@@ -43,9 +43,12 @@ CREATE TABLE "user" (
     role                        user_role    NOT NULL,                   -- student | security | admin (BR2)
     first_name                  VARCHAR(100) NOT NULL,
     last_name                   VARCHAR(100) NOT NULL,
-    student_number              VARCHAR(20)  UNIQUE,                     -- only for students (BR14)
-    employee_id                 VARCHAR(20)  UNIQUE,                     -- only for security
-    phone                       VARCHAR(20),
+    student_number              BIGINT UNIQUE
+        CHECK (
+            student_number BETWEEN 100000000 AND 999999999
+        ),                                                              -- only for students (BR14)
+    employee_id                 VARCHAR(12)  UNIQUE,                     -- only for security
+    phone                       VARCHAR(10),
     email_notification_opt_in   BOOLEAN      NOT NULL DEFAULT FALSE,     -- BR18
     is_active                   BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at                  TIMESTAMP    NOT NULL DEFAULT NOW(),
@@ -82,7 +85,7 @@ CREATE TABLE found_item_report (
     finder_id           UUID        NOT NULL REFERENCES "user"(user_id),
     item_description    TEXT        NOT NULL,
     category            VARCHAR(50) NOT NULL,
-    location_found      VARCHAR(255) NOT NULL,
+    location_found      VARCHAR(100) NOT NULL,
     date_found          DATE        NOT NULL,
     time_found          TIME,
     additional_notes    TEXT,
