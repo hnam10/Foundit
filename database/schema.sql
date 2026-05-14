@@ -27,7 +27,6 @@ CREATE TABLE campus (
     campus_name     VARCHAR(100) NOT NULL UNIQUE,           -- e.g. "Newnham", "Seneca@York"
     address         VARCHAR(255),
     retention_days  INT          NOT NULL DEFAULT 30,       -- configurable, up to 90 days
-    created_at      TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
 
