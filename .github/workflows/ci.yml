@@ -60,6 +60,10 @@ jobs:
         working-directory: foundit-ui
         run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        working-directory: foundit-ui
+        run: pnpm lint
+
       - name: Build
         working-directory: foundit-ui
         run: pnpm build
