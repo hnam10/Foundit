@@ -27,6 +27,10 @@ jobs:
         working-directory: backend
         run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        working-directory: backend
+        run: pnpm lint
+
       - name: Type check
         working-directory: backend
         run: pnpm typecheck
