@@ -8,7 +8,9 @@ import adminUsersRouter from './routes/admin/users';
 
 // Fail fast if required JWT secrets are missing
 if (!process.env.JWT_ACCESS_SECRET || !process.env.JWT_REFRESH_SECRET) {
-  console.error('FATAL: JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be set in environment');
+  console.error(
+    'FATAL: JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be set in environment'
+  );
   process.exit(1);
 }
 

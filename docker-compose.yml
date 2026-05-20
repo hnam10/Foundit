@@ -10,13 +10,17 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-foundit123}
       POSTGRES_DB: ${DB_NAME:-foundit_db}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - '${DB_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-foundit} -d ${DB_NAME:-foundit_db}"]
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${DB_USER:-foundit} -d ${DB_NAME:-foundit_db}',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,7 +33,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@foundit.local}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
     ports:
-      - "${PGADMIN_PORT:-5050}:80"
+      - '${PGADMIN_PORT:-5050}:80'
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
