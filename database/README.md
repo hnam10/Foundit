@@ -9,10 +9,10 @@ All files must be applied **in the order listed below**.
 
 ## 📁 Files
 
-| File | Purpose | Run Order |
-|------|---------|-----------|
-| `schema.sql` | Creates all tables, enums, indexes, and triggers | 1st |
-| `seed.sql` | Inserts campus records and the default admin user | 2nd |
+| File              | Purpose                                                         | Run Order      |
+| ----------------- | --------------------------------------------------------------- | -------------- |
+| `schema.sql`      | Creates all tables, enums, indexes, and triggers                | 1st            |
+| `seed.sql`        | Inserts campus records and the default admin user               | 2nd            |
 | `sample-data.sql` | Inserts sample users, items, and claims for development/testing | 3rd (optional) |
 
 ---
@@ -23,105 +23,110 @@ The database is built on **PostgreSQL** and uses the `uuid-ossp` extension for U
 
 ### Enums
 
-| Enum | Values |
-|------|--------|
-| `user_role` | `student`, `security`, `admin` |
-| `item_status` | `pending_report`, `stored`, `claimed`, `expired`, `disposed` |
-| `claim_status` | `submitted`, `under_review`, `approved`, `rejected`, `picked_up` |
-| `found_report_status` | `submitted`, `processed`, `linked_to_item` |
-| `match_status` | `suggested`, `confirmed`, `rejected`, `dismissed` |
-| `notification_type` | `claim_status_update`, `match_found`, `item_expiring`, `report_confirmation` |
-| `email_delivery_status` | `not_sent`, `sent`, `delivered`, `failed` |
+| Enum                    | Values                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `user_role`             | `student`, `security`, `admin`                                               |
+| `item_status`           | `pending_report`, `stored`, `claimed`, `expired`, `disposed`                 |
+| `claim_status`          | `submitted`, `under_review`, `approved`, `rejected`, `picked_up`             |
+| `found_report_status`   | `submitted`, `processed`, `linked_to_item`                                   |
+| `match_status`          | `suggested`, `confirmed`, `rejected`, `dismissed`                            |
+| `notification_type`     | `claim_status_update`, `match_found`, `item_expiring`, `report_confirmation` |
+| `email_delivery_status` | `not_sent`, `sent`, `delivered`, `failed`                                    |
 
 ### Tables
 
 #### `campus`
+
 Stores each Seneca campus location. The `retention_days` field controls how long an item is kept before expiry (default: 30 days, configurable up to 90).
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `campus_id` | UUID PK | Auto-generated |
-| `campus_name` | VARCHAR(100) | Unique (e.g., `Newnham`, `Seneca@York`) |
-| `address` | VARCHAR(255) | |
-| `retention_days` | INT | Default 30 |
+| Column           | Type         | Notes                                   |
+| ---------------- | ------------ | --------------------------------------- |
+| `campus_id`      | UUID PK      | Auto-generated                          |
+| `campus_name`    | VARCHAR(100) | Unique (e.g., `Newnham`, `Seneca@York`) |
+| `address`        | VARCHAR(255) |                                         |
+| `retention_days` | INT          | Default 30                              |
 
 **Seeded campuses:** Newnham · Seneca@York · King · Peterborough
 
 ---
 
 #### `user`
+
 All platform users — students, security staff, and admins.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `user_id` | UUID PK | |
-| `campus_id` | UUID FK → `campus` | `SET NULL` on campus delete |
-| `email` | VARCHAR(255) | Unique |
-| `username` | VARCHAR(255) | Unique |
-| `password_hash` | VARCHAR(255) | bcrypt |
-| `role` | `user_role` | `student` / `security` / `admin` (BR2) |
-| `student_number` | BIGINT | Students only; 9-digit range (BR14) |
-| `employee_id` | VARCHAR(12) | Security staff only |
-| `phone` | VARCHAR(10) | |
-| `email_notification_opt_in` | BOOLEAN | Default `FALSE` (BR18) |
-| `is_active` | BOOLEAN | Default `TRUE` |
+| Column                      | Type               | Notes                                  |
+| --------------------------- | ------------------ | -------------------------------------- |
+| `user_id`                   | UUID PK            |                                        |
+| `campus_id`                 | UUID FK → `campus` | `SET NULL` on campus delete            |
+| `email`                     | VARCHAR(255)       | Unique                                 |
+| `username`                  | VARCHAR(255)       | Unique                                 |
+| `password_hash`             | VARCHAR(255)       | bcrypt                                 |
+| `role`                      | `user_role`        | `student` / `security` / `admin` (BR2) |
+| `student_number`            | BIGINT             | Students only; 9-digit range (BR14)    |
+| `employee_id`               | VARCHAR(12)        | Security staff only                    |
+| `phone`                     | VARCHAR(10)        |                                        |
+| `email_notification_opt_in` | BOOLEAN            | Default `FALSE` (BR18)                 |
+| `is_active`                 | BOOLEAN            | Default `TRUE`                         |
 
 **Indexes:** `idx_user_student_number` (partial, where not null), `idx_user_campus_id`
 
 ---
 
 #### `report_link`
+
 One-time QR/URL tokens generated by security staff that allow finders to submit a found-item report (BR10).
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `link_id` | UUID PK | |
-| `token` | VARCHAR(255) | Unique |
-| `generated_by` | UUID FK → `user` | Must be security or admin |
-| `campus_id` | UUID FK → `campus` | |
-| `expires_at` | TIMESTAMP | Required (BR10) |
-| `is_used` | BOOLEAN | Default `FALSE` |
-| `used_at` | TIMESTAMP | Set when consumed |
+| Column         | Type               | Notes                     |
+| -------------- | ------------------ | ------------------------- |
+| `link_id`      | UUID PK            |                           |
+| `token`        | VARCHAR(255)       | Unique                    |
+| `generated_by` | UUID FK → `user`   | Must be security or admin |
+| `campus_id`    | UUID FK → `campus` |                           |
+| `expires_at`   | TIMESTAMP          | Required (BR10)           |
+| `is_used`      | BOOLEAN            | Default `FALSE`           |
+| `used_at`      | TIMESTAMP          | Set when consumed         |
 
 ---
 
 #### `found_item_report`
+
 A report submitted by a finder (student/staff) via a `report_link` token.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `report_id` | UUID PK | |
-| `report_link_id` | UUID FK → `report_link` | |
-| `finder_id` | UUID FK → `user` | |
-| `item_description` | TEXT | |
-| `category` | VARCHAR(50) | |
-| `location_found` | VARCHAR(100) | |
-| `date_found` | DATE | |
-| `time_found` | TIME | Optional |
-| `additional_notes` | TEXT | Optional |
-| `status` | `found_report_status` | Default `submitted` |
+| Column             | Type                    | Notes               |
+| ------------------ | ----------------------- | ------------------- |
+| `report_id`        | UUID PK                 |                     |
+| `report_link_id`   | UUID FK → `report_link` |                     |
+| `finder_id`        | UUID FK → `user`        |                     |
+| `item_description` | TEXT                    |                     |
+| `category`         | VARCHAR(50)             |                     |
+| `location_found`   | VARCHAR(100)            |                     |
+| `date_found`       | DATE                    |                     |
+| `time_found`       | TIME                    | Optional            |
+| `additional_notes` | TEXT                    | Optional            |
+| `status`           | `found_report_status`   | Default `submitted` |
 
 ---
 
 #### `item`
+
 An item that has been physically logged by security staff. May be linked to a `found_item_report`.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `item_id` | UUID PK | |
-| `campus_id` | UUID FK → `campus` | |
-| `category` | VARCHAR(50) | |
-| `title` | VARCHAR(100) | Public-facing name (BR7) |
-| `description_public` | VARCHAR(255) | Limited info for students (BR7) |
-| `description_internal` | TEXT | Full details for security only (BR12) |
-| `color` | VARCHAR(30) | |
-| `brand` | VARCHAR(50) | |
-| `location_found` | VARCHAR(255) | |
-| `date_found` | DATE | |
-| `status` | `item_status` | Default `pending_report` |
-| `found_item_report_id` | UUID FK → `found_item_report` | Optional |
-| `registered_by` | UUID FK → `user` | |
-| `retention_expiry_date` | DATE | Computed: `date_found + campus.retention_days` |
+| Column                  | Type                          | Notes                                          |
+| ----------------------- | ----------------------------- | ---------------------------------------------- |
+| `item_id`               | UUID PK                       |                                                |
+| `campus_id`             | UUID FK → `campus`            |                                                |
+| `category`              | VARCHAR(50)                   |                                                |
+| `title`                 | VARCHAR(100)                  | Public-facing name (BR7)                       |
+| `description_public`    | VARCHAR(255)                  | Limited info for students (BR7)                |
+| `description_internal`  | TEXT                          | Full details for security only (BR12)          |
+| `color`                 | VARCHAR(30)                   |                                                |
+| `brand`                 | VARCHAR(50)                   |                                                |
+| `location_found`        | VARCHAR(255)                  |                                                |
+| `date_found`            | DATE                          |                                                |
+| `status`                | `item_status`                 | Default `pending_report`                       |
+| `found_item_report_id`  | UUID FK → `found_item_report` | Optional                                       |
+| `registered_by`         | UUID FK → `user`              |                                                |
+| `retention_expiry_date` | DATE                          | Computed: `date_found + campus.retention_days` |
 
 **Indexes:** campus, category, status, date_found, retention_expiry_date
 
@@ -130,41 +135,43 @@ An item that has been physically logged by security staff. May be linked to a `f
 ---
 
 #### `claim`
+
 A lost-item claim submitted by a student. May be linked to a specific `item` after a match.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `claim_id` | UUID PK | |
-| `student_id` | UUID FK → `user` | Must be a student |
-| `item_id` | UUID FK → `item` | Nullable — set after matching |
-| `campus_id` | UUID FK → `campus` | |
-| `category` | VARCHAR(50) | |
-| `description` | TEXT | Required (BR4) |
-| `date_lost` | DATE | Optional |
-| `location_lost` | VARCHAR(255) | Optional |
-| `status` | `claim_status` | Default `submitted` (BR19) |
-| `reviewed_by` | UUID FK → `user` | Security/admin reviewer |
-| `reviewed_at` | TIMESTAMP | |
-| `rejection_reason` | TEXT | Populated on rejection |
-| `picked_up_at` | TIMESTAMP | Set when item is collected (BR15) |
-| `verified_by` | UUID FK → `user` | Student identity verified (BR14) |
+| Column             | Type               | Notes                             |
+| ------------------ | ------------------ | --------------------------------- |
+| `claim_id`         | UUID PK            |                                   |
+| `student_id`       | UUID FK → `user`   | Must be a student                 |
+| `item_id`          | UUID FK → `item`   | Nullable — set after matching     |
+| `campus_id`        | UUID FK → `campus` |                                   |
+| `category`         | VARCHAR(50)        |                                   |
+| `description`      | TEXT               | Required (BR4)                    |
+| `date_lost`        | DATE               | Optional                          |
+| `location_lost`    | VARCHAR(255)       | Optional                          |
+| `status`           | `claim_status`     | Default `submitted` (BR19)        |
+| `reviewed_by`      | UUID FK → `user`   | Security/admin reviewer           |
+| `reviewed_at`      | TIMESTAMP          |                                   |
+| `rejection_reason` | TEXT               | Populated on rejection            |
+| `picked_up_at`     | TIMESTAMP          | Set when item is collected (BR15) |
+| `verified_by`      | UUID FK → `user`   | Student identity verified (BR14)  |
 
 **Auto-update trigger:** `updated_at` is refreshed automatically on every UPDATE.
 
 ---
 
 #### `item_image`
+
 Images attached to either an `item` or a `claim` (BR6: JPG/PNG only, size-limited).
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `image_id` | UUID PK | |
-| `item_id` | UUID FK → `item` | At least one of `item_id` / `claim_id` must be set |
-| `claim_id` | UUID FK → `claim` | |
-| `image_url` | VARCHAR(500) | |
-| `uploaded_by` | UUID FK → `user` | |
-| `file_type` | VARCHAR(10) | `jpg` or `png` (BR6) |
-| `file_size_kb` | INT | Enforced at application layer (BR6) |
+| Column         | Type              | Notes                                              |
+| -------------- | ----------------- | -------------------------------------------------- |
+| `image_id`     | UUID PK           |                                                    |
+| `item_id`      | UUID FK → `item`  | At least one of `item_id` / `claim_id` must be set |
+| `claim_id`     | UUID FK → `claim` |                                                    |
+| `image_url`    | VARCHAR(500)      |                                                    |
+| `uploaded_by`  | UUID FK → `user`  |                                                    |
+| `file_type`    | VARCHAR(10)       | `jpg` or `png` (BR6)                               |
+| `file_size_kb` | INT               | Enforced at application layer (BR6)                |
 
 **Constraint:** `item_image_target_check` — either `item_id` or `claim_id` must be non-null.  
 **Cascade:** `ON DELETE CASCADE` from both `item` and `claim`.
@@ -172,55 +179,58 @@ Images attached to either an `item` or a `claim` (BR6: JPG/PNG only, size-limite
 ---
 
 #### `match_suggestion`
+
 AI/algorithm-generated suggestions linking a claim to a potential item.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `match_id` | UUID PK | |
-| `claim_id` | UUID FK → `claim` | |
-| `item_id` | UUID FK → `item` | |
-| `match_score` | DECIMAL(5,2) | 0.00–100.00 |
-| `match_criteria` | TEXT | Human-readable explanation |
-| `status` | `match_status` | Default `suggested` |
-| `reviewed_by` | UUID FK → `user` | |
-| `reviewed_at` | TIMESTAMP | |
+| Column           | Type              | Notes                      |
+| ---------------- | ----------------- | -------------------------- |
+| `match_id`       | UUID PK           |                            |
+| `claim_id`       | UUID FK → `claim` |                            |
+| `item_id`        | UUID FK → `item`  |                            |
+| `match_score`    | DECIMAL(5,2)      | 0.00–100.00                |
+| `match_criteria` | TEXT              | Human-readable explanation |
+| `status`         | `match_status`    | Default `suggested`        |
+| `reviewed_by`    | UUID FK → `user`  |                            |
+| `reviewed_at`    | TIMESTAMP         |                            |
 
 **Unique constraint:** `(claim_id, item_id)` — one suggestion per claim–item pair.
 
 ---
 
 #### `notification`
+
 In-app and email notifications sent to users.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `notification_id` | UUID PK | |
-| `recipient_id` | UUID FK → `user` | |
-| `type` | `notification_type` | |
-| `title` | VARCHAR(255) | |
-| `message` | TEXT | |
-| `reference_type` | VARCHAR(50) | `claim` / `item` / `report` |
-| `reference_id` | UUID | Points to the related record |
-| `is_read` | BOOLEAN | Default `FALSE` |
-| `email_sent` | BOOLEAN | Default `FALSE` |
-| `email_delivery_status` | `email_delivery_status` | Default `not_sent` |
+| Column                  | Type                    | Notes                        |
+| ----------------------- | ----------------------- | ---------------------------- |
+| `notification_id`       | UUID PK                 |                              |
+| `recipient_id`          | UUID FK → `user`        |                              |
+| `type`                  | `notification_type`     |                              |
+| `title`                 | VARCHAR(255)            |                              |
+| `message`               | TEXT                    |                              |
+| `reference_type`        | VARCHAR(50)             | `claim` / `item` / `report`  |
+| `reference_id`          | UUID                    | Points to the related record |
+| `is_read`               | BOOLEAN                 | Default `FALSE`              |
+| `email_sent`            | BOOLEAN                 | Default `FALSE`              |
+| `email_delivery_status` | `email_delivery_status` | Default `not_sent`           |
 
 **Indexes:** `idx_notification_recipient`, `idx_notification_is_read`
 
 ---
 
 #### `audit_log`
+
 Append-only log of all significant actions. **No UPDATE or DELETE should ever run on this table.**
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `log_id` | UUID PK | |
-| `actor_id` | UUID FK → `user` | `NULL` for system-initiated actions |
-| `action` | VARCHAR(100) | e.g., `item_created`, `claim_approved` |
-| `entity_type` | VARCHAR(50) | `item` / `claim` / `report` / `user` / `report_link` |
-| `entity_id` | UUID | ID of the affected record |
-| `details` | JSON | Additional context |
-| `ip_address` | VARCHAR(45) | IPv4 or IPv6 |
+| Column        | Type             | Notes                                                |
+| ------------- | ---------------- | ---------------------------------------------------- |
+| `log_id`      | UUID PK          |                                                      |
+| `actor_id`    | UUID FK → `user` | `NULL` for system-initiated actions                  |
+| `action`      | VARCHAR(100)     | e.g., `item_created`, `claim_approved`               |
+| `entity_type` | VARCHAR(50)      | `item` / `claim` / `report` / `user` / `report_link` |
+| `entity_id`   | UUID             | ID of the affected record                            |
+| `details`     | JSON             | Additional context                                   |
+| `ip_address`  | VARCHAR(45)      | IPv4 or IPv6                                         |
 
 **Indexes:** actor, entity (type + id), action, created_at
 
@@ -275,11 +285,11 @@ psql -U postgres -d foundit -f sample-data.sql
 
 ### Default credentials after seed
 
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | `admin@foundit.com` | `Admin123!` |
-| Sample Student | `alice@myseneca.ca` | `Test1234!` |
-| Sample Student | `bob@myseneca.ca` | `Test1234!` |
+| Role            | Email                        | Password    |
+| --------------- | ---------------------------- | ----------- |
+| Admin           | `admin@foundit.com`          | `Admin123!` |
+| Sample Student  | `alice@myseneca.ca`          | `Test1234!` |
+| Sample Student  | `bob@myseneca.ca`            | `Test1234!` |
 | Sample Security | `carol@senecapolytechnic.ca` | `Test1234!` |
 
 > ⚠️ **Change the admin password before deploying to any shared or production environment.**
@@ -296,4 +306,3 @@ psql -U postgres -d foundit -f sample-data.sql
 - **`item_image` polymorphic target** — an image can belong to an item or a claim (but not neither), enforced with a `CHECK` constraint.
 
 ---
-

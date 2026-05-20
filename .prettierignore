@@ -1,0 +1,17 @@
+# dependencies
+**/node_modules/
+
+# build output
+backend/dist/
+foundit-ui/.next/
+foundit-ui/out/
+
+# lockfiles
+**/pnpm-lock.yaml
+
+# generated
+foundit-ui/next-env.d.ts
+
+# editor / OS
+.claude/
+**/.DS_Store

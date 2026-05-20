@@ -1,4 +1,5 @@
 # PRJ566NCC_2261_Group2
+
 ## Seneca Campus Lost & Found System
 
 > A centralized digital platform that helps Seneca students recover lost items faster and with less confusion.
@@ -22,6 +23,7 @@ The **Seneca Campus Lost & Found System** is a centralized digital platform desi
 ### Background
 
 Seneca is a large campus with multiple buildings and shared spaces, increasing the likelihood of lost items. Currently, students rely on:
+
 - Manual processes through campus security
 - Unofficial group chats and social media
 
@@ -48,6 +50,7 @@ Reference: [Seneca Service Hub - Lost and Found](https://theservicehub.senecapol
 ## 💡 Solution
 
 A web-based platform that provides:
+
 - Centralized item reporting and searching
 - Improved speed and success rate of item recovery
 - Reduced confusion and reliance on informal methods
@@ -56,6 +59,7 @@ A web-based platform that provides:
 ## ✨ Features
 
 ### Core Features (Semester 1)
+
 - 📝 **Item Posting**: Users can report lost or found items with detailed descriptions
 - 🔍 **Search & Filter**: Advanced search functionality to find items quickly
 - 📊 **Item Status Tracking**: Real-time updates on item status
@@ -63,6 +67,7 @@ A web-based platform that provides:
 - 💾 **Database Management**: Robust backend for storing item information
 
 ### Advanced Features (Semester 2)
+
 - 🤖 **Semi-Automated Matching**: Intelligent suggestions to match lost items with found items
 - 🎉 **Gratitude Wall**: Platform for users to share success stories and express thanks
 - 🚨 **Content Moderation**: Reporting system for inappropriate content
@@ -74,12 +79,14 @@ A web-based platform that provides:
 This is a **two-semester project** (PRJ566 NCC):
 
 ### Semester One
+
 - Requirements analysis and system design
 - UI/UX wireframes and prototypes
 - Development of core features
 - Database design and backend setup
 
 ### Semester Two
+
 - Implementation of advanced features
 - System testing and refinement
 - Performance optimization and deployment
@@ -89,18 +96,17 @@ This is a **two-semester project** (PRJ566 NCC):
 
 **Team 02**
 
-| Role | Name |
-|------|------|
-| Project Manager | Yunjeong Choi |
-| Front-End Developer | Shu-Ting Hsu |
-| Back-End Developer | Rendell Velasco |
-| UI/UX Designer | Hsiao-Kang Chang |
-| Database & Documentation Lead | Hansol Nam |
-
+| Role                          | Name             |
+| ----------------------------- | ---------------- |
+| Project Manager               | Yunjeong Choi    |
+| Front-End Developer           | Shu-Ting Hsu     |
+| Back-End Developer            | Rendell Velasco  |
+| UI/UX Designer                | Hsiao-Kang Chang |
+| Database & Documentation Lead | Hansol Nam       |
 
 ## 🚀 Getting Started
 
-*Instructions will be added as development progresses*
+_Instructions will be added as development progresses_
 
 ### Prerequisites
 
@@ -134,7 +140,7 @@ This is an academic project for PRJ566 NCC at Seneca Polytechnic. Contributions 
 
 ## 📄 License
 
-*To be determined*
+_To be determined_
 
 ## 📞 Contact
 

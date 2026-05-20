@@ -6,7 +6,10 @@ const authenticate = (
   res: Response,
   _next: NextFunction
 ): void => {
-  res.status(501).json({ code: 'NOT_IMPLEMENTED', message: 'authenticate middleware not yet implemented' });
+  res.status(501).json({
+    code: 'NOT_IMPLEMENTED',
+    message: 'authenticate middleware not yet implemented',
+  });
 };
 
 export default authenticate;
