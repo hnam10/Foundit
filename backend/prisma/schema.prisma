@@ -1,0 +1,306 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+// ENUMS
+// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+enum UserRole {
+  student
+  security
+  admin
+
+  @@map("user_role")
+}
+
+enum ItemStatus {
+  pending_report
+  stored
+  claimed
+  expired
+  disposed
+
+  @@map("item_status")
+}
+
+enum ClaimStatus {
+  submitted
+  under_review
+  approved
+  rejected
+  picked_up
+
+  @@map("claim_status")
+}
+
+enum FoundReportStatus {
+  submitted
+  processed
+  linked_to_item
+
+  @@map("found_report_status")
+}
+
+enum MatchStatus {
+  suggested
+  confirmed
+  rejected
+  dismissed
+
+  @@map("match_status")
+}
+
+enum NotificationType {
+  claim_status_update
+  match_found
+  item_expiring
+  report_confirmation
+
+  @@map("notification_type")
+}
+
+enum EmailDeliveryStatus {
+  not_sent
+  sent
+  delivered
+  failed
+
+  @@map("email_delivery_status")
+}
+
+// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+// MODELS
+// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+model Campus {
+  campusId      String @id @default(uuid()) @db.Uuid @map("campus_id")
+  campusName    String @unique @db.VarChar(100) @map("campus_name")
+  address       String? @db.VarChar(255)
+  retentionDays Int    @default(30) @map("retention_days")
+
+  users            User[]
+  reportLinks      ReportLink[]
+  items            Item[]
+  claims           Claim[]
+
+  @@map("campus")
+}
+
+model User {
+  userId                 String   @id @default(uuid()) @db.Uuid @map("user_id")
+  campusId               String?  @db.Uuid @map("campus_id")
+  email                  String   @unique @db.VarChar(255)
+  username               String   @unique @db.VarChar(255)
+  passwordHash           String   @db.VarChar(255) @map("password_hash")
+  role                   UserRole
+  firstName              String   @db.VarChar(100) @map("first_name")
+  lastName               String   @db.VarChar(100) @map("last_name")
+  studentNumber          BigInt?  @unique @map("student_number")
+  employeeId             String?  @unique @db.VarChar(12) @map("employee_id")
+  phone                  String?  @db.VarChar(10)
+  emailNotificationOptIn Boolean  @default(false) @map("email_notification_opt_in")
+  isActive               Boolean  @default(true) @map("is_active")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at")
+
+  campus               Campus?           @relation(fields: [campusId], references: [campusId])
+  reportLinksGenerated ReportLink[]      @relation("GeneratedBy")
+  foundItemReports     FoundItemReport[] @relation("Finder")
+  itemsRegistered      Item[]            @relation("RegisteredBy")
+  claimsAsStudent      Claim[]           @relation("Student")
+  claimsReviewed       Claim[]           @relation("ReviewedBy")
+  claimsVerified       Claim[]           @relation("VerifiedBy")
+  imagesUploaded       ItemImage[]       @relation("UploadedBy")
+  matchesReviewed      MatchSuggestion[] @relation("MatchReviewedBy")
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@index([campusId])
+  @@map("user")
+}
+
+model ReportLink {
+  linkId      String    @id @default(uuid()) @db.Uuid @map("link_id")
+  token       String    @unique @db.VarChar(255)
+  generatedBy String    @db.Uuid @map("generated_by")
+  campusId    String    @db.Uuid @map("campus_id")
+  expiresAt   DateTime  @map("expires_at")
+  isUsed      Boolean   @default(false) @map("is_used")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  generator        User             @relation("GeneratedBy", fields: [generatedBy], references: [userId])
+  campus           Campus           @relation(fields: [campusId], references: [campusId])
+  foundItemReports FoundItemReport[]
+
+  @@map("report_link")
+}
+
+model FoundItemReport {
+  reportId        String            @id @default(uuid()) @db.Uuid @map("report_id")
+  reportLinkId    String            @db.Uuid @map("report_link_id")
+  finderId        String            @db.Uuid @map("finder_id")
+  itemDescription String            @map("item_description")
+  category        String            @db.VarChar(50)
+  locationFound   String            @db.VarChar(100) @map("location_found")
+  dateFound       DateTime          @db.Date @map("date_found")
+  timeFound       DateTime?         @db.Time() @map("time_found")
+  additionalNotes String?           @map("additional_notes")
+  status          FoundReportStatus @default(submitted)
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  reportLink ReportLink @relation(fields: [reportLinkId], references: [linkId])
+  finder     User       @relation("Finder", fields: [finderId], references: [userId])
+  items      Item[]
+
+  @@map("found_item_report")
+}
+
+model Item {
+  itemId              String     @id @default(uuid()) @db.Uuid @map("item_id")
+  campusId            String     @db.Uuid @map("campus_id")
+  category            String     @db.VarChar(50)
+  title               String     @db.VarChar(100)
+  descriptionPublic   String?    @db.VarChar(255) @map("description_public")
+  descriptionInternal String?    @map("description_internal")
+  color               String?    @db.VarChar(30)
+  brand               String?    @db.VarChar(50)
+  locationFound       String?    @db.VarChar(255) @map("location_found")
+  dateFound           DateTime   @db.Date @map("date_found")
+  status              ItemStatus @default(pending_report)
+  foundItemReportId   String?    @db.Uuid @map("found_item_report_id")
+  registeredBy        String     @db.Uuid @map("registered_by")
+  retentionExpiryDate DateTime?  @db.Date @map("retention_expiry_date")
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @default(now()) @updatedAt @map("updated_at")
+
+  campus          Campus           @relation(fields: [campusId], references: [campusId])
+  foundItemReport FoundItemReport? @relation(fields: [foundItemReportId], references: [reportId])
+  registrar       User             @relation("RegisteredBy", fields: [registeredBy], references: [userId])
+  images          ItemImage[]
+  claims          Claim[]
+  matchSuggestions MatchSuggestion[]
+
+  @@index([campusId])
+  @@index([category])
+  @@index([status])
+  @@index([dateFound])
+  @@index([retentionExpiryDate])
+  @@map("item")
+}
+
+model Claim {
+  claimId         String      @id @default(uuid()) @db.Uuid @map("claim_id")
+  studentId       String      @db.Uuid @map("student_id")
+  itemId          String?     @db.Uuid @map("item_id")
+  category        String      @db.VarChar(50)
+  campusId        String      @db.Uuid @map("campus_id")
+  description     String
+  dateLost        DateTime?   @db.Date @map("date_lost")
+  locationLost    String?     @db.VarChar(255) @map("location_lost")
+  status          ClaimStatus @default(submitted)
+  reviewedBy      String?     @db.Uuid @map("reviewed_by")
+  reviewedAt      DateTime?   @map("reviewed_at")
+  rejectionReason String?     @map("rejection_reason")
+  pickedUpAt      DateTime?   @map("picked_up_at")
+  verifiedBy      String?     @db.Uuid @map("verified_by")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at")
+
+  student          User              @relation("Student", fields: [studentId], references: [userId])
+  item             Item?             @relation(fields: [itemId], references: [itemId])
+  campus           Campus            @relation(fields: [campusId], references: [campusId])
+  reviewer         User?             @relation("ReviewedBy", fields: [reviewedBy], references: [userId])
+  verifier         User?             @relation("VerifiedBy", fields: [verifiedBy], references: [userId])
+  images           ItemImage[]
+  matchSuggestions MatchSuggestion[]
+
+  @@index([studentId])
+  @@index([itemId])
+  @@index([campusId])
+  @@index([status])
+  @@index([reviewedBy])
+  @@map("claim")
+}
+
+model ItemImage {
+  imageId    String   @id @default(uuid()) @db.Uuid @map("image_id")
+  itemId     String?  @db.Uuid @map("item_id")
+  claimId    String?  @db.Uuid @map("claim_id")
+  imageUrl   String   @db.VarChar(500) @map("image_url")
+  uploadedBy String   @db.Uuid @map("uploaded_by")
+  fileType   String   @db.VarChar(10) @map("file_type")
+  fileSizeKb Int      @map("file_size_kb")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  item     Item?  @relation(fields: [itemId], references: [itemId], onDelete: Cascade)
+  claim    Claim? @relation(fields: [claimId], references: [claimId], onDelete: Cascade)
+  uploader User   @relation("UploadedBy", fields: [uploadedBy], references: [userId])
+
+  @@map("item_image")
+}
+
+model MatchSuggestion {
+  matchId       String      @id @default(uuid()) @db.Uuid @map("match_id")
+  claimId       String      @db.Uuid @map("claim_id")
+  itemId        String      @db.Uuid @map("item_id")
+  matchScore    Decimal     @db.Decimal(5, 2) @map("match_score")
+  matchCriteria String?     @map("match_criteria")
+  status        MatchStatus @default(suggested)
+  reviewedBy    String?     @db.Uuid @map("reviewed_by")
+  reviewedAt    DateTime?   @map("reviewed_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  claim    Claim @relation(fields: [claimId], references: [claimId])
+  item     Item  @relation(fields: [itemId], references: [itemId])
+  reviewer User? @relation("MatchReviewedBy", fields: [reviewedBy], references: [userId])
+
+  @@unique([claimId, itemId])
+  @@map("match_suggestion")
+}
+
+model Notification {
+  notificationId      String              @id @default(uuid()) @db.Uuid @map("notification_id")
+  recipientId         String              @db.Uuid @map("recipient_id")
+  type                NotificationType
+  title               String              @db.VarChar(255)
+  message             String
+  referenceType       String?             @db.VarChar(50) @map("reference_type")
+  referenceId         String?             @db.Uuid @map("reference_id")
+  isRead              Boolean             @default(false) @map("is_read")
+  emailSent           Boolean             @default(false) @map("email_sent")
+  emailSentAt         DateTime?           @map("email_sent_at")
+  emailDeliveryStatus EmailDeliveryStatus @default(not_sent) @map("email_delivery_status")
+  createdAt           DateTime            @default(now()) @map("created_at")
+
+  recipient User @relation(fields: [recipientId], references: [userId])
+
+  @@index([recipientId])
+  @@index([recipientId, isRead])
+  @@map("notification")
+}
+
+model AuditLog {
+  logId      String   @id @default(uuid()) @db.Uuid @map("log_id")
+  actorId    String?  @db.Uuid @map("actor_id")
+  action     String   @db.VarChar(100)
+  entityType String   @db.VarChar(50) @map("entity_type")
+  entityId   String   @db.Uuid @map("entity_id")
+  details    Json?
+  ipAddress  String?  @db.VarChar(45) @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorId], references: [userId])
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_log")
+}

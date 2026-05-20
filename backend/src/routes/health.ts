@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { pool } from '../db';
+import { prisma } from '../db';
 
 const router = Router();
 
 router.get('/', async (_req, res, next) => {
   try {
-    await pool.query('SELECT 1');
+    await prisma.$queryRaw`SELECT 1`;
     res.json({ status: 'ok', db: true, timestamp: new Date().toISOString() });
   } catch (err) {
     next(err);
