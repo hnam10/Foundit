@@ -20,7 +20,7 @@ export default function Home() {
           <Stack gap={1}>
             <Heading size="4xl">Welcome to FoundIt</Heading>
             <Text color="fg.muted" fontSize="sm">
-              Please sign in to your account to continues
+              Please login to your account to continue
             </Text>
           </Stack>
           <Button px={16} colorPalette="red" onClick={handleSignIn}>
