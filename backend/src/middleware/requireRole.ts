@@ -1,14 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
+import { UserRole } from '@prisma/client';
 
-type UserRole = 'student' | 'security' | 'admin';
+const requireRole = (...roles: UserRole[]) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res
+        .status(401)
+        .json({ code: 'UNAUTHENTICATED', message: 'Authentication required' });
+      return;
+    }
 
-// TODO: Return 403 if req.user.role is not in the allowed roles
-const requireRole = (..._roles: UserRole[]) => {
-  return (_req: Request, res: Response, _next: NextFunction): void => {
-    res.status(501).json({
-      code: 'NOT_IMPLEMENTED',
-      message: 'requireRole middleware not yet implemented',
-    });
+    if (!roles.includes(req.user.role as UserRole)) {
+      res
+        .status(403)
+        .json({ code: 'FORBIDDEN', message: 'Insufficient permissions' });
+      return;
+    }
+
+    next();
   };
 };
 

@@ -17,12 +17,10 @@ const authenticate = (
 
   // Reject requests that are missing the Authorization header or not using Bearer scheme
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res
-      .status(401)
-      .json({
-        code: 'MISSING_TOKEN',
-        message: 'Authorization token is required',
-      });
+    res.status(401).json({
+      code: 'MISSING_TOKEN',
+      message: 'Authorization token is required',
+    });
     return;
   }
 
