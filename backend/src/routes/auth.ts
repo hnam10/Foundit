@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { validate } from '../validators/shared';
+import { loginSchema, refreshSchema, logoutSchema } from '../validators/auth';
 
 const router = Router();
 
@@ -29,7 +31,7 @@ const router = Router();
  *         description: Invalid credentials
  */
 // TODO: Validate credentials, compare bcrypt hash, issue JWT tokens
-router.post('/login', (_req, res) => {
+router.post('/login', validate(loginSchema), (_req, res) => {
   res.status(501).json({
     code: 'NOT_IMPLEMENTED',
     message: 'POST /api/auth/login not yet implemented',
@@ -59,7 +61,7 @@ router.post('/login', (_req, res) => {
  *         description: Refresh token is invalid or expired
  */
 // TODO: Verify refresh token, rotate, issue new access token
-router.post('/refresh', (_req, res) => {
+router.post('/refresh', validate(refreshSchema), (_req, res) => {
   res.status(501).json({
     code: 'NOT_IMPLEMENTED',
     message: 'POST /api/auth/refresh not yet implemented',
@@ -89,7 +91,7 @@ router.post('/refresh', (_req, res) => {
  *         description: Refresh token is invalid
  */
 // TODO: Revoke refresh token (no access token required)
-router.post('/logout', (_req, res) => {
+router.post('/logout', validate(logoutSchema), (_req, res) => {
   res.status(501).json({
     code: 'NOT_IMPLEMENTED',
     message: 'POST /api/auth/logout not yet implemented',
