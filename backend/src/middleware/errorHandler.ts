@@ -18,24 +18,33 @@ const errorHandler = (
   }
 
   if (err instanceof TokenExpiredError) {
-    res.status(401).json({ code: 'TOKEN_EXPIRED', message: 'Access token has expired' });
+    res
+      .status(401)
+      .json({ code: 'TOKEN_EXPIRED', message: 'Access token has expired' });
     return;
   }
 
   if (err instanceof JsonWebTokenError) {
-    res.status(401).json({ code: 'INVALID_TOKEN', message: 'Access token is invalid' });
+    res
+      .status(401)
+      .json({ code: 'INVALID_TOKEN', message: 'Access token is invalid' });
     return;
   }
 
   if (err instanceof Error) {
     res.status(500).json({
       code: 'INTERNAL_ERROR',
-      message: process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : err.message,
+      message:
+        process.env.NODE_ENV === 'production'
+          ? 'An unexpected error occurred'
+          : err.message,
     });
     return;
   }
 
-  res.status(500).json({ code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' });
+  res
+    .status(500)
+    .json({ code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' });
 };
 
 export default errorHandler;
