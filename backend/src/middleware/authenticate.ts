@@ -8,12 +8,21 @@ import jwt, { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
  * On success, attaches the decoded user payload to `req.user` and calls `next()`.
  * On failure, responds with a 401 and a machine-readable error code.
  */
-const authenticate = (req: Request, res: Response, next: NextFunction): void => {
+const authenticate = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
   const authHeader = req.headers.authorization;
 
   // Reject requests that are missing the Authorization header or not using Bearer scheme
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ code: 'MISSING_TOKEN', message: 'Authorization token is required' });
+    res
+      .status(401)
+      .json({
+        code: 'MISSING_TOKEN',
+        message: 'Authorization token is required',
+      });
     return;
   }
 
@@ -41,10 +50,14 @@ const authenticate = (req: Request, res: Response, next: NextFunction): void => 
   } catch (err) {
     if (err instanceof TokenExpiredError) {
       // Token was valid but has passed its expiry time — client should refresh
-      res.status(401).json({ code: 'TOKEN_EXPIRED', message: 'Access token has expired' });
+      res
+        .status(401)
+        .json({ code: 'TOKEN_EXPIRED', message: 'Access token has expired' });
     } else if (err instanceof JsonWebTokenError) {
       // Token is malformed, tampered with, or signed with the wrong secret
-      res.status(401).json({ code: 'INVALID_TOKEN', message: 'Access token is invalid' });
+      res
+        .status(401)
+        .json({ code: 'INVALID_TOKEN', message: 'Access token is invalid' });
     } else {
       // Unexpected error — delegate to the global error handler
       next(err);
