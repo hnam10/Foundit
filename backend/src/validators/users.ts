@@ -10,12 +10,18 @@ export const updateNotificationSchema = z.object({});
 
 export const listUsersQuerySchema = z.object({});
 
-// TODO: Validate req.query against schema; return 400 VALIDATION_ERROR on failure
-export const validateQuery = (_schema: z.ZodTypeAny) => {
-  return (_req: Request, res: Response, _next: NextFunction): void => {
-    res.status(501).json({
-      code: 'NOT_IMPLEMENTED',
-      message: 'validateQuery middleware not yet implemented',
-    });
+export const validateQuery = (schema: z.ZodTypeAny) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const result = schema.safeParse(req.query);
+    if (!result.success) {
+      res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid query parameters',
+        details: result.error.issues,
+      });
+      return;
+    }
+    req.query = result.data as typeof req.query;
+    next();
   };
 };
