@@ -22,8 +22,12 @@ const router = Router();
  *           enum: [student, security, admin]
  *       - in: query
  *         name: isActive
+ *         description: >
+ *           HTTP query strings are always plain text — pass the string "true" or "false",
+ *           not a JSON boolean. The server rejects any other value.
  *         schema:
- *           type: boolean
+ *           type: string
+ *           enum: [true, false]
  *       - in: query
  *         name: campusId
  *         schema:
