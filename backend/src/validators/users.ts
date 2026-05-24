@@ -62,7 +62,7 @@ export const createUserSchema = z.object({
 export const listUsersQuerySchema = z.object({
   role: z.enum(['student', 'security', 'admin']).optional(),
   isActive: z
-    .string()
+    .enum(['true', 'false'])
     .transform((v) => v === 'true')
     .optional(),
   campusId: z.uuid().optional(),

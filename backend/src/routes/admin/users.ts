@@ -77,6 +77,9 @@ router.get(
  *           schema:
  *             type: object
  *             required: [email, firstName, lastName, role, campusId]
+ *             description: >
+ *               role=student requires studentNumber;
+ *               role=security or role=admin requires employeeId.
  *             properties:
  *               email:
  *                 type: string
