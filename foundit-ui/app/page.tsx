@@ -47,7 +47,9 @@ export default function Home() {
             alignItems="center"
             textAlign="center"
           >
-            <Heading size="4xl" color="black">Welcome to FoundIt</Heading>
+            <Heading size="4xl" color="black">
+              Welcome to FoundIt
+            </Heading>
 
             <Text color="fg.muted" fontSize="sm">
               Please login to your account to continue
@@ -58,7 +60,9 @@ export default function Home() {
             </Button>
 
             <Stack gap={1} fontSize="sm">
-              <Text fontWeight="medium" color="black">Lost and found office hours:</Text>
+              <Text fontWeight="medium" color="black">
+                Lost and found office hours:
+              </Text>
               <Text color="fg.muted">Mon. to Fri. 9:00 AM - 5:00 PM</Text>
             </Stack>
           </Stack>

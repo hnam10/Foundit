@@ -38,8 +38,11 @@ interface NotificationCardProps {
  *
  * To add a new status: extend ClaimStatus above and add an entry here.
  */
-const statusConfig: Record<ClaimStatus, { strip: string; label: string; color: string }> = {
-  pending:  { strip: '#f59e0b', label: 'Pending',  color: '#92400e' },
+const statusConfig: Record<
+  ClaimStatus,
+  { strip: string; label: string; color: string }
+> = {
+  pending: { strip: '#f59e0b', label: 'Pending', color: '#92400e' },
   approved: { strip: '#22c55e', label: 'Approved', color: '#14532d' },
   rejected: { strip: '#ef4444', label: 'Rejected', color: '#7f1d1d' },
 };
@@ -87,7 +90,6 @@ export function NotificationCard({
 
       {/* Main content row */}
       <HStack flex={1} px={4} py={3} justify="space-between" align="center">
-
         {/* Left section: icon placeholder + claim details */}
         <HStack gap={3} align="center">
           {/* Neutral circle — replace with <Image> or an icon component when ready */}
@@ -116,7 +118,6 @@ export function NotificationCard({
             {date}
           </Text>
         </VStack>
-
       </HStack>
     </Flex>
   );
