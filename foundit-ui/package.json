@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint app",
     "format": "../node_modules/.bin/prettier --write .",
-    "format:check": "../node_modules/.bin/prettier --check ."
+    "format:check": "../node_modules/.bin/prettier --check .",
+    "prepare": "git -C .. config core.hooksPath foundit-ui/.husky || true"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.35.0",
