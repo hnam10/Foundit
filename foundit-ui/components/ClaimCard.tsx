@@ -11,7 +11,7 @@ import { Box, Circle, Flex, HStack, Text, VStack } from '@chakra-ui/react';
 export type ClaimStatus = 'pending' | 'approved' | 'rejected';
 
 /**
- * Props for NotificationCard.
+ * Props for claimCard.
  *
  * @param id           - Unique claim identifier shown as "Claim: #<id>"
  * @param categoryName - The category the lost item belongs to (e.g. "Electronics")
@@ -19,7 +19,7 @@ export type ClaimStatus = 'pending' | 'approved' | 'rejected';
  * @param status       - Current claim status; controls strip color and label
  * @param date         - Human-readable date the claim was made (e.g. "May 24, 2026")
  */
-interface NotificationCardProps {
+interface ClaimCardProps {
   id: string | number;
   categoryName: string;
   itemName: string;
@@ -50,9 +50,9 @@ const statusConfig: Record<
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
- * NotificationCard
+ * claimCard
  *
- * Displays a single claim notification as a horizontal card. Layout:
+ * Displays a single claim claim as a horizontal card. Layout:
  *
  *   ┌──────────────────────────────────────────────────────────┐
  *   │▌  ●  Category | Item Name              Status Label      │
@@ -65,13 +65,13 @@ const statusConfig: Record<
  * - The card uses w="full" so it always stretches to fill its parent.
  *   Wrap it in any Box/container to control its width.
  */
-export function NotificationCard({
+export function ClaimCard({
   id,
   categoryName,
   itemName,
   status,
   date,
-}: NotificationCardProps) {
+}: ClaimCardProps) {
   const { strip, label, color } = statusConfig[status];
 
   return (
