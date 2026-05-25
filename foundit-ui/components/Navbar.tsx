@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Flex, HStack, Link, Text } from '@chakra-ui/react';
-import { CircleUserRound } from 'lucide-react';
+// import { CircleUserRound } from 'lucide-react';
 
 interface NavbarProps {
   variant?: 'student' | 'guest';
@@ -52,7 +52,7 @@ export default function Navbar({ variant = 'guest' }: NavbarProps) {
               User Name
             </Text>
 
-            <CircleUserRound size={22} />
+            {/* <CircleUserRound size={22} /> */}
           </HStack>
         )}
       </Flex>
