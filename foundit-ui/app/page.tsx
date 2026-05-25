@@ -1,6 +1,6 @@
 'use client';
 
-import { Navbar } from '@/components/Navbar';
+import Navbar from '../components/Navbar';
 import { Box, Button, Heading, Stack, Text } from '@chakra-ui/react';
 
 export default function Home() {
