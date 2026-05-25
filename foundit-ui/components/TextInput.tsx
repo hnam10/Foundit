@@ -59,7 +59,7 @@ export default function TextInput({
         <Field.HelperText
           fontSize="0.875rem"
           lineHeight="1.6"
-          color="#4a4a4a"
+          color="#666666"
           mt={0.5}
           mb={1}
         >
@@ -91,13 +91,13 @@ export default function TextInput({
         fontWeight="normal"
         color="#1a1a1a"
         bg="white"
-        borderWidth="2px"
+        borderWidth="1px"
         borderRadius="md"
-        borderColor="#1a1a1a"
+        borderColor="#D9D9D9"
         _invalid={{ borderColor: '#cd0000' }}
         _focusVisible={{
           outline: 'none',
-          boxShadow: '0 0 0 4px #009adb',
+          boxShadow: '0 0 0 2px #009adb',
           borderColor: 'inherit',
         }}
         w={widthMap[width]}
