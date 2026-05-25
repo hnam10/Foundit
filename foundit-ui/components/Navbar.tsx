@@ -15,10 +15,10 @@ export default function Navbar({ variant = 'guest' }: NavbarProps) {
       borderBottom="1px solid"
       borderColor="gray.200"
       px={8}
-      py={3}
+      h="75px"
       w="100%"
     >
-      <Flex maxW="1200px" mx="auto" align="center">
+      <Flex maxW="1200px" mx="auto" h="100%" align="center">
         {/* Left Side */}
         <HStack gap={2} mr="auto" align="baseline">
           <Text fontSize="2xl" fontWeight="bold" color="red.600" lineHeight="1">
@@ -31,29 +31,26 @@ export default function Navbar({ variant = 'guest' }: NavbarProps) {
         </HStack>
 
         {/* Menu */}
-        <HStack gap={12} mr={16}>
-          <Link href="#" color="gray.700" fontWeight="medium">
+        <HStack gap={10} ml="auto">
+          <Link href="#" fontSize="md" color="gray.700" fontWeight="medium">
             Home
           </Link>
 
-          <Link href="#" color="gray.700" fontWeight="medium">
+          <Link href="#" fontSize="md" color="gray.700" fontWeight="medium">
             Found Items
           </Link>
 
-          <Link href="#" color="gray.700" fontWeight="medium">
-            My claim
+          <Link href="#" fontSize="md" color="gray.700" fontWeight="medium">
+            My claims
           </Link>
         </HStack>
 
         {/* Right Side */}
         {variant === 'student' && (
-          <HStack gap={3}>
-            {/* To do: backend auth and user data fetching */}
+          <HStack gap={3} ml={12}>
             <Text fontSize="sm" fontWeight="medium" color="gray.900">
               User Name
             </Text>
-
-            {/* <CircleUserRound size={22} /> */}
           </HStack>
         )}
       </Flex>
