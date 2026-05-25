@@ -3,10 +3,10 @@ import { Box, Flex, HStack, Link, Text } from '@chakra-ui/react';
 
 export default function Footer() {
   return (
-    <Box bg="black" color="gray.400" py={3} px={8}>
-      <Flex maxW="1200px" mx="auto" align="center">
+    <Box as="footer" bg="black" color="gray.400" px={8} h="85px" w="100%">
+      <Flex maxW="1200px" mx="auto" h="100%" align="center">
         {/* Left Side */}
-        <Text fontSize="sm">© 2026 Foundit. All rights reserved.</Text>
+        <Text fontSize="sm">© 2026 FoundIt. All rights reserved.</Text>
 
         {/* Right Side */}
         <HStack ml="auto" gap={8}>
