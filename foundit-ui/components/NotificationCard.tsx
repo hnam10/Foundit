@@ -7,22 +7,20 @@ import {
   VStack,
   Checkmark,
 } from '@chakra-ui/react';
-import { getRelativeTime } from '@/utils/date';
+import { getRelativeTime } from '@/utils/relativeDate';
 
 interface NotificationCardProps {
   title: string;
   message: string;
-  time: string;
   isRead?: boolean;
-    createdAt: string;
-
+  createdAt: string;
 }
 
 export default function NotificationCard({
   title,
   message,
   isRead = false,
-  createdAt
+  createdAt,
 }: NotificationCardProps) {
   return (
     <Flex
@@ -68,7 +66,8 @@ export default function NotificationCard({
         </VStack>
 
         <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">
-{getRelativeTime(createdAt)}        </Text>
+          {getRelativeTime(createdAt)}
+        </Text>
       </HStack>
     </Flex>
   );
