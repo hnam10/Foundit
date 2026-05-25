@@ -41,13 +41,14 @@ export default function Navbar({ variant = 'guest' }: NavbarProps) {
           </Link>
 
           <Link href="#" color="gray.700" fontWeight="medium">
-            My claims
+            My claim
           </Link>
         </HStack>
 
         {/* Right Side */}
         {variant === 'student' && (
           <HStack gap={3}>
+            {/* To do: backend auth and user data fetching */}
             <Text fontSize="sm" fontWeight="medium" color="gray.900">
               User Name
             </Text>

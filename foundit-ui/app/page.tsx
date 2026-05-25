@@ -1,6 +1,7 @@
 'use client';
 
 import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
 import { Box, Button, Heading, Stack, Text } from '@chakra-ui/react';
 
 export default function Home() {
@@ -67,6 +68,7 @@ export default function Home() {
             </Stack>
           </Stack>
         </Box>
+        <Footer />
       </Box>
     </Box>
   );
