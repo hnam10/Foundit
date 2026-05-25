@@ -51,7 +51,6 @@ export default function NotificationCard({
         <VStack align="start" gap={1} flex={1}>
           <Text
             as="a"
-            href="#"
             fontSize="sm"
             fontWeight="semibold"
             color="#1a1a1a"
