@@ -120,6 +120,7 @@ model User {
   matchesReviewed      MatchSuggestion[] @relation("MatchReviewedBy")
   notifications        Notification[]
   auditLogs            AuditLog[]
+  refreshTokenLogs     RefreshTokenLog[]
 
   @@index([campusId])
   @@map("user")
@@ -284,6 +285,21 @@ model Notification {
   @@index([recipientId])
   @@index([recipientId, isRead])
   @@map("notification")
+}
+
+model RefreshTokenLog {
+  logId     String   @id @default(uuid()) @db.Uuid @map("log_id")
+  userId    String   @db.Uuid @map("user_id")
+  // SHA-256 hex of the raw JWT (64 chars) — raw token is never stored
+  tokenHash String   @unique @db.VarChar(255) @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_token_log")
 }
 
 model AuditLog {

@@ -6,8 +6,8 @@ Express + TypeScript + PostgreSQL
 
 ### 1. Prerequisites
 
-- Node.js 18+
-- PostgreSQL running and seeded (see root `docker-compose.yml`)
+- Node.js 22+
+- PostgreSQL running (start via `cd database && docker compose up -d` from project root)
 
 ### 2. Install dependencies
 

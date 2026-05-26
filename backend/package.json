@@ -35,6 +35,9 @@
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.59.4"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "@prisma/client",
