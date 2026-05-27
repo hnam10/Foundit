@@ -71,9 +71,13 @@ export default function Navbar({
       bg="white"
       borderBottom="1px solid"
       borderColor="gray.200"
-      px={8}
-      h="75px"
+      px={{ base: 4, md: 8 }}
+      /* minH instead of h so the mobile menu can expand the bar vertically */
+      minH="75px"
       w="100%"
+      position="sticky"
+      top={0}
+      zIndex={10}
     >
       <Flex maxW="1200px" mx="auto" h="100%" align="center">
         <HStack gap={2} mr="auto" align="baseline">
@@ -100,6 +104,64 @@ export default function Navbar({
           </HStack>
         )}
       </Flex>
+
+      {/* ── Mobile dropdown (expands below main row) ──────────────────────── */}
+      {mobileOpen && (
+        <VStack
+          display={{ base: 'flex', md: 'none' }}
+          align="stretch"
+          gap={1}
+          pb={3}
+          borderTop="1px solid"
+          borderColor="gray.200"
+        >
+          {navLinks.map(({ label, href }) => {
+            const isActive = pathname === href;
+            return (
+              <Link
+                key={href}
+                asChild
+                display="block"
+                px={4}
+                py={2}
+                fontSize="sm"
+                fontWeight="medium"
+                color={isActive ? 'red.600' : 'gray.700'}
+                borderRadius="md"
+                _hover={{ bg: 'gray.100', textDecoration: 'none' }}
+                /* Close the menu when a link is tapped */
+                onClick={() => setMobileOpen(false)}
+              >
+                <NextLink href={href}>{label}</NextLink>
+              </Link>
+            );
+          })}
+
+          {/* Mobile user actions — separator + same items as desktop dropdown */}
+          {variant === 'student' && (
+            <>
+              <Box h="1px" bg="gray.200" my={1} mx={4} />
+              {userMenuItems.map(({ label, href, danger }) => (
+                <Link
+                  key={href}
+                  asChild
+                  display="block"
+                  px={4}
+                  py={2}
+                  fontSize="sm"
+                  fontWeight="medium"
+                  color={danger ? 'red.500' : 'gray.700'}
+                  borderRadius="md"
+                  _hover={{ bg: 'gray.100', textDecoration: 'none' }}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <NextLink href={href}>{label}</NextLink>
+                </Link>
+              ))}
+            </>
+          )}
+        </VStack>
+      )}
     </Box>
   );
 }
