@@ -137,8 +137,25 @@ export default function Navbar({
             );
           })}
 
-          {/* Mobile user actions — separator + same items as desktop dropdown */}
-          {variant === 'student' && (
+          {/* Guest: Login button (mobile) */}
+          {!isAuthenticated && (
+            <Box px={4} pt={2}>
+              <Button
+                variant="danger"
+                size="sm"
+                w="full"
+                onClick={() => {
+                  setMobileOpen(false);
+                  router.push('/login');
+                }}
+              >
+                Login
+              </Button>
+            </Box>
+          )}
+
+          {/* Authenticated: separator + user menu items (mobile) */}
+          {isAuthenticated && (
             <>
               <Box h="1px" bg="gray.200" my={1} mx={4} />
               {userMenuItems.map(({ label, href, danger }) => (
