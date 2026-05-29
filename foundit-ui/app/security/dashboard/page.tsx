@@ -53,7 +53,8 @@ export default function SecurityDashboardPage() {
 
   const campusStats = useMemo(() => {
     return (
-      MOCK_STATS_BY_CAMPUS[selectedCampusId] ?? MOCK_STATS_BY_CAMPUS[DEFAULT_CAMPUS_ID]
+      MOCK_STATS_BY_CAMPUS[selectedCampusId] ??
+      MOCK_STATS_BY_CAMPUS[DEFAULT_CAMPUS_ID]
     );
   }, [selectedCampusId]);
 
