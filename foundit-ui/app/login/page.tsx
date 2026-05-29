@@ -39,7 +39,7 @@ export default function LoginPage() {
         flexDirection="column"
         minH="100vh"
       >
-        <Navbar variant="student" />
+        <Navbar variant="guest" />
 
         <Box
           flex={1}
