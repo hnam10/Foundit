@@ -4,6 +4,7 @@ import { prisma } from '../db';
 import { validate } from '../validators/shared';
 import { loginSchema, refreshSchema, logoutSchema } from '../validators/auth';
 import { comparePassword } from '../utils/password';
+import { signAccessToken, signRefreshToken, hashTokenForStorage } from '../utils/token';
 
 const router = Router();
 
@@ -96,8 +97,37 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
       return;
     }
 
-    // Token issuance in next commit
-    res.status(200).json({ message: 'credentials verified (tokens pending)' });
+    const accessToken = signAccessToken({
+      user_id: user.userId,
+      role: user.role,
+      campus_id: user.campusId ?? null,
+      email: user.email,
+    });
+
+    const refreshToken = signRefreshToken(user.userId);
+    const tokenHash = hashTokenForStorage(refreshToken);
+    const refreshDays = parseInt(process.env.JWT_REFRESH_EXPIRES_DAYS ?? '7') || 7;
+
+    await prisma.refreshTokenLog.create({
+      data: {
+        userId: user.userId,
+        tokenHash,
+        expiresAt: new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    res.status(200).json({
+      accessToken,
+      refreshToken,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        role: user.role,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        campusId: user.campusId,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -107,7 +137,7 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
  * @openapi
  * /api/auth/refresh:
  *   post:
- *     summary: Refresh access token
+ *     summary: Exchange a refresh token for a new access token
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -121,11 +151,20 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
  *                 type: string
  *     responses:
  *       '200':
- *         description: Returns a new access token
+ *         description: Returns a new access token (refresh token is rotated)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessToken:
+ *                   type: string
+ *                 refreshToken:
+ *                   type: string
  *       '400':
  *         description: Validation error
  *       '401':
- *         description: Refresh token is invalid or expired
+ *         description: Refresh token is invalid, expired, or already revoked
  *       '501':
  *         description: Not yet implemented
  */
@@ -141,7 +180,8 @@ router.post('/refresh', validate(refreshSchema), (_req, res) => {
  * @openapi
  * /api/auth/logout:
  *   post:
- *     summary: Log out a user
+ *     summary: Revoke a refresh token and log out
+ *     description: No access token required. The provided refresh token is revoked and cannot be used again.
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -155,11 +195,11 @@ router.post('/refresh', validate(refreshSchema), (_req, res) => {
  *                 type: string
  *     responses:
  *       '204':
- *         description: Logged out successfully
+ *         description: Logged out successfully — no response body
  *       '400':
  *         description: Validation error
  *       '401':
- *         description: Refresh token is invalid
+ *         description: Refresh token is invalid or already revoked
  *       '501':
  *         description: Not yet implemented
  */
