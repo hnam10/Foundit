@@ -3,11 +3,10 @@
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { Box, Button, Heading, Stack, Text } from '@chakra-ui/react';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
-  function handleSignIn() {
-    window.location.href = '/signin';
-  }
+  const router = useRouter();
 
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
@@ -45,7 +44,7 @@ export default function Home() {
             textAlign="center"
           >
             <Stack gap={8} alignItems="center">
-              <Heading fontSize="28px" color="black" mb={6}>
+              <Heading fontSize="40px" color="black" mb={6}>
                 Welcome
               </Heading>
 
@@ -60,7 +59,7 @@ export default function Home() {
                   rounded="12px"
                   fontSize="16px"
                   colorPalette="blue"
-                  onClick={handleSignIn}
+                  onClick={() => router.push('/login')}
                 >
                   Login
                 </Button>
@@ -71,6 +70,7 @@ export default function Home() {
                   fontSize="16px"
                   colorPalette="blue"
                   variant="outline"
+                  onClick={() => router.push('/signup')}
                 >
                   Sign Up
                 </Button>
