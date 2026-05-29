@@ -21,12 +21,7 @@ export default function DashboardRedirectPage() {
   }, [router]);
 
   return (
-    <Box
-      minH="50vh"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-    >
+    <Box minH="50vh" display="flex" alignItems="center" justifyContent="center">
       <Spinner size="lg" color="blue.500" />
     </Box>
   );

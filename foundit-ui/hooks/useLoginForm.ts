@@ -8,10 +8,7 @@ import { setSessionRole, type UserRole } from '@/utils/auth';
 /** Temporary until login API returns role. */
 function inferRoleFromEmail(email: string): UserRole {
   const lower = email.toLowerCase();
-  if (
-    lower.includes('security') ||
-    lower.endsWith('@senecapolytechnic.ca')
-  ) {
+  if (lower.includes('security') || lower.endsWith('@senecapolytechnic.ca')) {
     return 'security';
   }
   return 'student';
