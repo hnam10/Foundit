@@ -8,7 +8,9 @@ export async function generateUniqueUsername(
   firstName: string,
   lastName: string
 ): Promise<string> {
-  const base = `${firstName}${lastName}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const base = `${firstName}${lastName}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 
   for (let attempt = 0; attempt < 10; attempt++) {
     const suffix = Math.floor(1000 + Math.random() * 9000).toString();

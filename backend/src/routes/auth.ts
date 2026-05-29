@@ -3,9 +3,19 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { prisma } from '../db';
 import { validate } from '../validators/shared';
-import { loginSchema, refreshSchema, logoutSchema } from '../validators/auth';
-import { comparePassword } from '../utils/password';
-import { signAccessToken, signRefreshToken, hashTokenForStorage } from '../utils/token';
+import {
+  loginSchema,
+  registerSchema,
+  refreshSchema,
+  logoutSchema,
+} from '../validators/auth';
+import { comparePassword, hashPassword } from '../utils/password';
+import { generateUniqueUsername } from '../utils/username';
+import {
+  signAccessToken,
+  signRefreshToken,
+  hashTokenForStorage,
+} from '../utils/token';
 import { writeAuditLog } from '../utils/auditLog';
 
 // Limits login attempts to 10 per IP per 15 minutes to slow down brute-force attacks.
@@ -80,72 +90,211 @@ const router = Router();
  *       '429':
  *         description: Too many login attempts — rate limited for 15 minutes
  */
-router.post('/login', loginRateLimiter, validate(loginSchema), async (req, res, next) => {
+router.post(
+  '/login',
+  loginRateLimiter,
+  validate(loginSchema),
+  async (req, res, next) => {
+    try {
+      const { email, password } = req.body as z.infer<typeof loginSchema>;
+
+      // Look up the user by email — same generic error for not found and wrong password
+      // to avoid leaking whether an email is registered.
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        res.status(401).json({
+          code: 'INVALID_CREDENTIALS',
+          message: 'Email or password is incorrect.',
+        });
+        return;
+      }
+
+      // Check is_active before bcrypt to avoid unnecessary hashing work
+      if (!user.isActive) {
+        res.status(403).json({
+          code: 'ACCOUNT_INACTIVE',
+          message:
+            'Your account has been deactivated. Contact an administrator.',
+        });
+        return;
+      }
+
+      const passwordMatch = await comparePassword(password, user.passwordHash);
+      if (!passwordMatch) {
+        res.status(401).json({
+          code: 'INVALID_CREDENTIALS',
+          message: 'Email or password is incorrect.',
+        });
+        return;
+      }
+
+      const accessToken = signAccessToken({
+        user_id: user.userId,
+        role: user.role,
+        campus_id: user.campusId ?? null,
+        email: user.email,
+      });
+
+      const refreshToken = signRefreshToken(user.userId);
+      const tokenHash = hashTokenForStorage(refreshToken);
+      const refreshDays =
+        parseInt(process.env.JWT_REFRESH_EXPIRES_DAYS ?? '7') || 7;
+
+      await prisma.refreshTokenLog.create({
+        data: {
+          userId: user.userId,
+          tokenHash,
+          expiresAt: new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      await writeAuditLog({
+        actorId: user.userId,
+        action: 'user_login',
+        entityType: 'user',
+        entityId: user.userId,
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json({
+        accessToken,
+        refreshToken,
+        user: {
+          userId: user.userId,
+          email: user.email,
+          role: user.role,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          campusId: user.campusId,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/auth/register:
+ *   post:
+ *     summary: Self-register a new user account
+ *     description: Creates a new student or security account. Admin role is not available via self-registration. Call POST /api/auth/login separately to obtain tokens.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password, firstName, lastName, role]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: jane@myseneca.ca
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *                 description: Must contain at least one uppercase letter, one lowercase letter, and one digit
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [student, security]
+ *               campusId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Optional — campus can be assigned later by an admin
+ *               phone:
+ *                 type: string
+ *                 example: '4161234567'
+ *     responses:
+ *       '201':
+ *         description: Account created — call POST /api/auth/login to get tokens
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     userId:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     username:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *                     firstName:
+ *                       type: string
+ *                     lastName:
+ *                       type: string
+ *                     campusId:
+ *                       type: string
+ *                       nullable: true
+ *       '400':
+ *         description: Validation error
+ *       '409':
+ *         description: Email already in use
+ */
+router.post('/register', validate(registerSchema), async (req, res, next) => {
   try {
-    const { email, password } = req.body as z.infer<typeof loginSchema>;
+    const data = req.body as z.infer<typeof registerSchema>;
 
-    // Look up the user by email — same generic error for not found and wrong password
-    // to avoid leaking whether an email is registered.
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      res.status(401).json({
-        code: 'INVALID_CREDENTIALS',
-        message: 'Email or password is incorrect.',
-      });
-      return;
-    }
-
-    // Check is_active before bcrypt to avoid unnecessary hashing work
-    if (!user.isActive) {
-      res.status(403).json({
-        code: 'ACCOUNT_INACTIVE',
-        message: 'Your account has been deactivated. Contact an administrator.',
-      });
-      return;
-    }
-
-    const passwordMatch = await comparePassword(password, user.passwordHash);
-    if (!passwordMatch) {
-      res.status(401).json({
-        code: 'INVALID_CREDENTIALS',
-        message: 'Email or password is incorrect.',
-      });
-      return;
-    }
-
-    const accessToken = signAccessToken({
-      user_id: user.userId,
-      role: user.role,
-      campus_id: user.campusId ?? null,
-      email: user.email,
+    // Reject duplicate emails early — findUnique is faster than catching a DB unique constraint error
+    const existing = await prisma.user.findUnique({
+      where: { email: data.email },
+      select: { userId: true },
     });
+    if (existing) {
+      res.status(409).json({
+        code: 'EMAIL_TAKEN',
+        message: 'An account with this email already exists.',
+      });
+      return;
+    }
 
-    const refreshToken = signRefreshToken(user.userId);
-    const tokenHash = hashTokenForStorage(refreshToken);
-    const refreshDays = parseInt(process.env.JWT_REFRESH_EXPIRES_DAYS ?? '7') || 7;
+    const passwordHash = await hashPassword(data.password);
 
-    await prisma.refreshTokenLog.create({
+    // Auto-generate a username from the user's name — e.g. "janedoe4521"
+    const username = await generateUniqueUsername(
+      data.firstName,
+      data.lastName
+    );
+
+    const user = await prisma.user.create({
       data: {
-        userId: user.userId,
-        tokenHash,
-        expiresAt: new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000),
+        email: data.email,
+        passwordHash,
+        username,
+        role: data.role,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        // campusId is optional at registration — null until assigned by an admin
+        campusId: data.campusId ?? null,
+        phone: data.phone,
       },
     });
 
     await writeAuditLog({
       actorId: user.userId,
-      action: 'user_login',
+      action: 'user_registered',
       entityType: 'user',
       entityId: user.userId,
       ipAddress: req.ip,
     });
 
-    res.status(200).json({
-      accessToken,
-      refreshToken,
+    // Return user profile only — no tokens issued at registration.
+    // The frontend must call POST /api/auth/login separately to obtain tokens.
+    res.status(201).json({
       user: {
         userId: user.userId,
         email: user.email,
+        username: user.username,
         role: user.role,
         firstName: user.firstName,
         lastName: user.lastName,
