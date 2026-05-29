@@ -23,7 +23,16 @@ cp .env.example .env
 
 Open `.env` and fill in the values (see [Environment Variables](#environment-variables) below).
 
-### 4. Start the dev server
+### 4. Apply database migrations and seed
+
+```bash
+pnpm exec prisma migrate dev
+pnpm exec prisma db seed
+```
+
+This creates all tables and inserts a default admin account (`admin@myseneca.ca` / `Admin@1234`).
+
+### 5. Start the dev server
 
 ```bash
 # Make sure you are inside the backend/ folder
@@ -52,12 +61,13 @@ Copy `.env.example` to `.env` and fill in each value.
 
 ### JWT
 
-| Variable                 | Description                                                                      |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| `JWT_ACCESS_SECRET`      | Secret used to sign access tokens — **required**, server won't start without it  |
-| `JWT_REFRESH_SECRET`     | Secret used to sign refresh tokens — **required**, server won't start without it |
-| `JWT_ACCESS_EXPIRES_IN`  | Access token lifetime (default: `15m`)                                           |
-| `JWT_REFRESH_EXPIRES_IN` | Refresh token lifetime (default: `7d`)                                           |
+| Variable                   | Description                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `JWT_ACCESS_SECRET`        | Secret used to sign access tokens — **required**, server won't start without it  |
+| `JWT_REFRESH_SECRET`       | Secret used to sign refresh tokens — **required**, server won't start without it |
+| `JWT_ACCESS_EXPIRES_IN`    | Access token lifetime (default: `15m`)                                           |
+| `JWT_REFRESH_EXPIRES_IN`   | Refresh token lifetime (default: `7d`)                                           |
+| `JWT_REFRESH_EXPIRES_DAYS` | Refresh token lifetime in days for DB expiry calculation (default: `7`)          |
 
 **Why two JWT secrets?**
 Access tokens and refresh tokens are signed with separate secrets so that if one is compromised, the other is unaffected. If they shared the same secret, a leaked refresh secret would let an attacker forge access tokens and bypass authentication entirely.
@@ -76,25 +86,29 @@ JWT_REFRESH_SECRET=another-different-random-string
 ```
 src/
 ├── types/
-│   └── express.d.ts          # req.user type declaration
+│   └── express.d.ts           # req.user type declaration (campus_id is nullable)
 ├── middleware/
-│   ├── authenticate.ts        # TODO: JWT verification
-│   └── requireRole.ts         # TODO: role-based access guard
+│   ├── authenticate.ts         # JWT verification — attaches req.user on success
+│   ├── requireRole.ts          # Role-based access guard
+│   └── errorHandler.ts         # Global Express error handler (Zod, JWT, generic)
 ├── validators/
-│   ├── auth.ts                # TODO: zod schemas for auth routes
-│   └── users.ts               # TODO: zod schemas for user/admin routes
+│   ├── shared.ts               # validate() and validateQuery() middleware helpers
+│   ├── auth.ts                 # Zod schemas: loginSchema, registerSchema, refreshSchema, logoutSchema
+│   └── users.ts                # Zod schemas: updateProfileSchema, createUserSchema, listUsersQuerySchema
+├── utils/
+│   ├── token.ts                # JWT signing, refresh token verification, SHA-256 hash helper
+│   ├── password.ts             # bcrypt hash and compare helpers
+│   ├── auditLog.ts             # Audit log writer
+│   └── username.ts             # Unique username generator
 ├── routes/
-│   ├── health.ts              # done
-│   ├── auth.ts                # TODO: login / refresh / logout
-│   ├── users.ts               # TODO: GET|PATCH /me, PATCH /me/notifications
+│   ├── health.ts               # GET /api/health
+│   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
+│   ├── users.ts                # GET|PATCH /api/users/me (stub)
 │   └── admin/
-│       └── users.ts           # TODO: list / create / deactivate / activate
-├── db.ts                      # PostgreSQL connection pool
-└── index.ts                   # entry point, router registration
+│       └── users.ts            # GET|POST /api/admin/users (stub)
+├── db.ts                       # Prisma client singleton
+└── index.ts                    # Entry point, router registration, error handler
 ```
-
-> All routes are scaffolded and return `501 NOT_IMPLEMENTED`.
-> Start with middleware → validators → routes (in that order).
 
 ---
 
@@ -102,31 +116,41 @@ src/
 
 ### Auth
 
-| Method | Path                | Description                                                 | Done |
-| ------ | ------------------- | ----------------------------------------------------------- | ---- |
-| POST   | `/api/auth/login`   | Verify email + password, return JWT access & refresh tokens |      |
-| POST   | `/api/auth/refresh` | Exchange refresh token for a new access token               |      |
-| POST   | `/api/auth/logout`  | Revoke refresh token (no access token needed)               |      |
+| Method | Path                 | Auth | Description                                                 | Done |
+| ------ | -------------------- | ---- | ----------------------------------------------------------- | ---- |
+| POST   | `/api/auth/register` | —    | Self-register a student or security account                 | ✓    |
+| POST   | `/api/auth/login`    | —    | Verify email + password, return JWT access & refresh tokens | ✓    |
+| POST   | `/api/auth/refresh`  | —    | Exchange refresh token for a new access token               |      |
+| POST   | `/api/auth/logout`   | —    | Revoke refresh token (no access token needed)               |      |
 
 ### User Profile
 
-| Method | Path                          | Description                                          | Done |
-| ------ | ----------------------------- | ---------------------------------------------------- | ---- |
-| GET    | `/api/users/me`               | Get current user's profile                           |      |
-| PATCH  | `/api/users/me`               | Update first name, last name, or phone               |      |
-| PATCH  | `/api/users/me/notifications` | Toggle email notification preference (students only) |      |
+| Method | Path                          | Auth    | Description                            | Done |
+| ------ | ----------------------------- | ------- | -------------------------------------- | ---- |
+| GET    | `/api/users/me`               | any     | Get current user's profile             |      |
+| PATCH  | `/api/users/me`               | any     | Update first name, last name, or phone |      |
+| PATCH  | `/api/users/me/notifications` | student | Toggle email notification preference   |      |
 
 ### Admin
 
-| Method | Path                                  | Description                                                | Done |
-| ------ | ------------------------------------- | ---------------------------------------------------------- | ---- |
-| GET    | `/api/admin/users`                    | List users with optional filters (role, is_active, campus) |      |
-| POST   | `/api/admin/users`                    | Create a new user account                                  |      |
-| PATCH  | `/api/admin/users/:userId/deactivate` | Deactivate a user account                                  |      |
-| PATCH  | `/api/admin/users/:userId/activate`   | Reactivate a user account                                  |      |
+| Method | Path                                  | Auth  | Description                                               | Done |
+| ------ | ------------------------------------- | ----- | --------------------------------------------------------- | ---- |
+| GET    | `/api/admin/users`                    | admin | List users with optional filters (role, isActive, campus) |      |
+| POST   | `/api/admin/users`                    | admin | Create a new user account                                 |      |
+| PATCH  | `/api/admin/users/:userId/deactivate` | admin | Deactivate a user account                                 |      |
+| PATCH  | `/api/admin/users/:userId/activate`   | admin | Reactivate a user account                                 |      |
 
 ### System
 
-| Method | Path          | Description           | Done |
-| ------ | ------------- | --------------------- | ---- |
-| GET    | `/api/health` | DB connectivity check | ✓    |
+| Method | Path          | Auth | Description           | Done |
+| ------ | ------------- | ---- | --------------------- | ---- |
+| GET    | `/api/health` | —    | DB connectivity check | ✓    |
+
+---
+
+## Notes
+
+- All responses use **camelCase** field names (e.g. `userId`, `firstName`, `campusId`)
+- `campus_id` in JWT payload is `string | null` — users who self-register without selecting a campus will have `null` until assigned by an admin
+- Stub routes return `501 NOT_IMPLEMENTED` until implemented
+- Login is rate-limited to 10 attempts per IP per 15 minutes
