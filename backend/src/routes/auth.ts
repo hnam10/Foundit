@@ -1,10 +1,24 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { prisma } from '../db';
 import { validate } from '../validators/shared';
 import { loginSchema, refreshSchema, logoutSchema } from '../validators/auth';
 import { comparePassword } from '../utils/password';
 import { signAccessToken, signRefreshToken, hashTokenForStorage } from '../utils/token';
+import { writeAuditLog } from '../utils/auditLog';
+
+// Limits login attempts to 10 per IP per 15 minutes to slow down brute-force attacks.
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    code: 'RATE_LIMITED',
+    message: 'Too many login attempts. Try again in 15 minutes.',
+  },
+});
 
 const router = Router();
 
@@ -63,8 +77,10 @@ const router = Router();
  *         description: Email or password is incorrect
  *       '403':
  *         description: Account has been deactivated
+ *       '429':
+ *         description: Too many login attempts — rate limited for 15 minutes
  */
-router.post('/login', validate(loginSchema), async (req, res, next) => {
+router.post('/login', loginRateLimiter, validate(loginSchema), async (req, res, next) => {
   try {
     const { email, password } = req.body as z.infer<typeof loginSchema>;
 
@@ -114,6 +130,14 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
         tokenHash,
         expiresAt: new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000),
       },
+    });
+
+    await writeAuditLog({
+      actorId: user.userId,
+      action: 'user_login',
+      entityType: 'user',
+      entityId: user.userId,
+      ipAddress: req.ip,
     });
 
     res.status(200).json({
