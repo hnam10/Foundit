@@ -42,7 +42,7 @@ export default function TextInput({
 
   return (
     // 1. In v3, FormControl is replaced by Field.Root
-    <Field.Root id={id} required={required} invalid={isInvalid} mb={7}>
+    <Field.Root id={id} required={required} invalid={isInvalid} mb={0}>
       {/* 2. In v3, FormLabel is replaced by Field.Label */}
       <Field.Label
         fontSize="1rem"
@@ -71,9 +71,9 @@ export default function TextInput({
       {error && (
         <Field.ErrorText
           fontSize="0.875rem"
-          fontWeight="semibold"
+          fontWeight="normal"
           color="#cd0000"
-          mt={0.5}
+          mt={0.2}
           mb={1}
         >
           {error}
