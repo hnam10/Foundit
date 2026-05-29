@@ -4,30 +4,19 @@ import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import TextInput from '../../components/TextInput';
 import { Box, Button, Stack, Heading } from '@chakra-ui/react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { ST } from 'next/dist/shared/lib/utils';
+import { useLoginForm } from '../../hooks/useLoginForm';
 
 export default function LoginPage() {
-  const router = useRouter();
-
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-
-  function handleLogin() {
-    setEmailError('');
-    setPasswordError('');
-
-    if (!email) setEmailError('Please enter your email.');
-    if (!password) setPasswordError('Please enter your password.');
-
-    if (!email || !password) return;
-
-    router.push('/dashboard');
-  }
+  const {
+    email,
+    setEmail,
+    password,
+    setPassword,
+    emailError,
+    passwordError,
+    handleEmailBlur,
+    handleLogin,
+  } = useLoginForm();
 
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
@@ -83,6 +72,7 @@ export default function LoginPage() {
                 width="full"
                 onChange={(e) => setEmail(e.target.value)}
                 error={emailError}
+                onBlur={handleEmailBlur}
               />
 
               <TextInput
