@@ -1,0 +1,1 @@
+cd foundit-ui && pnpm exec lint-staged
