@@ -3,6 +3,19 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { validateEmail } from '@/utils/validation';
+import { setSessionRole, type UserRole } from '@/utils/auth';
+
+/** Temporary until login API returns role. */
+function inferRoleFromEmail(email: string): UserRole {
+  const lower = email.toLowerCase();
+  if (
+    lower.includes('security') ||
+    lower.endsWith('@senecapolytechnic.ca')
+  ) {
+    return 'security';
+  }
+  return 'student';
+}
 
 export function useLoginForm() {
   const router = useRouter();
@@ -27,7 +40,7 @@ export function useLoginForm() {
     if (emailValidation || passwordValidation) {
       return;
     }
-    // TODO: connect login API after backend auth documentation is provided
+    // TODO: connect login API — use response.role instead of inferRoleFromEmail
 
     /*
 const response = await fetch(
@@ -40,8 +53,12 @@ const response = await fetch(
     body: JSON.stringify({ email, password }),
   }
 );
+const { role } = await response.json();
+setSessionRole(role);
 */
 
+    const role = inferRoleFromEmail(email);
+    setSessionRole(role);
     router.push('/dashboard');
   }
 
