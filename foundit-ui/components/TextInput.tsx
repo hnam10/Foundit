@@ -36,6 +36,7 @@ export default function TextInput({
   id,
   type = 'text',
   autoComplete,
+  onBlur,
   ...rest
 }: TextInputProps) {
   const isInvalid = !!error;
@@ -102,6 +103,7 @@ export default function TextInput({
         }}
         w={widthMap[width]}
         maxW={widthMap[width]}
+        onBlur={onBlur}
         {...rest}
       />
     </Field.Root>
