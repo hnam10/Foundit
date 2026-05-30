@@ -1,69 +1,103 @@
 'use client';
 
-import { Box, Flex, HStack, Link, Text } from '@chakra-ui/react';
-import { IoPersonCircleOutline } from 'react-icons/io5';
+/**
+ * Navbar — sticky top navigation bar.
+ *
+ * Variants:
+ *   'guest'    — not logged in; no username, shows Login button.
+ *   'student'  — authenticated student; shows Home, Found Items, My Claims + user dropdown.
+ *   'security' — authenticated security staff; shows Home, Items, Claims, QR/Link + user dropdown.
+ *
+ * Data shape:
+ *   The parent calls GET /api/users/me (returns NavUser), then passes
+ *   username={`${user.firstName} ${user.lastName}`} down to this component.
+ *   (@see NavUser type exported below)
+ *
+ * Active-link detection: uses Next.js `usePathname`.
+ *   (@see https://nextjs.org/docs/app/api-reference/functions/use-pathname)
+ *
+ * User dropdown: Chakra UI v3 Menu.
+ *   (@see https://www.chakra-ui.com/docs/components/menu)
+ */
 
-type NavbarVariant = 'student' | 'guest' | 'security';
+import {
+  Box,
+  Button as ChakraButton,
+  Flex,
+  HStack,
+  IconButton,
+  Link,
+  Menu,
+  Text,
+  VStack,
+} from '@chakra-ui/react';
+import { Button } from './ui/Button';
+import MdiIcon from '@mdi/react';
+import { mdiAccountCircle, mdiChevronDown } from '@mdi/js';
+import NextLink from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { FiMenu, FiX } from 'react-icons/fi';
 
-interface NavLink {
-  label: string;
-  href: string;
+/**
+ * Partial view of the user object returned by GET /api/users/me.
+ * The parent resolves this and builds the username string for this component.
+ * (@see backend/src/routes/users.ts — GET /me)
+ */
+export interface NavUser {
+  firstName: string;
+  lastName: string;
+  role: 'student' | 'security' | 'admin';
 }
+
+export type NavbarVariant = 'guest' | 'student' | 'security';
 
 interface NavbarProps {
   variant?: NavbarVariant;
-  userName?: string;
-  activePath?: string;
+  /** Formatted display name — build as `${NavUser.firstName} ${NavUser.lastName}`. */
+  username?: string;
 }
 
-const studentLinks: NavLink[] = [
-  { label: 'Home', href: '/student/dashboard' },
-  { label: 'Found Items', href: '#' },
-  { label: 'My claims', href: '#' },
-];
+/**
+ * Nav links per variant.
+ * TODO: Replace security placeholder href values with real routes once those pages exist.
+ */
+const navLinksByVariant: Record<
+  NavbarVariant,
+  { label: string; href: string }[]
+> = {
+  guest: [{ label: 'Home', href: '/' }],
+  student: [
+    { label: 'Home', href: '/' },
+    { label: 'Found Items', href: '/found-items' },
+    { label: 'My Claims', href: '/my-claims' },
+  ],
+  // Placeholders — update href values when security-facing pages are implemented.
+  security: [
+    { label: 'Home', href: '/' },
+    { label: 'Items', href: '/items' },
+    { label: 'Claims', href: '/claims' },
+    { label: 'QR / Link', href: '/qr' },
+  ],
+};
 
-const securityLinks: NavLink[] = [
-  { label: 'Home', href: '/security/dashboard' },
-  { label: 'Items', href: '#' },
-  { label: 'Claims', href: '#' },
-  { label: 'QR/Link', href: '#' },
+/** Dropdown items shown under the user menu (student and security variants). */
+const userMenuItems = [
+  { label: 'Settings', href: '/settings', danger: false },
+  { label: 'Notifications', href: '/notifications', danger: false },
+  { label: 'Sign Out', href: '/signout', danger: true },
 ];
-
-function NavMenu({
-  links,
-  activePath,
-}: {
-  links: NavLink[];
-  activePath?: string;
-}) {
-  return (
-    <HStack gap={10}>
-      {links.map((item) => {
-        const isActive = activePath === item.href;
-        return (
-          <Link
-            key={item.label}
-            href={item.href}
-            fontSize="md"
-            fontWeight="medium"
-            color={isActive ? 'red.600' : 'gray.700'}
-            _hover={{ color: isActive ? 'red.600' : 'gray.900' }}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
-    </HStack>
-  );
-}
 
 export default function Navbar({
   variant = 'guest',
-  userName,
-  activePath,
+  username = 'User Name',
 }: NavbarProps) {
-  const showUser = variant === 'student' || variant === 'security';
-  const navLinks = variant === 'security' ? securityLinks : studentLinks;
+  const pathname = usePathname();
+  const router = useRouter();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const navLinks = navLinksByVariant[variant];
+  const isAuthenticated = variant !== 'guest';
 
   return (
     <Box
@@ -79,7 +113,9 @@ export default function Navbar({
       top={0}
       zIndex={10}
     >
-      <Flex maxW="1200px" mx="auto" h="100%" align="center">
+      {/* ── Main row (always visible) ─────────────────────────────────────── */}
+      <Flex h="75px" align="center">
+        {/* Brand — mr="auto" pushes all right-side items to the far right */}
         <HStack gap={2} mr="auto" align="baseline">
           <Text fontSize="2xl" fontWeight="bold" color="red.600" lineHeight="1">
             Seneca
@@ -89,20 +125,82 @@ export default function Navbar({
           </Text>
         </HStack>
 
-        <HStack gap={10} ml="auto">
-          <NavMenu links={navLinks} activePath={activePath} />
+        {/* Desktop: nav links + user menu (hidden on mobile) */}
+        <HStack gap={10} display={{ base: 'none', md: 'flex' }} align="center">
+          {navLinks.map(({ label, href }) => {
+            const isActive = pathname === href;
+            return (
+              <Link
+                key={href}
+                asChild
+                fontSize="md"
+                fontWeight="medium"
+                /* Red text + underline on the active page */
+                color={isActive ? 'red.600' : 'gray.700'}
+                borderBottom={isActive ? '2px solid' : 'none'}
+                borderColor="red.600"
+                pb="2px"
+                _hover={{ color: 'red.600', textDecoration: 'none' }}
+              >
+                <NextLink href={href}>{label}</NextLink>
+              </Link>
+            );
+          })}
+
+          {/* Guest: Login button using the shared Button component */}
+          {!isAuthenticated && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => router.push('/login')}
+            >
+              Login
+            </Button>
+          )}
+
+          {/* Authenticated: user dropdown (student + security) */}
+          {isAuthenticated && (
+            <Menu.Root>
+              <Menu.Trigger asChild>
+                <ChakraButton variant="ghost" size="sm" px={2} ml={2}>
+                  <HStack gap={2}>
+                    <Text fontSize="md" fontWeight="medium" color="gray.900">
+                      {username}
+                    </Text>
+                    <MdiIcon path={mdiAccountCircle} size={0.9} />
+                    <MdiIcon path={mdiChevronDown} size={0.7} />
+                  </HStack>
+                </ChakraButton>
+              </Menu.Trigger>
+
+              <Menu.Positioner>
+                <Menu.Content>
+                  {userMenuItems.map(({ label, href, danger }) => (
+                    <Menu.Item
+                      key={href}
+                      value={label.toLowerCase()}
+                      fontSize="md"
+                      color={danger ? 'red.500' : 'gray.700'}
+                      onClick={() => router.push(href)}
+                    >
+                      {label}
+                    </Menu.Item>
+                  ))}
+                </Menu.Content>
+              </Menu.Positioner>
+            </Menu.Root>
+          )}
         </HStack>
 
-        {showUser && (
-          <HStack gap={2} ml={12} flexShrink={0}>
-            <Text fontSize="sm" fontWeight="medium" color="gray.900">
-              {userName ?? 'User Name'}
-            </Text>
-            <Box color="gray.500" aria-hidden>
-              <IoPersonCircleOutline size={28} />
-            </Box>
-          </HStack>
-        )}
+        {/* Mobile: hamburger toggle (hidden on desktop) */}
+        <IconButton
+          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+          variant="ghost"
+          display={{ base: 'flex', md: 'none' }}
+          onClick={() => setMobileOpen((prev) => !prev)}
+        >
+          {mobileOpen ? <FiX size={22} /> : <FiMenu size={22} />}
+        </IconButton>
       </Flex>
 
       {/* ── Mobile dropdown (expands below main row) ──────────────────────── */}
@@ -141,7 +239,7 @@ export default function Navbar({
           {!isAuthenticated && (
             <Box px={4} pt={2}>
               <Button
-                variant="danger"
+                variant="primary"
                 size="sm"
                 w="full"
                 onClick={() => {

@@ -27,7 +27,7 @@ export default function Home() {
         flexDirection="column"
         minH="100vh"
       >
-        <Navbar variant="student" />
+        <Navbar variant="guest" />
         <Box
           flex={1}
           display="flex"
