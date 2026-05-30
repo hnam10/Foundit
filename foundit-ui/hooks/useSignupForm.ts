@@ -32,7 +32,7 @@ export function useSignUpForm() {
     setEmailError(validateEmail(email));
   }
 
-  function handleSignUp() {
+  async function handleSignUp() {
     const emailValidation = validateEmail(email);
     const firstError = validateRequired(firstName);
     const lastError = validateRequired(lastName);
@@ -54,8 +54,42 @@ export function useSignUpForm() {
     ) {
       return;
     }
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            firstName,
+            lastName,
+            role,
+          }),
+        }
+      );
 
-    router.push('/login');
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 409 && result.code === 'EMAIL_TAKEN') {
+          setEmailError(result.message);
+          return;
+        }
+
+        setEmailError(
+          result.message || 'Something went wrong. Please try again.'
+        );
+        return;
+      }
+
+      router.push('/login');
+    } catch {
+      setEmailError('Unable to connect to server.');
+    }
   }
 
   return {
