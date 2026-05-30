@@ -51,7 +51,8 @@ const authenticate = (
       typeof payload !== 'object' ||
       payload === null ||
       typeof (payload as Record<string, unknown>).user_id !== 'string' ||
-      typeof (payload as Record<string, unknown>).campus_id !== 'string' ||
+      (typeof (payload as Record<string, unknown>).campus_id !== 'string' &&
+        (payload as Record<string, unknown>).campus_id !== null) ||
       typeof (payload as Record<string, unknown>).email !== 'string' ||
       !['student', 'security', 'admin'].includes(
         (payload as Record<string, unknown>).role as string
@@ -67,7 +68,7 @@ const authenticate = (
     req.user = {
       user_id: p.user_id as string,
       role: p.role as 'student' | 'security' | 'admin',
-      campus_id: p.campus_id as string,
+      campus_id: (p.campus_id as string | null) ?? null,
       email: p.email as string,
     };
 

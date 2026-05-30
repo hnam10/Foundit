@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Foundit Local",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "foundit_db",
+      "Username": "foundit",
+      "SSLMode": "prefer"
+    }
+  }
+}

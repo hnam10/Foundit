@@ -2,22 +2,106 @@
 
 > PRJ566 NCC · Team 02 · Database & Documentation Lead: Hansol Nam
 
-PostgreSQL schema for the **Seneca Campus Lost & Found System**.  
-All files must be applied **in the order listed below**.
+PostgreSQL schema for the **Seneca Campus Lost & Found System**.
+
+> **Schema and seed data are managed by Prisma Migrate** (in `backend/`).  
+> The raw SQL files have been moved to `archive/` for reference only — do not apply them manually.
 
 ---
 
-## 📁 Files
+## Structure
 
-| File              | Purpose                                                         | Run Order      |
-| ----------------- | --------------------------------------------------------------- | -------------- |
-| `schema.sql`      | Creates all tables, enums, indexes, and triggers                | 1st            |
-| `seed.sql`        | Inserts campus records and the default admin user               | 2nd            |
-| `sample-data.sql` | Inserts sample users, items, and claims for development/testing | 3rd (optional) |
+```
+database/
+├── docker-compose.yml       # PostgreSQL + pgAdmin services
+├── pgadmin/
+│   └── servers.json         # pgAdmin pre-registered server config
+├── archive/                 # Legacy SQL files (reference only)
+│   ├── schema.sql
+│   ├── seed.sql
+│   └── sample-data.sql
+└── README.md
+```
+
+Schema is defined in `backend/prisma/schema.prisma`.  
+Seed data is in `backend/prisma/seed.ts`.
 
 ---
 
-## 🗂️ Schema Overview
+## Setup
+
+### First time (or after a full reset)
+
+**Step 1 — Start the database** (from `database/`)
+
+```bash
+cd database
+docker compose up -d
+```
+
+**Step 2 — Apply schema + seed** (from `backend/`)
+
+```bash
+cd backend
+pnpm exec prisma migrate dev
+NODE_ENV=development pnpm exec prisma db seed
+```
+
+**Why `NODE_ENV=development`?**
+
+> The seed script checks this variable to decide whether to insert dev-only sample data (alice, bob, carol + sample records).  
+> Setting it to `development` explicitly inserts everything. Setting it to `production` inserts only the admin account — safe for real deployments.  
+> On a local machine where `NODE_ENV` is usually unset, omitting it works the same as `development`, but being explicit makes the intent clear.
+
+That's it. The database is ready.
+
+---
+
+## Reset Everything
+
+Wipes all data and starts completely fresh:
+
+```bash
+# From database/
+cd database && docker compose down -v && docker compose up -d
+
+# From backend/
+cd backend && pnpm exec prisma migrate dev && NODE_ENV=development pnpm exec prisma db seed
+```
+
+---
+
+## Seed Accounts
+
+After seeding, the following accounts are available:
+
+| Role     | Email               | Password     | Notes                            |
+| -------- | ------------------- | ------------ | -------------------------------- |
+| Admin    | `admin@myseneca.ca` | `Admin@1234` | Always seeded                    |
+| Student  | `alice@myseneca.ca` | `Test1234!`  | Dev only (`NODE_ENV≠production`) |
+| Student  | `bob@myseneca.ca`   | `Test1234!`  | Dev only                         |
+| Security | `carol@myseneca.ca` | `Test1234!`  | Dev only                         |
+
+Dev sample data also includes: 1 report link · 1 found item report · 1 item · 1 claim.
+
+> Change the admin password before deploying to any shared or production environment.
+
+---
+
+## pgAdmin
+
+Visual database browser at **http://localhost:5050**
+
+| Field    | Value             |
+| -------- | ----------------- |
+| Email    | `admin@admin.com` |
+| Password | `admin123`        |
+
+The **Foundit Local** server is pre-registered. Enter the DB password (`foundit123`) when prompted on first connect — it will be remembered for the session.
+
+---
+
+## Schema Overview
 
 The database is built on **PostgreSQL** and uses the `uuid-ossp` extension for UUID primary keys.
 
@@ -261,42 +345,7 @@ user ──< audit_log
 
 ---
 
-## 🚀 Setup
-
-### Prerequisites
-
-- PostgreSQL 15+
-
-### Apply in order
-
-```bash
-# 1. Create the database
-psql -U postgres -c "CREATE DATABASE foundit;"
-
-# 2. Apply schema
-psql -U postgres -d foundit -f schema.sql
-
-# 3. Insert seed data (campuses + admin user)
-psql -U postgres -d foundit -f seed.sql
-
-# 4. (Optional) Insert sample data for development
-psql -U postgres -d foundit -f sample-data.sql
-```
-
-### Default credentials after seed
-
-| Role            | Email                        | Password    |
-| --------------- | ---------------------------- | ----------- |
-| Admin           | `admin@foundit.com`          | `Admin123!` |
-| Sample Student  | `alice@myseneca.ca`          | `Test1234!` |
-| Sample Student  | `bob@myseneca.ca`            | `Test1234!` |
-| Sample Security | `carol@senecapolytechnic.ca` | `Test1234!` |
-
-> ⚠️ **Change the admin password before deploying to any shared or production environment.**
-
----
-
-## 📐 Design Decisions
+## Design Decisions
 
 - **UUID primary keys** — used everywhere for security (non-guessable IDs) and future distributed-system compatibility.
 - **Dual description fields on `item`** — `description_public` is shown to students; `description_internal` is security-only, protecting sensitive details from being exploited (BR7, BR12).
