@@ -3,14 +3,13 @@
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import TextInput from '../../components/TextInput';
-import React from 'react';
 import {
   Box,
   Button,
+  Stack,
   Heading,
   HStack,
   Link,
-  Stack,
   Text,
 } from '@chakra-ui/react';
 import { useSignUpForm } from '../../hooks/useSignupForm';
@@ -19,23 +18,30 @@ export default function SignUpPage() {
   const {
     role,
     setRole,
+
+    email,
+    setEmail,
+    emailError,
+    handleEmailBlur,
+
     firstName,
     setFirstName,
+
     lastName,
     setLastName,
-    schoolId,
-    setSchoolId,
+
     password,
     setPassword,
+
     confirmPassword,
     setConfirmPassword,
+
     firstNameError,
     lastNameError,
-    schoolIdError,
     passwordError,
     confirmPasswordError,
+
     handleSignUp,
-    validateSchoolIdField,
   } = useSignUpForm();
 
   return (
@@ -123,8 +129,19 @@ export default function SignUpPage() {
                   error={lastNameError}
                 />
               </HStack>
-
               <TextInput
+                placeholder="example@myseneca.ca"
+                id="email"
+                label="Email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                width="full"
+                onChange={(e) => setEmail(e.target.value)}
+                error={emailError}
+                onBlur={handleEmailBlur}
+              />
+              {/* <TextInput
                 id="schoolId"
                 label="Student/Employee ID"
                 value={schoolId}
@@ -132,7 +149,7 @@ export default function SignUpPage() {
                 onChange={(e) => setSchoolId(e.target.value)}
                 onBlur={() => validateSchoolIdField(schoolId)}
                 error={schoolIdError}
-              />
+              /> */}
 
               <TextInput
                 id="password"

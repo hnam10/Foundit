@@ -6,7 +6,7 @@ import {
   validateRequired,
   validatePassword,
   validatePasswordMatch,
-  validateSchoolId,
+  validateEmail,
 } from '@/utils/validation';
 
 type Role = 'student' | 'security';
@@ -15,69 +15,102 @@ export function useSignUpForm() {
   const router = useRouter();
 
   const [role, setRole] = useState<Role>('student');
+  const [email, setEmail] = useState('');
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [schoolId, setSchoolId] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const [firstNameError, setFirstNameError] = useState('');
   const [lastNameError, setLastNameError] = useState('');
-  const [schoolIdError, setSchoolIdError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
-  function validateSchoolIdField(value: string, currentRole: Role = role) {
-    const idError = validateSchoolId(value, currentRole);
-    setSchoolIdError(idError);
+  function handleEmailBlur() {
+    setEmailError(validateEmail(email));
   }
 
-  function handleSignUp() {
+  async function handleSignUp() {
+    const emailValidation = validateEmail(email);
     const firstError = validateRequired(firstName);
     const lastError = validateRequired(lastName);
-    const idError = validateSchoolId(schoolId, role);
     const passError = validatePassword(password);
     const confirmError = validatePasswordMatch(password, confirmPassword);
 
+    setEmailError(emailValidation);
     setFirstNameError(firstError);
     setLastNameError(lastError);
-    setSchoolIdError(idError);
     setPasswordError(passError);
     setConfirmPasswordError(confirmError);
 
-    if (firstError || lastError || idError || passError || confirmError) {
+    if (
+      emailValidation ||
+      firstError ||
+      lastError ||
+      passError ||
+      confirmError
+    ) {
       return;
     }
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            firstName,
+            lastName,
+            role,
+          }),
+        }
+      );
 
-    router.push('/login');
-  }
+      const result = await response.json();
 
-  function handleRoleChange(newRole: Role) {
-    setRole(newRole);
-    if (schoolId) {
-      validateSchoolIdField(schoolId, newRole);
+      if (!response.ok) {
+        if (response.status === 409 && result.code === 'EMAIL_TAKEN') {
+          setEmailError(result.message);
+          return;
+        }
+
+        setEmailError(
+          result.message || 'Something went wrong. Please try again.'
+        );
+        return;
+      }
+
+      router.push('/login');
+    } catch {
+      setEmailError('Unable to connect to server.');
     }
   }
 
   return {
     role,
-    setRole: handleRoleChange,
+    setRole,
+    email,
+    setEmail,
     firstName,
     setFirstName,
     lastName,
     setLastName,
-    schoolId,
-    setSchoolId,
     password,
     setPassword,
     confirmPassword,
     setConfirmPassword,
     firstNameError,
     lastNameError,
-    schoolIdError,
+    emailError,
     passwordError,
     confirmPasswordError,
-    validateSchoolIdField,
+    handleEmailBlur,
     handleSignUp,
   };
 }
