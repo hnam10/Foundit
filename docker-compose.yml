@@ -13,8 +13,8 @@ services:
       - '${DB_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+      # - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      # - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
     healthcheck:
       test:
         [
@@ -30,7 +30,7 @@ services:
     container_name: foundit-pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@foundit.local}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-aadmin@admin.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
     ports:
       - '${PGADMIN_PORT:-5050}:80'
