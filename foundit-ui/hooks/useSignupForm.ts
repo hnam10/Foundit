@@ -6,7 +6,7 @@ import {
   validateRequired,
   validatePassword,
   validatePasswordMatch,
-  validateSchoolId,
+  validateEmail,
 } from '@/utils/validation';
 
 type Role = 'student' | 'security';
@@ -15,69 +15,68 @@ export function useSignUpForm() {
   const router = useRouter();
 
   const [role, setRole] = useState<Role>('student');
+  const [email, setEmail] = useState('');
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [schoolId, setSchoolId] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const [firstNameError, setFirstNameError] = useState('');
   const [lastNameError, setLastNameError] = useState('');
-  const [schoolIdError, setSchoolIdError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
-  function validateSchoolIdField(value: string, currentRole: Role = role) {
-    const idError = validateSchoolId(value, currentRole);
-    setSchoolIdError(idError);
+  function handleEmailBlur() {
+    setEmailError(validateEmail(email));
   }
 
   function handleSignUp() {
+    const emailValidation = validateEmail(email);
     const firstError = validateRequired(firstName);
     const lastError = validateRequired(lastName);
-    const idError = validateSchoolId(schoolId, role);
     const passError = validatePassword(password);
     const confirmError = validatePasswordMatch(password, confirmPassword);
 
+    setEmailError(emailValidation);
     setFirstNameError(firstError);
     setLastNameError(lastError);
-    setSchoolIdError(idError);
     setPasswordError(passError);
     setConfirmPasswordError(confirmError);
 
-    if (firstError || lastError || idError || passError || confirmError) {
+    if (
+      emailValidation ||
+      firstError ||
+      lastError ||
+      passError ||
+      confirmError
+    ) {
       return;
     }
 
     router.push('/login');
   }
 
-  function handleRoleChange(newRole: Role) {
-    setRole(newRole);
-    if (schoolId) {
-      validateSchoolIdField(schoolId, newRole);
-    }
-  }
-
   return {
     role,
-    setRole: handleRoleChange,
+    setRole,
+    email,
+    setEmail,
     firstName,
     setFirstName,
     lastName,
     setLastName,
-    schoolId,
-    setSchoolId,
     password,
     setPassword,
     confirmPassword,
     setConfirmPassword,
     firstNameError,
     lastNameError,
-    schoolIdError,
+    emailError,
     passwordError,
     confirmPasswordError,
-    validateSchoolIdField,
+    handleEmailBlur,
     handleSignUp,
   };
 }
