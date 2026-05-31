@@ -37,26 +37,36 @@ export function useLoginForm() {
     if (emailValidation || passwordValidation) {
       return;
     }
-    // TODO: connect login API — use response.role instead of inferRoleFromEmail
 
-    /*
-const response = await fetch(
-  `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, password }),
-  }
-);
-const { role } = await response.json();
-setSessionRole(role);
-*/
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      }
+    );
 
-    const role = inferRoleFromEmail(email);
+    const result = await response.json();
+
+    if (!response.ok) {
+      setPasswordError(result.message || 'Login failed.');
+      return;
+    }
+
+    localStorage.setItem('accessToken', result.accessToken);
+    localStorage.setItem('user', JSON.stringify(result.user));
+
+    const role = result.user.role as UserRole;
     setSessionRole(role);
-    router.push('/dashboard');
+
+    if (role === 'security') {
+      router.push('/security/dashboard');
+    } else {
+      router.push('/student/dashboard');
+    }
   }
 
   return {
