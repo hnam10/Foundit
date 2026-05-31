@@ -162,17 +162,17 @@ Global API rules:
 
 ### Claims
 
-| Method | Path                                              | Auth                   | Status  | Description                                                 |
-| ------ | ------------------------------------------------- | ---------------------- | ------- | ----------------------------------------------------------- |
-| POST   | `/api/claims`                                     | student                | Planned | Submit a lost item claim                                    |
-| GET    | `/api/claims`                                     | student/security/admin | Planned | List claims; student sees own, security/admin can filter    |
-| GET    | `/api/claims/:claimId`                            | student/security/admin | Planned | Get claim detail with ownership/authorization checks        |
-| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Planned | Transition claim status using existing DB enum              |
-| DELETE | `/api/claims/:claimId`                            | student                | Planned | Cancel/delete own cancellable claim with audit logging      |
-| PATCH  | `/api/claims/:claimId`                            | security/admin         | Planned | Link a stored item to the claim (`itemId` only)             |
-| GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Planned | Retrieve match suggestions for a claim                      |
-| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Planned | Trigger match scoring and create suggestions                |
-| PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Planned | Confirm or dismiss a match suggestion                       |
+| Method | Path                                              | Auth                   | Status  | Description                                              |
+| ------ | ------------------------------------------------- | ---------------------- | ------- | -------------------------------------------------------- |
+| POST   | `/api/claims`                                     | student                | Planned | Submit a lost item claim                                 |
+| GET    | `/api/claims`                                     | student/security/admin | Planned | List claims; student sees own, security/admin can filter |
+| GET    | `/api/claims/:claimId`                            | student/security/admin | Planned | Get claim detail with ownership/authorization checks     |
+| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Planned | Transition claim status using existing DB enum           |
+| DELETE | `/api/claims/:claimId`                            | student                | Planned | Cancel/delete own cancellable claim with audit logging   |
+| PATCH  | `/api/claims/:claimId`                            | security/admin         | Planned | Link a stored item to the claim (`itemId` only)          |
+| GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Planned | Retrieve match suggestions for a claim                   |
+| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Planned | Trigger match scoring and create suggestions             |
+| PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Planned | Confirm or dismiss a match suggestion                    |
 
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
 
@@ -192,16 +192,16 @@ Report link tokens stay in the URL to match the current database model, but must
 
 ### Items
 
-| Method | Path                                 | Auth           | Status  | Description                                                 |
-| ------ | ------------------------------------ | -------------- | ------- | ----------------------------------------------------------- |
-| GET    | `/api/items/category-stats`          | —              | Planned | Public item counts per category                             |
-| POST   | `/api/items/batch`                   | security/admin | Planned | Batch status update for items                               |
-| POST   | `/api/items`                         | security/admin | Planned | Register a found item into inventory                        |
-| GET    | `/api/items`                         | security/admin | Planned | List items with filters                                     |
-| GET    | `/api/items/:itemId`                 | security/admin | Planned | Get item detail                                             |
-| PATCH  | `/api/items/:itemId`                 | security/admin | Planned | Update item fields; does not modify status                  |
-| DELETE | `/api/items/:itemId`                 | admin          | Planned | Permanently delete only erroneous records with audit log    |
-| PATCH  | `/api/items/:itemId/status`          | security/admin | Planned | Transition item lifecycle status                            |
+| Method | Path                        | Auth           | Status  | Description                                              |
+| ------ | --------------------------- | -------------- | ------- | -------------------------------------------------------- |
+| GET    | `/api/items/category-stats` | —              | Planned | Public item counts per category                          |
+| POST   | `/api/items/batch`          | security/admin | Planned | Batch status update for items                            |
+| POST   | `/api/items`                | security/admin | Planned | Register a found item into inventory                     |
+| GET    | `/api/items`                | security/admin | Planned | List items with filters                                  |
+| GET    | `/api/items/:itemId`        | security/admin | Planned | Get item detail                                          |
+| PATCH  | `/api/items/:itemId`        | security/admin | Planned | Update item fields; does not modify status               |
+| DELETE | `/api/items/:itemId`        | admin          | Planned | Permanently delete only erroneous records with audit log |
+| PATCH  | `/api/items/:itemId/status` | security/admin | Planned | Transition item lifecycle status                         |
 
 Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed`; `DELETE /api/items/:itemId` is reserved for admin correction of erroneous records.
 
