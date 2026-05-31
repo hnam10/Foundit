@@ -10,7 +10,7 @@
  *
  * Data shape:
  *   The parent calls GET /api/users/me (returns NavUser), then passes
- *   username={`${user.firstName} ${user.lastName}`} down to this component.
+ *   userName={`${user.firstName} ${user.lastName}`} down to this component.
  *   (@see NavUser type exported below)
  *
  * Active-link detection: uses Next.js `usePathname`.
@@ -18,6 +18,20 @@
  *
  * User dropdown: Chakra UI v3 Menu.
  *   (@see https://www.chakra-ui.com/docs/components/menu)
+ *
+ * Usage:
+ *   // Guest (standalone page)
+ *   <Navbar variant="guest" />
+ *
+ *   // Authenticated — activePath threaded from the layout
+ *   const pathname = usePathname();
+ *   <Navbar variant="student" userName="Jane Smith" activePath={pathname} />
+ *   <Navbar variant="security" userName="Officer Reyes" activePath={pathname} />
+ *
+ *   // Via RoleShell (recommended for role-based layouts)
+ *   <RoleShell variant="student" userName={displayName} activePath={pathname}>
+ *     {children}
+ *   </RoleShell>
  */
 
 import {
@@ -33,11 +47,10 @@ import {
 } from '@chakra-ui/react';
 import { Button } from './ui/Button';
 import MdiIcon from '@mdi/react';
-import { mdiAccountCircle, mdiChevronDown } from '@mdi/js';
+import { mdiAccountCircle, mdiChevronDown, mdiClose, mdiMenu } from '@mdi/js';
 import NextLink from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { FiMenu, FiX } from 'react-icons/fi';
 
 /**
  * Partial view of the user object returned by GET /api/users/me.
@@ -70,28 +83,36 @@ export interface DropdownItem {
   danger?: boolean;
 }
 
-interface DropdownProps {
-  variant: DropdownVariant;
-  items: DropdownItem[];
-  /** Required when variant === 'user'. */
-  username?: string;
-}
+type DropdownProps =
+  | { variant: 'user'; items: DropdownItem[]; userName: string }
+  | {
+      variant: Exclude<DropdownVariant, 'user'>;
+      items: DropdownItem[];
+      userName?: never;
+    };
 
-export function Dropdown({ variant, items, username }: DropdownProps) {
+export function Dropdown({ variant, items, userName }: DropdownProps) {
   const router = useRouter();
 
-  const trigger =
-    variant === 'user' ? (
-      <ChakraButton variant="ghost" size="sm" px={2} ml={2}>
-        <HStack gap={2}>
-          <Text fontSize="md" fontWeight="medium" color="gray.900">
-            {username}
-          </Text>
-          <MdiIcon path={mdiAccountCircle} size={0.9} />
-          <MdiIcon path={mdiChevronDown} size={0.7} />
-        </HStack>
-      </ChakraButton>
-    ) : null;
+  const trigger = (() => {
+    switch (variant) {
+      case 'user':
+        return (
+          <ChakraButton variant="ghost" size="sm" px={2} ml={2}>
+            <HStack gap={2}>
+              <Text fontSize="md" fontWeight="medium" color="gray.900">
+                {userName}
+              </Text>
+              <MdiIcon path={mdiAccountCircle} size={0.9} />
+              <MdiIcon path={mdiChevronDown} size={0.7} />
+            </HStack>
+          </ChakraButton>
+        );
+      default:
+        variant satisfies never;
+        return null;
+    }
+  })();
 
   return (
     <Menu.Root>
@@ -121,10 +142,7 @@ export function Dropdown({ variant, items, username }: DropdownProps) {
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
-/**
- * Nav links per variant.
- * TODO: Replace security placeholder href values with real routes once those pages exist.
- */
+/** Nav links per variant. */
 const navLinksByVariant: Record<
   NavbarVariant,
   { label: string; href: string }[]
@@ -203,7 +221,7 @@ export default function Navbar({
                 color={isActive ? 'red.600' : 'gray.700'}
                 borderBottom={isActive ? '2px solid' : 'none'}
                 borderColor="red.600"
-                pb="2px"
+                pb={isActive ? '2px' : undefined}
                 _hover={{ color: 'red.600', textDecoration: 'none' }}
               >
                 <NextLink href={href}>{label}</NextLink>
@@ -224,7 +242,7 @@ export default function Navbar({
           {isAuthenticated && (
             <Dropdown
               variant="user"
-              username={userName}
+              userName={userName}
               items={userMenuItems}
             />
           )}
@@ -237,7 +255,11 @@ export default function Navbar({
           display={{ base: 'flex', md: 'none' }}
           onClick={() => setMobileOpen((prev) => !prev)}
         >
-          {mobileOpen ? <FiX size={22} /> : <FiMenu size={22} />}
+          {mobileOpen ? (
+            <MdiIcon path={mdiClose} size={0.9} />
+          ) : (
+            <MdiIcon path={mdiMenu} size={0.9} />
+          )}
         </IconButton>
       </Flex>
 
