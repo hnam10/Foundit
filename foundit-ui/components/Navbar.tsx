@@ -55,8 +55,71 @@ export type NavbarVariant = 'guest' | 'student' | 'security';
 interface NavbarProps {
   variant?: NavbarVariant;
   /** Formatted display name — build as `${NavUser.firstName} ${NavUser.lastName}`. */
+  userName?: string;
+  /** Current pathname — pass from the layout via usePathname(). Falls back to internal usePathname() if omitted. */
+  activePath?: string;
+}
+
+// ── Dropdown ──────────────────────────────────────────────────────────────────
+
+type DropdownVariant = 'user';
+
+export interface DropdownItem {
+  label: string;
+  href: string;
+  danger?: boolean;
+}
+
+interface DropdownProps {
+  variant: DropdownVariant;
+  items: DropdownItem[];
+  /** Required when variant === 'user'. */
   username?: string;
 }
+
+export function Dropdown({ variant, items, username }: DropdownProps) {
+  const router = useRouter();
+
+  const trigger =
+    variant === 'user' ? (
+      <ChakraButton variant="ghost" size="sm" px={2} ml={2}>
+        <HStack gap={2}>
+          <Text fontSize="md" fontWeight="medium" color="gray.900">
+            {username}
+          </Text>
+          <MdiIcon path={mdiAccountCircle} size={0.9} />
+          <MdiIcon path={mdiChevronDown} size={0.7} />
+        </HStack>
+      </ChakraButton>
+    ) : null;
+
+  return (
+    <Menu.Root>
+      <Menu.Trigger asChild>{trigger}</Menu.Trigger>
+      <Menu.Positioner mt={4}>
+        <Menu.Content minW="160px">
+          {items.map(({ label, href, danger }) => (
+            <Menu.Item
+              key={href}
+              value={label.toLowerCase()}
+              fontSize="sm"
+              fontWeight="medium"
+              color={danger ? 'red.500' : 'gray.700'}
+              px={4}
+              py={2}
+              _highlighted={{ bg: 'gray.100' }}
+              onClick={() => router.push(href)}
+            >
+              {label}
+            </Menu.Item>
+          ))}
+        </Menu.Content>
+      </Menu.Positioner>
+    </Menu.Root>
+  );
+}
+
+// ── Data ──────────────────────────────────────────────────────────────────────
 
 /**
  * Nav links per variant.
@@ -81,17 +144,21 @@ const navLinksByVariant: Record<
 };
 
 /** Dropdown items shown under the user menu (student and security variants). */
-const userMenuItems = [
-  { label: 'Settings', href: '/settings', danger: false },
-  { label: 'Notifications', href: '/notifications', danger: false },
+const userMenuItems: DropdownItem[] = [
+  { label: 'Settings', href: '/settings' },
+  { label: 'Notifications', href: '/notifications' },
   { label: 'Sign Out', href: '/login', danger: true },
 ];
 
+// ── Navbar ────────────────────────────────────────────────────────────────────
+
 export default function Navbar({
   variant = 'guest',
-  username = 'User Name',
+  userName = 'User Name',
+  activePath,
 }: NavbarProps) {
   const pathname = usePathname();
+  const currentPath = activePath ?? pathname;
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -105,7 +172,6 @@ export default function Navbar({
       borderBottom="1px solid"
       borderColor="gray.200"
       px={{ base: 4, md: 8 }}
-      /* minH instead of h so the mobile menu can expand the bar vertically */
       minH="75px"
       w="100%"
       position="sticky"
@@ -127,14 +193,13 @@ export default function Navbar({
         {/* Desktop: nav links + user menu (hidden on mobile) */}
         <HStack gap={10} display={{ base: 'none', md: 'flex' }} align="center">
           {navLinks.map(({ label, href }) => {
-            const isActive = pathname === href;
+            const isActive = currentPath === href;
             return (
               <Link
                 key={href}
                 asChild
                 fontSize="md"
                 fontWeight="medium"
-                /* Red text + underline on the active page */
                 color={isActive ? 'red.600' : 'gray.700'}
                 borderBottom={isActive ? '2px solid' : 'none'}
                 borderColor="red.600"
@@ -146,7 +211,6 @@ export default function Navbar({
             );
           })}
 
-          {/* Guest: Login button using the shared Button component */}
           {!isAuthenticated && (
             <Button
               variant="primary"
@@ -157,41 +221,12 @@ export default function Navbar({
             </Button>
           )}
 
-          {/* Authenticated: user dropdown (student + security) */}
           {isAuthenticated && (
-            <Menu.Root>
-              <Menu.Trigger asChild>
-                <ChakraButton variant="ghost" size="sm" px={2} ml={2}>
-                  <HStack gap={2}>
-                    <Text fontSize="md" fontWeight="medium" color="gray.900">
-                      {username}
-                    </Text>
-                    <MdiIcon path={mdiAccountCircle} size={0.9} />
-                    <MdiIcon path={mdiChevronDown} size={0.7} />
-                  </HStack>
-                </ChakraButton>
-              </Menu.Trigger>
-
-              <Menu.Positioner mt={4}>
-                <Menu.Content minW="160px">
-                  {userMenuItems.map(({ label, href, danger }) => (
-                    <Menu.Item
-                      key={href}
-                      value={label.toLowerCase()}
-                      fontSize="sm"
-                      fontWeight="medium"
-                      color={danger ? 'red.500' : 'gray.700'}
-                      px={4}
-                      py={2}
-                      _highlighted={{ bg: '#3B82F6', color: 'white' }}
-                      onClick={() => router.push(href)}
-                    >
-                      {label}
-                    </Menu.Item>
-                  ))}
-                </Menu.Content>
-              </Menu.Positioner>
-            </Menu.Root>
+            <Dropdown
+              variant="user"
+              username={userName}
+              items={userMenuItems}
+            />
           )}
         </HStack>
 
@@ -217,7 +252,7 @@ export default function Navbar({
           borderColor="gray.200"
         >
           {navLinks.map(({ label, href }) => {
-            const isActive = pathname === href;
+            const isActive = currentPath === href;
             return (
               <Link
                 key={href}
@@ -230,7 +265,6 @@ export default function Navbar({
                 color={isActive ? 'red.600' : 'gray.700'}
                 borderRadius="md"
                 _hover={{ bg: 'gray.100', textDecoration: 'none' }}
-                /* Close the menu when a link is tapped */
                 onClick={() => setMobileOpen(false)}
               >
                 <NextLink href={href}>{label}</NextLink>
@@ -238,7 +272,6 @@ export default function Navbar({
             );
           })}
 
-          {/* Guest: Login button (mobile) */}
           {!isAuthenticated && (
             <Box px={4} pt={2}>
               <Button
@@ -255,7 +288,6 @@ export default function Navbar({
             </Box>
           )}
 
-          {/* Authenticated: separator + user menu items (mobile) */}
           {isAuthenticated && (
             <>
               <Box h="1px" bg="gray.200" my={1} mx={4} />
