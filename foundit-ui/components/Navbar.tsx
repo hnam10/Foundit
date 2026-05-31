@@ -68,13 +68,12 @@ const navLinksByVariant: Record<
 > = {
   guest: [{ label: 'Home', href: '/' }],
   student: [
-    { label: 'Home', href: '/' },
+    { label: 'Home', href: '/student/dashboard' },
     { label: 'Found Items', href: '/found-items' },
     { label: 'My Claims', href: '/my-claims' },
   ],
-  // Placeholders — update href values when security-facing pages are implemented.
   security: [
-    { label: 'Home', href: '/' },
+    { label: 'Home', href: '/security/dashboard' },
     { label: 'Items', href: '/items' },
     { label: 'Claims', href: '/claims' },
     { label: 'QR / Link', href: '/qr' },
@@ -85,7 +84,7 @@ const navLinksByVariant: Record<
 const userMenuItems = [
   { label: 'Settings', href: '/settings', danger: false },
   { label: 'Notifications', href: '/notifications', danger: false },
-  { label: 'Sign Out', href: '/signout', danger: true },
+  { label: 'Sign Out', href: '/login', danger: true },
 ];
 
 export default function Navbar({
@@ -173,14 +172,18 @@ export default function Navbar({
                 </ChakraButton>
               </Menu.Trigger>
 
-              <Menu.Positioner>
-                <Menu.Content>
+              <Menu.Positioner mt={4}>
+                <Menu.Content minW="160px">
                   {userMenuItems.map(({ label, href, danger }) => (
                     <Menu.Item
                       key={href}
                       value={label.toLowerCase()}
-                      fontSize="md"
+                      fontSize="sm"
+                      fontWeight="medium"
                       color={danger ? 'red.500' : 'gray.700'}
+                      px={4}
+                      py={2}
+                      _highlighted={{ bg: '#3B82F6', color: 'white' }}
                       onClick={() => router.push(href)}
                     >
                       {label}
