@@ -167,8 +167,6 @@ Global API rules:
 | POST   | `/api/claims`                                     | student                | Planned | Submit a lost item claim                                    |
 | GET    | `/api/claims`                                     | student/security/admin | Planned | List claims; student sees own, security/admin can filter    |
 | GET    | `/api/claims/:claimId`                            | student/security/admin | Planned | Get claim detail with ownership/authorization checks        |
-| POST   | `/api/claims/:claimId/images`                     | student                | Planned | Upload claim images; image implementation owned separately  |
-| DELETE | `/api/claims/:claimId/images/:imageId`            | student                | Planned | Delete a claim image; image implementation owned separately |
 | PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Planned | Transition claim status using existing DB enum              |
 | DELETE | `/api/claims/:claimId`                            | student                | Planned | Cancel/delete own cancellable claim with audit logging      |
 | PATCH  | `/api/claims/:claimId`                            | security/admin         | Planned | Link a stored item to the claim (`itemId` only)             |
@@ -192,8 +190,6 @@ Claim cancellation uses `DELETE /api/claims/:claimId` because the original datab
 
 Report link tokens stay in the URL to match the current database model, but must be treated as one-time secrets: high entropy, rate-limited validation/submission, `Cache-Control: no-store`, redacted logs, and atomic consume on submit.
 
-Found item reports do not support direct image upload under the current database design. If a reported found item needs images, security first creates an `Item` linked by `foundItemReportId`, then uploads images through `POST /api/items/:itemId/images`.
-
 ### Items
 
 | Method | Path                                 | Auth           | Status  | Description                                                 |
@@ -206,8 +202,6 @@ Found item reports do not support direct image upload under the current database
 | PATCH  | `/api/items/:itemId`                 | security/admin | Planned | Update item fields; does not modify status                  |
 | DELETE | `/api/items/:itemId`                 | admin          | Planned | Permanently delete only erroneous records with audit log    |
 | PATCH  | `/api/items/:itemId/status`          | security/admin | Planned | Transition item lifecycle status                            |
-| POST   | `/api/items/:itemId/images`          | security/admin | Planned | Upload item images; image implementation owned separately   |
-| DELETE | `/api/items/:itemId/images/:imageId` | security/admin | Planned | Delete an item image; image implementation owned separately |
 
 Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed`; `DELETE /api/items/:itemId` is reserved for admin correction of erroneous records.
 

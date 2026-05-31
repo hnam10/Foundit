@@ -4,6 +4,9 @@
 
 PostgreSQL schema for the **Seneca Campus Lost & Found System**.
 
+> **This Docker setup starts a clean, empty database.**  
+> No data is pre-loaded. To populate the database with schema and seed data, run Prisma Migrate and the seed script from the `backend/` directory after starting the container — see [Setup](#setup) below.
+
 > **Schema and seed data are managed by Prisma Migrate** (in `backend/`).  
 > The raw SQL files have been moved to `archive/` for reference only — do not apply them manually.
 
