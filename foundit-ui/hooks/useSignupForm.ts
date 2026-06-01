@@ -76,7 +76,7 @@ export function useSignUpForm() {
 
       if (!response.ok) {
         if (response.status === 409 && result.code === 'EMAIL_TAKEN') {
-          setEmailError(result.message);
+          setEmailError('This email is already in use.');
           return;
         }
 

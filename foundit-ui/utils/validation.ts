@@ -8,6 +8,9 @@ export function validateEmail(email: string): string {
   if (!emailRegex.test(email)) {
     return 'Invalid email format.';
   }
+  if (!email.toLowerCase().endsWith('@myseneca.ca')) {
+    return 'Please use your Seneca email.';
+  }
 
   return '';
 }
