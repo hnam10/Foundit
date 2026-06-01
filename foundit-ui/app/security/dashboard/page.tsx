@@ -6,6 +6,7 @@ import { CampusStatusCard } from '@/components/dashboard/CampusStatusCard';
 import type { ClaimCategoryStatProps } from '@/components/dashboard/ClaimCategoryStat';
 import { CAMPUSES, DEFAULT_CAMPUS_ID } from '@/constants/campuses';
 import { MOCK_SECURITY_DISPLAY_NAME } from '@/constants/mockSession';
+import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
 
 /** Placeholder per-campus stats until dashboard API supports campusId filter. */
 const MOCK_STATS_BY_CAMPUS: Record<
@@ -48,8 +49,7 @@ const MOCK_STATS_BY_CAMPUS: Record<
 
 export default function SecurityDashboardPage() {
   const [selectedCampusId, setSelectedCampusId] = useState(DEFAULT_CAMPUS_ID);
-
-  const displayName = MOCK_SECURITY_DISPLAY_NAME;
+  const displayName = useLoggedInDisplayName(MOCK_SECURITY_DISPLAY_NAME);
 
   const campusStats = useMemo(() => {
     return (
