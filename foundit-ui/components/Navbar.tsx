@@ -155,9 +155,9 @@ const navLinksByVariant: Record<
   ],
   security: [
     { label: 'Home', href: '/security/dashboard' },
-    { label: 'Items', href: '/items' },
-    { label: 'Claims', href: '/claims' },
-    { label: 'QR / Link', href: '/qr' },
+    { label: 'Items', href: '/security/items' },
+    { label: 'Claims', href: '/security/claims' },
+    { label: 'QR / Link', href: '/security/qr' },
   ],
 };
 
