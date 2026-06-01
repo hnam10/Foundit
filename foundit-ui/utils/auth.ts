@@ -37,3 +37,37 @@ export function getSessionRole(): UserRole | null {
 export function getRoleHome(role: UserRole): string {
   return ROLE_HOME[role];
 }
+
+export interface LoggedInUser {
+  userId: string;
+  email: string;
+  role: UserRole;
+  firstName: string;
+  lastName: string;
+  campusId?: string | null;
+}
+
+export function getLoggedInUser(): LoggedInUser | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = localStorage.getItem('user');
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as LoggedInUser;
+  } catch {
+    return null;
+  }
+}
+
+export function getLoggedInDisplayName(): string | null {
+  const user = getLoggedInUser();
+  if (!user?.firstName) {
+    return null;
+  }
+  return `${user.firstName} ${user.lastName}`.trim();
+}
