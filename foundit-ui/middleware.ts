@@ -37,6 +37,15 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  if (pathname.startsWith('/profile')) {
+    if (!role) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    if (role !== 'student' && role !== 'security' && role !== 'admin') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
   if (pathname.startsWith('/admin')) {
     if (!role) {
       return NextResponse.redirect(new URL('/login', request.url));
@@ -63,5 +72,7 @@ export const config = {
     '/admin/:path*',
     '/dashboard',
     '/dashboard/:path*',
+    '/profile/:path*',
+    '/profile',
   ],
 };
