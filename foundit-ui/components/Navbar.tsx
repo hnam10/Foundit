@@ -51,6 +51,7 @@ import { mdiAccountCircle, mdiChevronDown, mdiClose, mdiMenu } from '@mdi/js';
 import NextLink from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { signOut } from '@/utils/auth';
 
 /**
  * Partial view of the user object returned by GET /api/users/me.
@@ -79,7 +80,8 @@ type DropdownVariant = 'user';
 
 export interface DropdownItem {
   label: string;
-  href: string;
+  href?: string;
+  onClick?: () => void;
   danger?: boolean;
 }
 
@@ -119,9 +121,9 @@ export function Dropdown({ variant, items, userName }: DropdownProps) {
       <Menu.Trigger asChild>{trigger}</Menu.Trigger>
       <Menu.Positioner mt={4}>
         <Menu.Content minW="160px">
-          {items.map(({ label, href, danger }) => (
+          {items.map(({ label, href, onClick, danger }) => (
             <Menu.Item
-              key={href}
+              key={label}
               value={label.toLowerCase()}
               fontSize="sm"
               fontWeight="medium"
@@ -129,7 +131,13 @@ export function Dropdown({ variant, items, userName }: DropdownProps) {
               px={4}
               py={2}
               _highlighted={{ bg: 'gray.100' }}
-              onClick={() => router.push(href)}
+              onClick={() => {
+                if (onClick) {
+                  onClick();
+                } else if (href) {
+                  router.push(href);
+                }
+              }}
             >
               {label}
             </Menu.Item>
@@ -165,7 +173,7 @@ const navLinksByVariant: Record<
 const userMenuItems: DropdownItem[] = [
   { label: 'Settings', href: '/settings' },
   { label: 'Notifications', href: '/notifications' },
-  { label: 'Sign Out', href: '/login', danger: true },
+  { label: 'Sign Out', onClick: signOut, danger: true },
 ];
 
 // ── Navbar ────────────────────────────────────────────────────────────────────
@@ -313,23 +321,46 @@ export default function Navbar({
           {isAuthenticated && (
             <>
               <Box h="1px" bg="gray.200" my={1} mx={4} />
-              {userMenuItems.map(({ label, href, danger }) => (
-                <Link
-                  key={href}
-                  asChild
-                  display="block"
-                  px={4}
-                  py={2}
-                  fontSize="sm"
-                  fontWeight="medium"
-                  color={danger ? 'red.500' : 'gray.700'}
-                  borderRadius="md"
-                  _hover={{ bg: 'gray.100', textDecoration: 'none' }}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  <NextLink href={href}>{label}</NextLink>
-                </Link>
-              ))}
+              {userMenuItems.map(({ label, href, onClick, danger }) =>
+                onClick ? (
+                  <ChakraButton
+                    key={label}
+                    variant="ghost"
+                    justifyContent="flex-start"
+                    w="full"
+                    px={4}
+                    py={2}
+                    h="auto"
+                    fontSize="sm"
+                    fontWeight="medium"
+                    color={danger ? 'red.500' : 'gray.700'}
+                    borderRadius="md"
+                    _hover={{ bg: 'gray.100' }}
+                    onClick={() => {
+                      setMobileOpen(false);
+                      onClick();
+                    }}
+                  >
+                    {label}
+                  </ChakraButton>
+                ) : (
+                  <Link
+                    key={href}
+                    asChild
+                    display="block"
+                    px={4}
+                    py={2}
+                    fontSize="sm"
+                    fontWeight="medium"
+                    color={danger ? 'red.500' : 'gray.700'}
+                    borderRadius="md"
+                    _hover={{ bg: 'gray.100', textDecoration: 'none' }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <NextLink href={href!}>{label}</NextLink>
+                  </Link>
+                )
+              )}
             </>
           )}
         </VStack>

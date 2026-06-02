@@ -46,9 +46,22 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
+    if (!role) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    return redirectToRoleHome(request, role);
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/student/:path*', '/security/:path*', '/admin/:path*'],
+  matcher: [
+    '/student/:path*',
+    '/security/:path*',
+    '/admin/:path*',
+    '/dashboard',
+    '/dashboard/:path*',
+  ],
 };

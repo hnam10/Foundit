@@ -1,22 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { validateEmail } from '@/utils/validation';
-import { setSessionRole, type UserRole } from '@/utils/auth';
-
-/** Temporary until login API returns role. */
-function inferRoleFromEmail(email: string): UserRole {
-  const lower = email.toLowerCase();
-  if (lower.includes('security') || lower.endsWith('@senecapolytechnic.ca')) {
-    return 'security';
-  }
-  return 'student';
-}
+import { getRoleHome, setSessionRole, type UserRole } from '@/utils/auth';
 
 export function useLoginForm() {
-  const router = useRouter();
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -38,34 +26,40 @@ export function useLoginForm() {
       return;
     }
 
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`,
-      {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl) {
+      setPasswordError(
+        'API URL is not configured. Set NEXT_PUBLIC_API_URL in foundit-ui/.env.local.'
+      );
+      return;
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setPasswordError(result.message || 'Login failed.');
+        return;
       }
-    );
 
-    const result = await response.json();
+      localStorage.setItem('accessToken', result.accessToken);
+      localStorage.setItem('user', JSON.stringify(result.user));
 
-    if (!response.ok) {
-      setPasswordError(result.message || 'Login failed.');
-      return;
-    }
+      const role = result.user.role as UserRole;
+      setSessionRole(role);
 
-    localStorage.setItem('accessToken', result.accessToken);
-    localStorage.setItem('user', JSON.stringify(result.user));
-
-    const role = result.user.role as UserRole;
-    setSessionRole(role);
-
-    if (role === 'security') {
-      router.push('/security/dashboard');
-    } else {
-      router.push('/student/dashboard');
+      // Full navigation so middleware sees the role cookie on the first request.
+      window.location.href = getRoleHome(role);
+    } catch {
+      setPasswordError('Unable to connect to server.');
     }
   }
 

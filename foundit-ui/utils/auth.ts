@@ -10,7 +10,23 @@ export function setSessionRole(role: UserRole) {
 }
 
 export function clearSessionRole() {
-  document.cookie = `${ROLE_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  document.cookie = `${ROLE_COOKIE}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+}
+
+/** Clears client-side auth state (role cookie + stored tokens). */
+export function clearAuthSession() {
+  clearSessionRole();
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('user');
+    localStorage.removeItem('refreshToken');
+  }
+}
+
+/** Signs out and navigates to login so middleware sees cleared cookies. */
+export function signOut() {
+  clearAuthSession();
+  window.location.href = '/login';
 }
 
 export function getSessionRole(): UserRole | null {

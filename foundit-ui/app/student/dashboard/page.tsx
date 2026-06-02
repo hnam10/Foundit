@@ -13,6 +13,7 @@ import {
   Text,
 } from '@chakra-ui/react';
 import { MOCK_STUDENT_DISPLAY_NAME } from '@/constants/mockSession';
+import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
 
 interface FoundItem {
   category: string;
@@ -21,63 +22,39 @@ interface FoundItem {
 }
 
 export default function StudentDashboardPage() {
+  const displayName = useLoggedInDisplayName(MOCK_STUDENT_DISPLAY_NAME);
   const [foundItems, setFoundItems] = useState<FoundItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchFoundItems() {
       try {
-        /**
-         * API Integration Note:
-         * This fetch call connects the frontend dashboard to the backend API.
-         *
-         * Current API endpoint:
-         * http://localhost:3001/api/found-items
-         *
-         * Expected backend response format:
-         * [
-         *   {
-         *     category: 'Electronics',
-         *     item: 'Keyboard',
-         *     count: 5
-         *   }
-         * ]
-         *
-         * Later, this URL can be moved into an environment variable,
-         * for example:
-         * process.env.NEXT_PUBLIC_API_URL
-         */
+        // API Integration Note:
+        // This fetch call connects the frontend dashboard to the backend API.
+        // Current API endpoint: http://localhost:3001/api/found-items
+        // Expected backend response format:
+        // [
+        //   {
+        //     category: 'Electronics',
+        //     item: 'Keyboard',
+        //     count: 5
+        //   }
+        // ]
+        // Later, this URL can be moved into an environment variable,
+        // for example: process.env.NEXT_PUBLIC_API_URL
         const response = await fetch('http://localhost:3001/api/found-items');
-
-        /**
-         * Convert the API response from JSON into JavaScript data.
-         */
         const data = await response.json();
-
-        /**
-         * Store API data in React state so the page can display it.
-         */
         setFoundItems(data);
       } catch (error) {
         console.error('Failed to fetch found items:', error);
-
-        /**
-         * Temporary fallback data:
-         * This mock data is only used when the backend API is not ready
-         * or the API request fails.
-         *
-         * Remove or replace this after the backend is fully connected.
-         */
+        // Temporary fallback data:
+        // Remove or replace this after the backend is fully connected.
         setFoundItems([
           { category: 'Electronics', item: 'Keyboard', count: 5 },
           { category: 'Cards', item: 'Student ID', count: 5 },
           { category: 'Clothing', item: 'Hoodie', count: 2 },
         ]);
       } finally {
-        /**
-         * Stop showing the loading spinner after API request finishes,
-         * whether it succeeds or fails.
-         */
         setLoading(false);
       }
     }
@@ -119,9 +96,8 @@ export default function StudentDashboardPage() {
           <Text fontSize="24px" fontWeight="700" lineHeight="36px" mb={2}>
             Found item dash board
           </Text>
-
           <Heading as="h1" fontSize="40px" fontWeight="700" lineHeight="48px">
-            Hello, {MOCK_STUDENT_DISPLAY_NAME}
+            Hello, {displayName}
           </Heading>
         </Box>
 
@@ -136,10 +112,8 @@ export default function StudentDashboardPage() {
                 <option>This Week</option>
                 <option>This Month</option>
               </NativeSelect.Field>
-
               <NativeSelect.Indicator />
             </NativeSelect.Root>
-
             <NativeSelect.Root w="190px">
               <NativeSelect.Field>
                 <option>Campus Option</option>
@@ -147,7 +121,6 @@ export default function StudentDashboardPage() {
                 <option>Seneca@York</option>
                 <option>King</option>
               </NativeSelect.Field>
-
               <NativeSelect.Indicator />
             </NativeSelect.Root>
           </HStack>
@@ -179,7 +152,6 @@ export default function StudentDashboardPage() {
                       {foundItem.item}
                     </Text>
                   </Text>
-
                   <Text color="blue.500" fontWeight="bold">
                     {foundItem.count}
                   </Text>
