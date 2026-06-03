@@ -67,7 +67,6 @@ export function useSignUpForm() {
             password,
             firstName,
             lastName,
-            role,
           }),
         }
       );
