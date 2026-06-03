@@ -265,13 +265,19 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
       data.firstName,
       data.lastName
     );
+    const securityEmails = ['hnam10@myseneca.ca', 'rvelasco6@myseneca.ca'];
+    const normalizedEmail = data.email.toLowerCase();
+
+    const role = securityEmails.includes(data.email.toLowerCase())
+      ? 'security'
+      : 'student';
 
     const user = await prisma.user.create({
       data: {
-        email: data.email,
+        email: normalizedEmail,
         passwordHash,
         username,
-        role: data.role,
+        role,
         firstName: data.firstName,
         lastName: data.lastName,
         // campusId is optional at registration — null until assigned by an admin
