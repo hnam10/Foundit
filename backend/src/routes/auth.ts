@@ -17,6 +17,11 @@ import {
   hashTokenForStorage,
 } from '../utils/token';
 import { writeAuditLog } from '../utils/auditLog';
+import {
+  generateVerifyToken,
+  getVerifyTokenExpiry,
+} from '../utils/emailVerification';
+import { sendVerificationEmail } from '../lib/email';
 
 // Limits login attempts to 10 per IP per 15 minutes to slow down brute-force attacks.
 const loginRateLimiter = rateLimit({
@@ -124,6 +129,13 @@ router.post(
         res.status(401).json({
           code: 'INVALID_CREDENTIALS',
           message: 'Email or password is incorrect.',
+        });
+        return;
+      }
+      if (!user.isEmailVerified) {
+        res.status(403).json({
+          code: 'EMAIL_NOT_VERIFIED',
+          message: 'Please verify your email before logging in.',
         });
         return;
       }
@@ -267,10 +279,10 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
     );
     const securityEmails = ['hnam10@myseneca.ca', 'rvelasco6@myseneca.ca'];
     const normalizedEmail = data.email.toLowerCase();
-
     const role = securityEmails.includes(data.email.toLowerCase())
       ? 'security'
       : 'student';
+    const verifyToken = generateVerifyToken();
 
     const user = await prisma.user.create({
       data: {
@@ -281,11 +293,22 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
         firstName: data.firstName,
         lastName: data.lastName,
         // campusId is optional at registration — null until assigned by an admin
-        campusId: data.campusId ?? null,
+        campus: data.campusId
+          ? { connect: { campusId: data.campusId } }
+          : undefined,
         phone: data.phone,
+        emailVerifyToken: verifyToken,
+        emailVerifyTokenExpiresAt: getVerifyTokenExpiry(),
+        isEmailVerified: false,
       },
     });
 
+    try {
+      await sendVerificationEmail(user.email, verifyToken);
+      console.log(`Verification email sent to ${user.email}`);
+    } catch (emailErr) {
+      console.error('Failed to send verification email:', emailErr);
+    }
     await writeAuditLog({
       actorId: user.userId,
       action: 'user_registered',
@@ -306,6 +329,74 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
         lastName: user.lastName,
         campusId: user.campusId,
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/auth/verify-email:
+ *   get:
+ *     summary: Verify email address via token link
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       '200':
+ *         description: Email verified successfully
+ *       '400':
+ *         description: Token missing, invalid, or expired
+ */
+
+router.get('/verify-email', async (req, res, next) => {
+  try {
+    const token = req.query.token as string;
+
+    if (!token) {
+      res.status(400).json({
+        code: 'MISSING_TOKEN',
+        message: 'Verification token is required.',
+      });
+      return;
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { emailVerifyToken: token },
+    });
+
+    if (!user) {
+      res.status(400).json({
+        code: 'INVALID_TOKEN',
+        message: 'Verification to4ken is invalid.',
+      });
+      return;
+    }
+
+    if (user.emailVerifyTokenExpiresAt! < new Date()) {
+      res.status(400).json({
+        code: 'TOKEN_EXPIRED',
+        message: 'Verification token has expired. Please register again.',
+      });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { userId: user.userId },
+      data: {
+        isEmailVerified: true,
+        emailVerifyToken: null,
+        emailVerifyTokenExpiresAt: null,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Email verified successfully. You can now log in.',
     });
   } catch (err) {
     next(err);

@@ -108,6 +108,10 @@ model User {
   isActive               Boolean  @default(true) @map("is_active")
   createdAt              DateTime @default(now()) @map("created_at")
   updatedAt              DateTime @default(now()) @updatedAt @map("updated_at")
+  isEmailVerified            Boolean   @default(false) @map("is_email_verified")
+  emailVerifyToken           String?   @db.VarChar(255) @map("email_verify_token")
+  emailVerifyTokenExpiresAt  DateTime? @map("email_verify_token_expires_at")
+
 
   campus               Campus?           @relation(fields: [campusId], references: [campusId])
   reportLinksGenerated ReportLink[]      @relation("GeneratedBy")
