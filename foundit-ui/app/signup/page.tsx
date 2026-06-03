@@ -79,6 +79,7 @@ export default function SignUpPage() {
             shadow="md"
             w="532px"
             p="50px"
+            my="12"
             gap="28px"
           >
             <Heading fontSize="40px" textAlign="center" color="#0F172A">

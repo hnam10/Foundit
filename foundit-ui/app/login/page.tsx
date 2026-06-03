@@ -51,6 +51,7 @@ export default function LoginPage() {
           <Stack
             bg="white"
             p={8}
+            my={12}
             rounded="md"
             shadow="md"
             w="532px"
