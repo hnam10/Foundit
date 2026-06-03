@@ -85,7 +85,7 @@ export function useSignUpForm() {
         return;
       }
 
-      router.push('/login');
+      router.push('/signup/success');
     } catch {
       setEmailError('Unable to connect to server.');
     }
