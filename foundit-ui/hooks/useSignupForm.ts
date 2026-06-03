@@ -93,8 +93,6 @@ export function useSignUpForm() {
   }
 
   return {
-    role,
-    setRole,
     email,
     setEmail,
     firstName,

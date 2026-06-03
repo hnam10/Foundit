@@ -16,9 +16,6 @@ import { useSignUpForm } from '../../hooks/useSignupForm';
 
 export default function SignUpPage() {
   const {
-    role,
-    setRole,
-
     email,
     setEmail,
     emailError,
@@ -79,7 +76,6 @@ export default function SignUpPage() {
             shadow="md"
             w="532px"
             p="50px"
-            my="12"
             gap="28px"
           >
             <Heading fontSize="40px" textAlign="center" color="#0F172A">
@@ -87,30 +83,6 @@ export default function SignUpPage() {
             </Heading>
 
             <Stack gap="20px">
-              <Stack gap="6px" w="150px">
-                <Text fontSize="14px" color="#1a1a1a">
-                  Account Type
-                </Text>
-                <select
-                  style={{
-                    height: '42px',
-                    border: '1px solid #D9D9D9',
-                    borderRadius: '6px',
-                    paddingLeft: '12px',
-                    paddingRight: '12px',
-                    backgroundColor: 'white',
-                    outline: 'none',
-                  }}
-                  value={role}
-                  onChange={(e) =>
-                    setRole(e.target.value as 'student' | 'security')
-                  }
-                >
-                  <option value="student">Student</option>
-                  <option value="security">Security</option>
-                </select>
-              </Stack>
-
               <HStack gap="24px" align="flex-start">
                 <TextInput
                   id="firstName"
@@ -186,7 +158,6 @@ export default function SignUpPage() {
             >
               Sign Up
             </Button>
-
             <Text textAlign="center" fontSize="14px">
               Already have an account?{' '}
               <Link href="/login" color="blue.500">
