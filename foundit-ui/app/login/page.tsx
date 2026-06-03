@@ -3,7 +3,7 @@
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import TextInput from '../../components/TextInput';
-import { Box, Button, Stack, Heading } from '@chakra-ui/react';
+import { Box, Button, Stack, Heading, Link, Text } from '@chakra-ui/react';
 import { useLoginForm } from '../../hooks/useLoginForm';
 
 export default function LoginPage() {
@@ -97,6 +97,13 @@ export default function LoginPage() {
             >
               Login
             </Button>
+
+            <Text textAlign="center" fontSize="14px">
+              Don&apos;t have an account?{' '}
+              <Link href="/signup" color="blue.500">
+                Sign up here
+              </Link>
+            </Text>
           </Stack>
         </Box>
 
