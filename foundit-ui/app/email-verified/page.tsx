@@ -47,14 +47,13 @@ export default function SignupSuccessPage() {
             textAlign="center"
           >
             <Heading fontSize="40px" color="black" mb={6}>
-              Verify Email
+              Welcome
             </Heading>
 
-            <Text mb={12} color="#666666" pt={30}>
-              {' '}
-              Verification email sent.
+            <Text mb={12} color="#666666" pt={10}>
+              Your account is now verified.
               <br />
-              Please verify your email to activate your account.
+              Please log in to continue.
             </Text>
 
             <Button
@@ -65,7 +64,7 @@ export default function SignupSuccessPage() {
               colorPalette="blue"
               onClick={() => router.push('/login')}
             >
-              Back to Login
+              Login
             </Button>
           </Stack>
         </Box>

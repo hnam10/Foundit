@@ -395,7 +395,7 @@ router.get('/verify-email', async (req, res, next) => {
       },
     });
 
-    res.redirect(`${process.env.FRONTEND_URL}/signup/success`);
+    res.redirect(`${process.env.FRONTEND_URL}/email-verified`);
     return;
   } catch (err) {
     next(err);
