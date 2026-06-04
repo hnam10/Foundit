@@ -107,7 +107,9 @@ router.post(
 
       // Look up the user by email — same generic error for not found and wrong password
       // to avoid leaking whether an email is registered.
-      const user = await prisma.user.findUnique({ where: { email } });
+      const user = await prisma.user.findUnique({
+        where: { email: email.toLowerCase() },
+      });
       if (!user) {
         res.status(401).json({
           code: 'INVALID_CREDENTIALS',
@@ -223,7 +225,7 @@ router.post(
  *                 example: '4161234567'
  *     responses:
  *       '201':
- *         description: Account created — call POST /api/auth/login to get tokens
+ *         description: Account created — check your email and verify before logging in
  *         content:
  *           application/json:
  *             schema:
@@ -257,8 +259,10 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
     const data = req.body as z.infer<typeof registerSchema>;
 
     // Reject duplicate emails early — findUnique is faster than catching a DB unique constraint error
+    const normalizedEmail = data.email.toLowerCase();
+
     const existing = await prisma.user.findUnique({
-      where: { email: data.email },
+      where: { email: normalizedEmail },
       select: { userId: true },
     });
     if (existing) {
@@ -277,7 +281,6 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
       data.lastName
     );
     const securityEmails = ['hnam10@myseneca.ca', 'rvelasco6@myseneca.ca'];
-    const normalizedEmail = data.email.toLowerCase();
     const role = securityEmails.includes(data.email.toLowerCase())
       ? 'security'
       : 'student';
