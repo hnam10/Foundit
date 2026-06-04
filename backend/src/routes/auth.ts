@@ -91,7 +91,9 @@ const router = Router();
  *       '401':
  *         description: Email or password is incorrect
  *       '403':
- *         description: Account has been deactivated
+ *         description: Account has been deactivated or email is not verified
+ *
+ *
  *       '429':
  *         description: Too many login attempts — rate limited for 15 minutes
  */
@@ -199,7 +201,7 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email, password, firstName, lastName, role]
+ *             required: [email, password, firstName, lastName]
  *             properties:
  *               email:
  *                 type: string
@@ -212,9 +214,6 @@ router.post(
  *                 type: string
  *               lastName:
  *                 type: string
- *               role:
- *                 type: string
- *                 enum: [student, security]
  *               campusId:
  *                 type: string
  *                 format: uuid
@@ -282,7 +281,9 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
     const role = securityEmails.includes(data.email.toLowerCase())
       ? 'security'
       : 'student';
+
     const verifyToken = generateVerifyToken();
+    const verifyTokenHash = hashTokenForStorage(verifyToken);
 
     const user = await prisma.user.create({
       data: {
@@ -297,7 +298,7 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
           ? { connect: { campusId: data.campusId } }
           : undefined,
         phone: data.phone,
-        emailVerifyToken: verifyToken,
+        emailVerifyToken: verifyTokenHash,
         emailVerifyTokenExpiresAt: getVerifyTokenExpiry(),
         isEmailVerified: false,
       },
@@ -308,7 +309,18 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
       console.log(`Verification email sent to ${user.email}`);
     } catch (emailErr) {
       console.error('Failed to send verification email:', emailErr);
+
+      await prisma.user.delete({
+        where: { userId: user.userId },
+      });
+
+      res.status(500).json({
+        code: 'EMAIL_SEND_FAILED',
+        message: 'Failed to send verification email. Please try again.',
+      });
+      return;
     }
+
     await writeAuditLog({
       actorId: user.userId,
       action: 'user_registered',
@@ -348,8 +360,8 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
  *         schema:
  *           type: string
  *     responses:
- *       '200':
- *         description: Email verified successfully
+ *       '302':
+ *         description: Email verified successfully. Redirects to the frontend email verified page.
  *       '400':
  *         description: Token missing, invalid, or expired
  */
@@ -365,9 +377,10 @@ router.get('/verify-email', async (req, res, next) => {
       });
       return;
     }
+    const tokenHash = hashTokenForStorage(token);
 
     const user = await prisma.user.findFirst({
-      where: { emailVerifyToken: token },
+      where: { emailVerifyToken: tokenHash },
     });
 
     if (!user) {
@@ -381,7 +394,8 @@ router.get('/verify-email', async (req, res, next) => {
     if (user.emailVerifyTokenExpiresAt! < new Date()) {
       res.status(400).json({
         code: 'TOKEN_EXPIRED',
-        message: 'Verification token has expired. Please register again.',
+        message:
+          'Verification token has expired. Please request a new verification email.',
       });
       return;
     }
