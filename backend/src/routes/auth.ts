@@ -373,7 +373,7 @@ router.get('/verify-email', async (req, res, next) => {
     if (!user) {
       res.status(400).json({
         code: 'INVALID_TOKEN',
-        message: 'Verification to4ken is invalid.',
+        message: 'Verification token is invalid.',
       });
       return;
     }
@@ -395,9 +395,8 @@ router.get('/verify-email', async (req, res, next) => {
       },
     });
 
-    res.status(200).json({
-      message: 'Email verified successfully. You can now log in.',
-    });
+    res.redirect(`${process.env.FRONTEND_URL}/signup/success`);
+    return;
   } catch (err) {
     next(err);
   }
