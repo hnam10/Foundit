@@ -67,7 +67,6 @@ export function useSignUpForm() {
             password,
             firstName,
             lastName,
-            role,
           }),
         }
       );
@@ -86,15 +85,13 @@ export function useSignUpForm() {
         return;
       }
 
-      router.push('/login');
+      router.push('/signup/success');
     } catch {
       setEmailError('Unable to connect to server.');
     }
   }
 
   return {
-    role,
-    setRole,
     email,
     setEmail,
     firstName,

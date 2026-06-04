@@ -17,6 +17,11 @@ import {
   hashTokenForStorage,
 } from '../utils/token';
 import { writeAuditLog } from '../utils/auditLog';
+import {
+  generateVerifyToken,
+  getVerifyTokenExpiry,
+} from '../utils/emailVerification';
+import { sendVerificationEmail } from '../lib/email';
 
 // Limits login attempts to 10 per IP per 15 minutes to slow down brute-force attacks.
 const loginRateLimiter = rateLimit({
@@ -86,7 +91,9 @@ const router = Router();
  *       '401':
  *         description: Email or password is incorrect
  *       '403':
- *         description: Account has been deactivated
+ *         description: Account has been deactivated or email is not verified
+ *
+ *
  *       '429':
  *         description: Too many login attempts — rate limited for 15 minutes
  */
@@ -100,7 +107,9 @@ router.post(
 
       // Look up the user by email — same generic error for not found and wrong password
       // to avoid leaking whether an email is registered.
-      const user = await prisma.user.findUnique({ where: { email } });
+      const user = await prisma.user.findUnique({
+        where: { email: email.toLowerCase() },
+      });
       if (!user) {
         res.status(401).json({
           code: 'INVALID_CREDENTIALS',
@@ -124,6 +133,13 @@ router.post(
         res.status(401).json({
           code: 'INVALID_CREDENTIALS',
           message: 'Email or password is incorrect.',
+        });
+        return;
+      }
+      if (!user.isEmailVerified) {
+        res.status(403).json({
+          code: 'EMAIL_NOT_VERIFIED',
+          message: 'Please verify your email before logging in.',
         });
         return;
       }
@@ -187,7 +203,7 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email, password, firstName, lastName, role]
+ *             required: [email, password, firstName, lastName]
  *             properties:
  *               email:
  *                 type: string
@@ -200,9 +216,6 @@ router.post(
  *                 type: string
  *               lastName:
  *                 type: string
- *               role:
- *                 type: string
- *                 enum: [student, security]
  *               campusId:
  *                 type: string
  *                 format: uuid
@@ -212,7 +225,7 @@ router.post(
  *                 example: '4161234567'
  *     responses:
  *       '201':
- *         description: Account created — call POST /api/auth/login to get tokens
+ *         description: Account created — check your email and verify before logging in
  *         content:
  *           application/json:
  *             schema:
@@ -246,8 +259,10 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
     const data = req.body as z.infer<typeof registerSchema>;
 
     // Reject duplicate emails early — findUnique is faster than catching a DB unique constraint error
+    const normalizedEmail = data.email.toLowerCase();
+
     const existing = await prisma.user.findUnique({
-      where: { email: data.email },
+      where: { email: normalizedEmail },
       select: { userId: true },
     });
     if (existing) {
@@ -265,20 +280,65 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
       data.firstName,
       data.lastName
     );
+    const securityEmails = ['hnam10@myseneca.ca', 'rvelasco6@myseneca.ca'];
+    const role = securityEmails.includes(data.email.toLowerCase())
+      ? 'security'
+      : 'student';
 
-    const user = await prisma.user.create({
-      data: {
-        email: data.email,
-        passwordHash,
-        username,
-        role: data.role,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        // campusId is optional at registration — null until assigned by an admin
-        campusId: data.campusId ?? null,
-        phone: data.phone,
-      },
-    });
+    const verifyToken = generateVerifyToken();
+    const verifyTokenHash = hashTokenForStorage(verifyToken);
+    let user;
+    try {
+      user = await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          username,
+          role,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          // campusId is optional at registration — null until assigned by an admin
+          campus: data.campusId
+            ? { connect: { campusId: data.campusId } }
+            : undefined,
+          phone: data.phone,
+          emailVerifyToken: verifyTokenHash,
+          emailVerifyTokenExpiresAt: getVerifyTokenExpiry(),
+          isEmailVerified: false,
+        },
+      });
+    } catch (err: unknown) {
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'code' in err &&
+        (err as { code: string }).code === 'P2002'
+      ) {
+        res.status(409).json({
+          code: 'EMAIL_TAKEN',
+          message: 'An account with this email already exists.',
+        });
+        return;
+      }
+      throw err;
+    }
+
+    try {
+      await sendVerificationEmail(user.email, verifyToken);
+      console.log(`Verification email sent to ${user.userId}`);
+    } catch (emailErr) {
+      console.error('Failed to send verification email:', emailErr);
+
+      await prisma.user.delete({
+        where: { userId: user.userId },
+      });
+
+      res.status(500).json({
+        code: 'EMAIL_SEND_FAILED',
+        message: 'Failed to send verification email. Please try again.',
+      });
+      return;
+    }
 
     await writeAuditLog({
       actorId: user.userId,
@@ -301,6 +361,74 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
         campusId: user.campusId,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/auth/verify-email:
+ *   get:
+ *     summary: Verify email address via token link
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       '302':
+ *         description: Email verified successfully. Redirects to the frontend email verified page.
+ *       '400':
+ *         description: Token missing, invalid, or expired
+ */
+
+router.get('/verify-email', async (req, res, next) => {
+  try {
+    const token = req.query.token as string;
+
+    if (!token) {
+      res.status(400).json({
+        code: 'MISSING_TOKEN',
+        message: 'Verification token is required.',
+      });
+      return;
+    }
+    const tokenHash = hashTokenForStorage(token);
+
+    const user = await prisma.user.findFirst({
+      where: { emailVerifyToken: tokenHash },
+    });
+
+    if (!user) {
+      res.status(400).json({
+        code: 'INVALID_TOKEN',
+        message: 'Verification token is invalid.',
+      });
+      return;
+    }
+
+    if (user.emailVerifyTokenExpiresAt! < new Date()) {
+      res.status(400).json({
+        code: 'TOKEN_EXPIRED',
+        message: 'Verification token has expired. Please register again.',
+      });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { userId: user.userId },
+      data: {
+        isEmailVerified: true,
+        emailVerifyToken: null,
+        emailVerifyTokenExpiresAt: null,
+      },
+    });
+
+    res.redirect(`${process.env.FRONTEND_URL}/email-verified`);
+    return;
   } catch (err) {
     next(err);
   }

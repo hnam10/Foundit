@@ -46,6 +46,9 @@ CREATE TABLE "user" (
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "is_email_verified" BOOLEAN NOT NULL DEFAULT false,
+    "email_verify_token"              VARCHAR(255),
+    "email_verify_token_expires_at"   TIMESTAMP(3),
 
     CONSTRAINT "user_pkey" PRIMARY KEY ("user_id")
 );

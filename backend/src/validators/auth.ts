@@ -27,9 +27,6 @@ export const registerSchema = z.object({
     .regex(/[0-9]/, 'Password must contain at least one digit'),
   firstName: z.string().min(1).max(100).trim(),
   lastName: z.string().min(1).max(100).trim(),
-  role: z.enum(['student', 'security']), // admin role is not available via self-registration
-  // campusId is optional — users may self-register without a campus assignment.
-  // If omitted, campus_id will be null until assigned later by an admin.
   campusId: z.uuid().optional(),
   phone: z
     .string()

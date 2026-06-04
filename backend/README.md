@@ -17,6 +17,18 @@ pnpm install
 
 ### 3. Set up environment variables
 
+### Email
+
+| Variable    | Description                                            |
+| ----------- | ------------------------------------------------------ |
+| `SMTP_HOST` | SMTP server host (e.g. `smtp.gmail.com`)               |
+| `SMTP_PORT` | SMTP port (default: `587`)                             |
+| `SMTP_USER` | SMTP sender email address                              |
+| `SMTP_PASS` | SMTP password or app password                          |
+| `APP_URL`   | Base URL of the backend (e.g. `http://localhost:3001`) |
+
+https://myaccount.google.com/apppasswords
+
 ```bash
 cp .env.example .env
 ```
@@ -95,11 +107,16 @@ src/
 │   ├── shared.ts               # validate() and validateQuery() middleware helpers
 │   ├── auth.ts                 # Zod schemas: loginSchema, registerSchema, refreshSchema, logoutSchema
 │   └── users.ts                # Zod schemas: updateProfileSchema, createUserSchema, listUsersQuerySchema
+├── lib/
+│   └── email.ts                # Nodemailer transporter and email sender
 ├── utils/
 │   ├── token.ts                # JWT signing, refresh token verification, SHA-256 hash helper
 │   ├── password.ts             # bcrypt hash and compare helpers
 │   ├── auditLog.ts             # Audit log writer
+|   ├── emailVerification.ts    # Token generation and expiry helpers
 │   └── username.ts             # Unique username generator
+├── jobs/
+│   └── cleanupUnverifiedUsers.ts  # Daily cron job to delete unverified accounts
 ├── routes/
 │   ├── health.ts               # GET /api/health
 │   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
@@ -130,12 +147,13 @@ Global API rules:
 
 ### Auth
 
-| Method | Path                 | Auth | Status | Description                                                 |
-| ------ | -------------------- | ---- | ------ | ----------------------------------------------------------- |
-| POST   | `/api/auth/register` | —    | Done   | Self-register a student or security account                 |
-| POST   | `/api/auth/login`    | —    | Done   | Verify email + password, return JWT access & refresh tokens |
-| POST   | `/api/auth/refresh`  | —    | Stub   | Exchange refresh token for a new access token               |
-| POST   | `/api/auth/logout`   | —    | Stub   | Revoke refresh token                                        |
+| Method | Path                     | Auth | Status | Description                                                 |
+| ------ | ------------------------ | ---- | ------ | ----------------------------------------------------------- |
+| POST   | `/api/auth/register`     | —    | Done   | Self-register a student or security account                 |
+| POST   | `/api/auth/login`        | —    | Done   | Verify email + password, return JWT access & refresh tokens |
+| POST   | `/api/auth/refresh`      | —    | Stub   | Exchange refresh token for a new access token               |
+| POST   | `/api/auth/logout`       | —    | Stub   | Revoke refresh token                                        |
+| GET    | `/api/auth/verify-email` | —    | Done   | Verify email address via token link                         |
 
 ### Campus
 

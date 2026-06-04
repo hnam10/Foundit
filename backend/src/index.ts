@@ -8,6 +8,7 @@ import authRouter from './routes/auth';
 import usersRouter from './routes/users';
 import adminUsersRouter from './routes/admin/users';
 import errorHandler from './middleware/errorHandler';
+import { startCleanupJob } from './jobs/cleanupUnverifiedUsers';
 
 // Fail fast if required JWT secrets are missing
 if (!process.env.JWT_ACCESS_SECRET || !process.env.JWT_REFRESH_SECRET) {
@@ -33,4 +34,5 @@ app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  startCleanupJob();
 });
