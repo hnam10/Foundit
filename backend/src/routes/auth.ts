@@ -287,29 +287,45 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
 
     const verifyToken = generateVerifyToken();
     const verifyTokenHash = hashTokenForStorage(verifyToken);
-
-    const user = await prisma.user.create({
-      data: {
-        email: normalizedEmail,
-        passwordHash,
-        username,
-        role,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        // campusId is optional at registration — null until assigned by an admin
-        campus: data.campusId
-          ? { connect: { campusId: data.campusId } }
-          : undefined,
-        phone: data.phone,
-        emailVerifyToken: verifyTokenHash,
-        emailVerifyTokenExpiresAt: getVerifyTokenExpiry(),
-        isEmailVerified: false,
-      },
-    });
+    let user;
+    try {
+      user = await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          username,
+          role,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          // campusId is optional at registration — null until assigned by an admin
+          campus: data.campusId
+            ? { connect: { campusId: data.campusId } }
+            : undefined,
+          phone: data.phone,
+          emailVerifyToken: verifyTokenHash,
+          emailVerifyTokenExpiresAt: getVerifyTokenExpiry(),
+          isEmailVerified: false,
+        },
+      });
+    } catch (err: unknown) {
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'code' in err &&
+        (err as { code: string }).code === 'P2002'
+      ) {
+        res.status(409).json({
+          code: 'EMAIL_TAKEN',
+          message: 'An account with this email already exists.',
+        });
+        return;
+      }
+      throw err;
+    }
 
     try {
       await sendVerificationEmail(user.email, verifyToken);
-      console.log(`Verification email sent to ${user.email}`);
+      console.log(`Verification email sent to ${user.userId}`);
     } catch (emailErr) {
       console.error('Failed to send verification email:', emailErr);
 
