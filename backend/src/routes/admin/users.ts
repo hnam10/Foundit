@@ -50,8 +50,9 @@ const router = Router();
  *       '401':
  *         description: Missing or invalid token
  *       '403':
- *         description: Insufficient permissions
- */
+ *         description: Account has been deactivated or email is not verified
+ *
+ *  */
 // TODO: List users with optional role, is_active, campus_id filters
 router.get(
   '/',
@@ -115,8 +116,9 @@ router.get(
  *       '401':
  *         description: Missing or invalid token
  *       '403':
- *         description: Insufficient permissions
- */
+ *         description: Account has been deactivated or email is not verified
+ *
+ *  */
 // TODO: Create user with auto-generated username and hashed password
 router.post(
   '/',
@@ -152,7 +154,7 @@ router.post(
  *       '401':
  *         description: Missing or invalid token
  *       '403':
- *         description: Insufficient permissions
+ *         description: Account has been deactivated or email is not verified
  *       '404':
  *         description: User not found
  */
@@ -190,7 +192,7 @@ router.patch(
  *       '401':
  *         description: Missing or invalid token
  *       '403':
- *         description: Insufficient permissions
+ *         description: Account has been deactivated or email is not verified
  *       '404':
  *         description: User not found
  */
