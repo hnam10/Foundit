@@ -394,8 +394,7 @@ router.get('/verify-email', async (req, res, next) => {
     if (user.emailVerifyTokenExpiresAt! < new Date()) {
       res.status(400).json({
         code: 'TOKEN_EXPIRED',
-        message:
-          'Verification token has expired. Please request a new verification email.',
+        message: 'Verification token has expired. Please register again.',
       });
       return;
     }

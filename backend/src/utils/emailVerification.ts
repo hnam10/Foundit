@@ -7,5 +7,5 @@ export function generateVerifyToken(): string {
 
 //expire in 60 min
 export function getVerifyTokenExpiry(): Date {
-  return new Date(Date.now() + 60 * 60 * 1000);
+  return new Date(Date.now() + 24 * 60 * 60 * 1000);
 }

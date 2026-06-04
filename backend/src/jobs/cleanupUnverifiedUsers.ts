@@ -3,14 +3,12 @@ import { prisma } from '../db';
 
 export function startCleanupJob() {
   cron.schedule('0 0 * * *', async () => {
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
     try {
       const deleted = await prisma.user.deleteMany({
         where: {
           isEmailVerified: false,
-          createdAt: {
-            lt: oneDayAgo,
+          emailVerifyTokenExpiresAt: {
+            lt: new Date(),
           },
         },
       });
