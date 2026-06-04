@@ -97,6 +97,7 @@ export default function LoginPage() {
             >
               Login
             </Button>
+
             <Text textAlign="center" fontSize="14px">
               Don&apos;t have an account?{' '}
               <Link href="/signup" color="blue.500">
