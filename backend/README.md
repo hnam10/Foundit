@@ -120,7 +120,7 @@ src/
 ├── routes/
 │   ├── health.ts               # GET /api/health
 │   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
-│   ├── users.ts                # GET|PATCH /api/users/me (stub)
+│   ├── users.ts                # GET /api/users/me (done) · PATCH stubs
 │   └── admin/
 │       └── users.ts            # Admin user management stubs
 ├── db.ts                       # Prisma client singleton
@@ -165,7 +165,7 @@ Global API rules:
 
 | Method | Path                          | Auth    | Status  | Description                                     |
 | ------ | ----------------------------- | ------- | ------- | ----------------------------------------------- |
-| GET    | `/api/users/me`               | any     | Stub    | Get current user's profile                      |
+| GET    | `/api/users/me`               | any     | Done    | Get current user's profile                      |
 | PATCH  | `/api/users/me`               | any     | Stub    | Update `firstName`, `lastName`, or `phone` only |
 | PATCH  | `/api/users/me/password`      | any     | Planned | Change password; requires `currentPassword`     |
 | PATCH  | `/api/users/me/notifications` | student | Stub    | Toggle email notification preference            |
