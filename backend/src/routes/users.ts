@@ -73,8 +73,7 @@ async function loadActiveUserProfile(
   if (!user.isActive) {
     res.status(403).json({
       code: 'ACCOUNT_INACTIVE',
-      message:
-        'Your account has been deactivated. Contact an administrator.',
+      message: 'Your account has been deactivated. Contact an administrator.',
     });
     return null;
   }

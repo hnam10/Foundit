@@ -163,12 +163,12 @@ Global API rules:
 
 ### User Profile
 
-| Method | Path                          | Auth    | Status  | Description                                     |
-| ------ | ----------------------------- | ------- | ------- | ----------------------------------------------- |
-| GET    | `/api/users/me`               | any     | Done    | Get current user's profile                      |
-| PUT    | `/api/users/me`               | any     | Done    | Replace `firstName`, `lastName`, and `phone`    |
-| PATCH  | `/api/users/me/password`      | any     | Planned | Change password; requires `currentPassword`     |
-| PATCH  | `/api/users/me/notifications` | student | Stub    | Toggle email notification preference            |
+| Method | Path                          | Auth    | Status  | Description                                  |
+| ------ | ----------------------------- | ------- | ------- | -------------------------------------------- |
+| GET    | `/api/users/me`               | any     | Done    | Get current user's profile                   |
+| PUT    | `/api/users/me`               | any     | Done    | Replace `firstName`, `lastName`, and `phone` |
+| PATCH  | `/api/users/me/password`      | any     | Planned | Change password; requires `currentPassword`  |
+| PATCH  | `/api/users/me/notifications` | student | Stub    | Toggle email notification preference         |
 
 ### Admin
 
