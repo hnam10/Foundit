@@ -1,13 +1,15 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
+import { z } from 'zod';
 import { User } from '@prisma/client';
 import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { validate } from '../validators/shared';
 import {
-  updateProfileSchema,
+  replaceProfileSchema,
   updateNotificationSchema,
 } from '../validators/users';
+import { writeAuditLog } from '../utils/auditLog';
 
 const router = Router();
 
@@ -49,6 +51,35 @@ function toUserProfileDto(user: UserProfileRow) {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
+}
+
+async function loadActiveUserProfile(
+  userId: string,
+  res: Response
+): Promise<UserProfileRow | null> {
+  const user = await prisma.user.findUnique({
+    where: { userId },
+    select: userProfileSelect,
+  });
+
+  if (!user) {
+    res.status(404).json({
+      code: 'USER_NOT_FOUND',
+      message: 'User account no longer exists.',
+    });
+    return null;
+  }
+
+  if (!user.isActive) {
+    res.status(403).json({
+      code: 'ACCOUNT_INACTIVE',
+      message:
+        'Your account has been deactivated. Contact an administrator.',
+    });
+    return null;
+  }
+
+  return user;
 }
 
 /**
@@ -113,25 +144,8 @@ function toUserProfileDto(user: UserProfileRow) {
  */
 router.get('/me', authenticate, async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { userId: req.user!.user_id },
-      select: userProfileSelect,
-    });
-
+    const user = await loadActiveUserProfile(req.user!.user_id, res);
     if (!user) {
-      res.status(404).json({
-        code: 'USER_NOT_FOUND',
-        message: 'User account no longer exists.',
-      });
-      return;
-    }
-
-    if (!user.isActive) {
-      res.status(403).json({
-        code: 'ACCOUNT_INACTIVE',
-        message:
-          'Your account has been deactivated. Contact an administrator.',
-      });
       return;
     }
 
@@ -141,16 +155,85 @@ router.get('/me', authenticate, async (req, res, next) => {
   }
 });
 
-// TODO: Update first_name, last_name, or phone
-router.patch(
+/**
+ * @openapi
+ * /api/users/me:
+ *   put:
+ *     summary: Replace the authenticated user's editable profile fields
+ *     description: Updates `firstName`, `lastName`, and `phone` only. Send `phone` as `null` to clear it.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [firstName, lastName, phone]
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *                 nullable: true
+ *                 example: '4161234567'
+ *     responses:
+ *       '200':
+ *         description: Updated user profile
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid access token
+ *       '403':
+ *         description: Account has been deactivated
+ *       '404':
+ *         description: User no longer exists
+ */
+router.put(
   '/me',
   authenticate,
-  validate(updateProfileSchema),
-  (_req, res) => {
-    res.status(501).json({
-      code: 'NOT_IMPLEMENTED',
-      message: 'PATCH /api/users/me not yet implemented',
-    });
+  validate(replaceProfileSchema),
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.user_id;
+      const existing = await loadActiveUserProfile(userId, res);
+      if (!existing) {
+        return;
+      }
+
+      const { firstName, lastName, phone } = req.body as z.infer<
+        typeof replaceProfileSchema
+      >;
+
+      const updated = await prisma.user.update({
+        where: { userId },
+        data: { firstName, lastName, phone },
+        select: userProfileSelect,
+      });
+
+      await writeAuditLog({
+        actorId: userId,
+        action: 'user_profile_updated',
+        entityType: 'user',
+        entityId: userId,
+        details: {
+          previous: {
+            firstName: existing.firstName,
+            lastName: existing.lastName,
+            phone: existing.phone,
+          },
+          updated: { firstName, lastName, phone },
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json(toUserProfileDto(updated));
+    } catch (err) {
+      next(err);
+    }
   }
 );
 

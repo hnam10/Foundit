@@ -106,7 +106,7 @@ src/
 ├── validators/
 │   ├── shared.ts               # validate() and validateQuery() middleware helpers
 │   ├── auth.ts                 # Zod schemas: loginSchema, registerSchema, refreshSchema, logoutSchema
-│   └── users.ts                # Zod schemas: updateProfileSchema, createUserSchema, listUsersQuerySchema
+│   └── users.ts                # Zod schemas: replaceProfileSchema, updateProfileSchema, createUserSchema, listUsersQuerySchema
 ├── lib/
 │   └── email.ts                # Nodemailer transporter and email sender
 ├── utils/
@@ -120,7 +120,7 @@ src/
 ├── routes/
 │   ├── health.ts               # GET /api/health
 │   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
-│   ├── users.ts                # GET /api/users/me (done) · PATCH stubs
+│   ├── users.ts                # GET|PUT /api/users/me (done) · PATCH stubs
 │   └── admin/
 │       └── users.ts            # Admin user management stubs
 ├── db.ts                       # Prisma client singleton
@@ -166,7 +166,7 @@ Global API rules:
 | Method | Path                          | Auth    | Status  | Description                                     |
 | ------ | ----------------------------- | ------- | ------- | ----------------------------------------------- |
 | GET    | `/api/users/me`               | any     | Done    | Get current user's profile                      |
-| PATCH  | `/api/users/me`               | any     | Stub    | Update `firstName`, `lastName`, or `phone` only |
+| PUT    | `/api/users/me`               | any     | Done    | Replace `firstName`, `lastName`, and `phone`    |
 | PATCH  | `/api/users/me/password`      | any     | Planned | Change password; requires `currentPassword`     |
 | PATCH  | `/api/users/me/notifications` | student | Stub    | Toggle email notification preference            |
 
