@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+// PUT /api/users/me — replaces the user's editable profile fields.
+// phone: null clears the number; a 10-digit string sets it.
+export const replaceProfileSchema = z.object({
+  firstName: z.string().min(1).max(100).trim(),
+  lastName: z.string().min(1).max(100).trim(),
+  phone: z
+    .string()
+    .regex(/^\d{10}$/)
+    .nullable(),
+});
+
 // PATCH /api/users/me — all fields optional but at least one must be present.
 // phone: null = clear the number; undefined = no change; "1234567890" = set new value.
 export const updateProfileSchema = z
