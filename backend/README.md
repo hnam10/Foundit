@@ -200,8 +200,8 @@ Claim cancellation uses `DELETE /api/claims/:claimId` because the original datab
 | ------ | ------------------------------------------ | -------------- | ------- | ------------------------------------------------------------------- |
 | POST   | `/api/report-links`                        | security/admin | Planned | Generate a one-time QR report link token                            |
 | GET    | `/api/report-links`                        | security/admin | Planned | List report links generated for relevant campus scope               |
-| GET    | `/api/report-links/:token/validate`        | —              | Planned | Validate a token; returns only `{ valid: true/false }`              |
-| POST   | `/api/report-links/:token/submit`          | student        | Planned | Submit a found item report and atomically consume token             |
+| GET    | `/api/report-links/:token/validate`        | —              | Done    | Validate a token and return availability status                     |
+| POST   | `/api/report-links/:token/submit`          | student        | Done    | Submit a found item report and atomically consume token             |
 | GET    | `/api/found-item-reports`                  | security/admin | Planned | List found item reports                                             |
 | GET    | `/api/found-item-reports/:reportId`        | security/admin | Planned | Get found item report detail                                        |
 | PATCH  | `/api/found-item-reports/:reportId/status` | security/admin | Planned | Transition report status (`submitted → processed → linked_to_item`) |
@@ -212,7 +212,8 @@ Report link tokens stay in the URL to match the current database model, but must
 
 | Method | Path                        | Auth           | Status  | Description                                              |
 | ------ | --------------------------- | -------------- | ------- | -------------------------------------------------------- |
-| GET    | `/api/items/category-stats` | —              | Planned | Public item counts per category                          |
+| GET    | `/api/public/items`         | —              | Done    | Browse public-safe stored items with optional filters    |
+| GET    | `/api/items/category-stats` | —              | Done    | Public item counts per category                          |
 | POST   | `/api/items/batch`          | security/admin | Planned | Batch status update for items                            |
 | POST   | `/api/items`                | security/admin | Planned | Register a found item into inventory                     |
 | GET    | `/api/items`                | security/admin | Planned | List items with filters                                  |

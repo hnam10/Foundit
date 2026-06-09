@@ -5,6 +5,8 @@ import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './swagger';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
+import reportLinksRouter from './routes/reportLinks';
+import itemsRouter from './routes/items';
 import usersRouter from './routes/users';
 import adminUsersRouter from './routes/admin/users';
 import errorHandler from './middleware/errorHandler';
@@ -27,6 +29,8 @@ app.use(express.json());
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/report-links', reportLinksRouter);
+app.use('/api', itemsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/admin/users', adminUsersRouter);
 
