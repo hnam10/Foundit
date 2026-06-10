@@ -106,6 +106,7 @@ src/
 ├── validators/
 │   ├── shared.ts               # validate() and validateQuery() middleware helpers
 │   ├── auth.ts                 # Zod schemas: loginSchema, registerSchema, refreshSchema, logoutSchema
+│   ├── claims.ts               # Zod schemas for claim routes
 │   └── users.ts                # Zod schemas: replaceProfileSchema, updateProfileSchema, createUserSchema, listUsersQuerySchema
 ├── lib/
 │   └── email.ts                # Nodemailer transporter and email sender
@@ -120,6 +121,7 @@ src/
 ├── routes/
 │   ├── health.ts               # GET /api/health
 │   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
+│   ├── claims.ts               # Claim lifecycle routes
 │   ├── users.ts                # GET|PUT /api/users/me (done) · PATCH stubs
 │   └── admin/
 │       └── users.ts            # Admin user management stubs
@@ -182,15 +184,15 @@ Global API rules:
 
 | Method | Path                                              | Auth                   | Status  | Description                                              |
 | ------ | ------------------------------------------------- | ---------------------- | ------- | -------------------------------------------------------- |
-| POST   | `/api/claims`                                     | student                | Planned | Submit a lost item claim                                 |
-| GET    | `/api/claims`                                     | student/security/admin | Planned | List claims; student sees own, security/admin can filter |
-| GET    | `/api/claims/:claimId`                            | student/security/admin | Planned | Get claim detail with ownership/authorization checks     |
-| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Planned | Transition claim status using existing DB enum           |
-| DELETE | `/api/claims/:claimId`                            | student                | Planned | Cancel/delete own cancellable claim with audit logging   |
-| PATCH  | `/api/claims/:claimId`                            | security/admin         | Planned | Link a stored item to the claim (`itemId` only)          |
-| GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Planned | Retrieve match suggestions for a claim                   |
-| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Planned | Trigger match scoring and create suggestions             |
-| PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Planned | Confirm or dismiss a match suggestion                    |
+| POST   | `/api/claims`                                     | student                | Done    | Submit a lost item claim                                 |
+| GET    | `/api/claims`                                     | student/security/admin | Done    | List claims; student sees own, security/admin can filter |
+| GET    | `/api/claims/:claimId`                            | student/security/admin | Done    | Get claim detail with ownership/authorization checks     |
+| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done    | Transition claim status using existing DB enum           |
+| DELETE | `/api/claims/:claimId`                            | student                | Done    | Cancel/delete own cancellable claim with audit logging   |
+| PATCH  | `/api/claims/:claimId`                            | security/admin         | Done    | Link a stored item to the claim (`itemId` only)          |
+| GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done    | Retrieve match suggestions for a claim                   |
+| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done    | Trigger match scoring and create suggestions             |
+| PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Done    | Confirm or dismiss a match suggestion                    |
 
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
 
