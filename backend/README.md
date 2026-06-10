@@ -182,17 +182,17 @@ Global API rules:
 
 ### Claims
 
-| Method | Path                                              | Auth                   | Status  | Description                                              |
-| ------ | ------------------------------------------------- | ---------------------- | ------- | -------------------------------------------------------- |
-| POST   | `/api/claims`                                     | student                | Done    | Submit a lost item claim                                 |
-| GET    | `/api/claims`                                     | student/security/admin | Done    | List claims; student sees own, security/admin can filter |
-| GET    | `/api/claims/:claimId`                            | student/security/admin | Done    | Get claim detail with ownership/authorization checks     |
-| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done    | Transition claim status using existing DB enum           |
-| DELETE | `/api/claims/:claimId`                            | student                | Done    | Cancel/delete own cancellable claim with audit logging   |
-| PATCH  | `/api/claims/:claimId`                            | security/admin         | Done    | Link a stored item to the claim (`itemId` only)          |
-| GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done    | Retrieve match suggestions for a claim                   |
-| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done    | Trigger match scoring and create suggestions             |
-| PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Done    | Confirm or dismiss a match suggestion                    |
+| Method | Path                                              | Auth                   | Status | Description                                              |
+| ------ | ------------------------------------------------- | ---------------------- | ------ | -------------------------------------------------------- |
+| POST   | `/api/claims`                                     | student                | Done   | Submit a lost item claim                                 |
+| GET    | `/api/claims`                                     | student/security/admin | Done   | List claims; student sees own, security/admin can filter |
+| GET    | `/api/claims/:claimId`                            | student/security/admin | Done   | Get claim detail with ownership/authorization checks     |
+| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done   | Transition claim status using existing DB enum           |
+| DELETE | `/api/claims/:claimId`                            | student                | Done   | Cancel/delete own cancellable claim with audit logging   |
+| PATCH  | `/api/claims/:claimId`                            | security/admin         | Done   | Link a stored item to the claim (`itemId` only)          |
+| GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Retrieve match suggestions for a claim                   |
+| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Trigger match scoring and create suggestions             |
+| PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Done   | Confirm or dismiss a match suggestion                    |
 
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
 
