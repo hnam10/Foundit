@@ -1,5 +1,8 @@
-import React from 'react';
-import { Field, Input } from '@chakra-ui/react';
+'use client';
+
+import React, { useState } from 'react';
+import { Box, Field, IconButton, Input } from '@chakra-ui/react';
+import { LuEye, LuEyeOff } from 'react-icons/lu';
 
 // ─── Map fixed width variants to Chakra UI size units ───────────────────────
 const widthMap = {
@@ -40,6 +43,34 @@ export default function TextInput({
   ...rest
 }: TextInputProps) {
   const isInvalid = !!error;
+  const isPasswordField = type === 'password';
+  const [showPassword, setShowPassword] = useState(false);
+  const inputType = isPasswordField && showPassword ? 'text' : type;
+
+  const inputStyles = {
+    type: inputType,
+    autoComplete,
+    placeholder: undefined,
+    h: 12,
+    px: 4,
+    fontSize: '1rem',
+    fontWeight: 'normal' as const,
+    color: '#1a1a1a',
+    bg: 'white',
+    borderWidth: '1px',
+    borderRadius: 'md',
+    borderColor: '#D9D9D9',
+    _invalid: { borderColor: '#cd0000' },
+    _focusVisible: {
+      outline: 'none',
+      boxShadow: '0 0 0 2px #009adb',
+      borderColor: 'inherit',
+    },
+    w: widthMap[width],
+    maxW: widthMap[width],
+    onBlur,
+    ...rest,
+  };
 
   return (
     // 1. In v3, FormControl is replaced by Field.Root
@@ -82,30 +113,33 @@ export default function TextInput({
       )}
 
       {/* 5. Input Field */}
-      <Input
-        type={type}
-        autoComplete={autoComplete}
-        placeholder={undefined}
-        h={12}
-        px={4}
-        fontSize="1rem"
-        fontWeight="normal"
-        color="#1a1a1a"
-        bg="white"
-        borderWidth="1px"
-        borderRadius="md"
-        borderColor="#D9D9D9"
-        _invalid={{ borderColor: '#cd0000' }}
-        _focusVisible={{
-          outline: 'none',
-          boxShadow: '0 0 0 2px #009adb',
-          borderColor: 'inherit',
-        }}
-        w={widthMap[width]}
-        maxW={widthMap[width]}
-        onBlur={onBlur}
-        {...rest}
-      />
+      {isPasswordField ? (
+        <Box position="relative" w={widthMap[width]} maxW={widthMap[width]}>
+          <Input {...inputStyles} pr={12} w="100%" maxW="100%" />
+          <IconButton
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            variant="ghost"
+            size="sm"
+            type="button"
+            position="absolute"
+            right={2}
+            top="50%"
+            transform="translateY(-50%)"
+            color="#666666"
+            onClick={() => setShowPassword((prev) => !prev)}
+            css={{
+              _icon: {
+                width: '5',
+                height: '5',
+              },
+            }}
+          >
+            {showPassword ? <LuEyeOff /> : <LuEye />}
+          </IconButton>
+        </Box>
+      ) : (
+        <Input {...inputStyles} />
+      )}
     </Field.Root>
   );
 }

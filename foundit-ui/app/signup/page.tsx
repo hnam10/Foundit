@@ -39,6 +39,7 @@ export default function SignUpPage() {
     confirmPasswordError,
 
     handleSignUp,
+    isSubmitting,
   } = useSignUpForm();
 
   return (
@@ -77,6 +78,7 @@ export default function SignUpPage() {
             w="532px"
             p="50px"
             gap="28px"
+            my={12}
           >
             <Heading fontSize="40px" textAlign="center" color="#0F172A">
               Sign Up
@@ -155,6 +157,9 @@ export default function SignUpPage() {
               colorPalette="blue"
               onClick={handleSignUp}
               alignSelf="center"
+              disabled={isSubmitting}
+              loading={isSubmitting}
+              loadingText="Signing up..."
             >
               Sign Up
             </Button>
