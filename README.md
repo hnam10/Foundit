@@ -1,53 +1,48 @@
-# PRJ566NCC_2261_Group2
+# Foundit
 
 ## Seneca Campus Lost & Found System
 
 > A centralized digital platform that helps Seneca students recover lost items faster and with less confusion.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Overview](#overview)
 - [Problem Statement](#problem-statement)
 - [Solution](#solution)
 - [Features](#features)
-- [Project Timeline](#project-timeline)
-- [Team](#team)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
+- [Team](#team)
 - [Contributing](#contributing)
 - [License](#license)
 
-## 🎯 Overview
+## Overview
 
-The **Seneca Campus Lost & Found System** is a centralized digital platform designed to help students at Seneca Polytechnic report, browse, and match lost and found items efficiently. This project addresses the current lack of a user-friendly system for managing lost items across campus.
+**Foundit** is a web platform for Seneca Polytechnic that lets students report, browse, and match lost and found items across campus. It replaces fragmented manual processes with a single, searchable system.
 
 ### Background
 
-Seneca is a large campus with multiple buildings and shared spaces, increasing the likelihood of lost items. Currently, students rely on:
+Seneca is a large campus with multiple buildings and shared spaces, which increases the likelihood of lost items. Today, students often rely on:
 
 - Manual processes through campus security
 - Unofficial group chats and social media
 
 These approaches are fragmented, time-consuming, and often ineffective.
 
-## 🔍 Problem Statement
+## Problem Statement
 
 There is **no centralized, accessible system** for reporting and searching lost and found items at Seneca Polytechnic.
 
 ### Who is Affected?
 
-- **Students**: Lose valuable or essential items such as student IDs, headphones, and water bottles
-- **Campus Security**: Faces increased manual workload managing lost items
-- **Campus Community**: Experiences frustration and inefficiency in item recovery
-
-### Supporting Evidence
-
-- High student population increases lost-item frequency
-- Manual processes lead to delays and unclaimed items
-- Digital platforms are proven to improve information accessibility
+- **Students** — lose valuable or essential items such as student IDs, headphones, and water bottles
+- **Campus Security** — faces increased manual workload managing lost items
+- **Campus Community** — experiences frustration and inefficiency in item recovery
 
 Reference: [Seneca Service Hub - Lost and Found](https://theservicehub.senecapolytechnic.ca/s/article/Lost-and-found)
 
-## 💡 Solution
+## Solution
 
 A web-based platform that provides:
 
@@ -56,45 +51,114 @@ A web-based platform that provides:
 - Reduced confusion and reliance on informal methods
 - Efficient matching between lost and found items
 
-## ✨ Features
+## Features
 
-### Core Features (Semester 1)
+### Core
 
-- 📝 **Item Posting**: Users can report lost or found items with detailed descriptions
-- 🔍 **Search & Filter**: Advanced search functionality to find items quickly
-- 📊 **Item Status Tracking**: Real-time updates on item status
-- 👤 **User Authentication**: Secure login system for Seneca students
-- 💾 **Database Management**: Robust backend for storing item information
+- **Item Posting** — Report lost or found items with detailed descriptions
+- **Search & Filter** — Find items quickly with advanced search
+- **Item Status Tracking** — Real-time updates on item status
+- **User Authentication** — Secure login for students, security staff, and admins
+- **Database Management** — Robust backend for storing item and claim data
 
-### Advanced Features (Semester 2)
+### Advanced
 
-- 🤖 **Semi-Automated Matching**: Intelligent suggestions to match lost items with found items
-- 🎉 **Gratitude Wall**: Platform for users to share success stories and express thanks
-- 🚨 **Content Moderation**: Reporting system for inappropriate content
-- ⚡ **Performance Optimization**: Enhanced system speed and reliability
-- 📱 **Responsive Design**: Mobile-friendly interface
+- **Semi-Automated Matching** — Suggestions to link lost claims with found items
+- **Gratitude Wall** — Share success stories and express thanks
+- **Content Moderation** — Report inappropriate content
+- **Performance Optimization** — Fast, reliable system behavior
+- **Responsive Design** — Mobile-friendly interface
 
-## 📅 Project Timeline
+## Tech Stack
 
-This is a **two-semester project** (PRJ566 NCC):
+| Layer    | Technologies                          |
+| -------- | ------------------------------------- |
+| Frontend | Next.js, React, Chakra UI, TypeScript |
+| Backend  | Express, TypeScript, Prisma           |
+| Database | PostgreSQL (Docker)                   |
+| Auth     | JWT (access + refresh tokens)         |
+| Email    | Nodemailer (SMTP)                     |
 
-### Semester One
+## Project Structure
 
-- Requirements analysis and system design
-- UI/UX wireframes and prototypes
-- Development of core features
-- Database design and backend setup
+```
+Foundit/
+├── foundit-ui/     # Next.js frontend
+├── backend/        # Express API + Prisma
+├── database/       # Docker Compose for PostgreSQL + pgAdmin
+└── README.md
+```
 
-### Semester Two
+For deeper documentation, see:
 
-- Implementation of advanced features
-- System testing and refinement
-- Performance optimization and deployment
-- Documentation and final presentation
+- [Backend setup & API](./backend/README.md)
+- [Database setup & schema](./database/README.md)
 
-## 👥 Team
+## Getting Started
 
-**Team 02**
+### Prerequisites
+
+- Node.js 22+
+- pnpm 11+
+- Docker (for PostgreSQL)
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/86unj/Foundit.git
+cd Foundit
+```
+
+### 2. Start the database
+
+```bash
+cd database
+docker compose up -d
+```
+
+### 3. Set up the backend
+
+```bash
+cd backend
+pnpm install
+cp .env.example .env
+```
+
+Edit `.env` with your database URL, JWT secrets, and SMTP settings. See [backend/README.md](./backend/README.md) for details.
+
+Apply migrations and seed data:
+
+```bash
+pnpm exec prisma migrate dev
+NODE_ENV=development pnpm exec prisma db seed
+```
+
+Start the API server:
+
+```bash
+pnpm run dev
+```
+
+The backend runs at `http://localhost:3001`. Verify with:
+
+```bash
+curl http://localhost:3001/api/health
+```
+
+### 4. Set up the frontend
+
+In a new terminal:
+
+```bash
+cd foundit-ui
+pnpm install
+cp .env.example .env   # if present
+pnpm run dev
+```
+
+The frontend runs at `http://localhost:3000`.
+
+## Team
 
 | Role                          | Name             |
 | ----------------------------- | ---------------- |
@@ -104,48 +168,18 @@ This is a **two-semester project** (PRJ566 NCC):
 | UI/UX Designer                | Hsiao-Kang Chang |
 | Database & Documentation Lead | Hansol Nam       |
 
-## 🚀 Getting Started
+## Contributing
 
-_Instructions will be added as development progresses_
+This project is maintained by the Foundit team. If you are a team member, open a pull request with a clear description of your changes and follow the existing code style.
 
-### Prerequisites
+## License
 
-```bash
-# List of required software/tools
-```
+To be determined.
 
-### Installation
+## Contact
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/seneca-lost-and-found.git
-
-# Navigate to project directory
-cd seneca-lost-and-found
-
-# Install dependencies
-# (commands will be added)
-```
-
-### Usage
-
-```bash
-# Run the application
-# (commands will be added)
-```
-
-## 🤝 Contributing
-
-This is an academic project for PRJ566 NCC at Seneca Polytechnic. Contributions are currently limited to team members.
-
-## 📄 License
-
-_To be determined_
-
-## 📞 Contact
-
-For questions or feedback, please contact the team members listed above.
+For questions or feedback, contact any team member listed above.
 
 ---
 
-**Seneca Polytechnic - PRJ566 NCC | Team 02**
+**Seneca Polytechnic — Foundit**
