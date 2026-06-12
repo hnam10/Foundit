@@ -9,6 +9,7 @@ import usersRouter from './routes/users';
 import adminUsersRouter from './routes/admin/users';
 import errorHandler from './middleware/errorHandler';
 import { startCleanupJob } from './jobs/cleanupUnverifiedUsers';
+import uploadsRouter from './routes/uploads';
 
 // Fail fast if required JWT secrets are missing
 if (!process.env.JWT_ACCESS_SECRET || !process.env.JWT_REFRESH_SECRET) {
@@ -29,6 +30,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/admin/users', adminUsersRouter);
+app.use('/api/uploads', uploadsRouter);
 
 app.use(errorHandler);
 
