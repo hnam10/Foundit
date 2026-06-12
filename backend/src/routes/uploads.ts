@@ -47,15 +47,6 @@ router.post('/presigned-url', async (req, res, next) => {
       });
       return;
     }
-
-    if (!contentType.startsWith('image/')) {
-      res.status(400).json({
-        code: 'INVALID_FILE_TYPE',
-        message: 'Only image files are allowed.',
-      });
-      return;
-    }
-
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(contentType)) {
       res.status(400).json({
@@ -84,7 +75,7 @@ router.post('/presigned-url', async (req, res, next) => {
     });
 
     const uploadUrl = await getSignedUrl(r2, command, {
-      expiresIn: 300 * 60,
+      expiresIn: 5 * 60 * 60, // 5 hours
     });
 
     res.status(200).json({
