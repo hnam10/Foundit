@@ -160,13 +160,7 @@ The frontend runs at `http://localhost:3000`.
 
 ## Team
 
-| Role                          | Name             |
-| ----------------------------- | ---------------- |
-| Project Manager               | Yunjeong Choi    |
-| Front-End Developer           | Shu-Ting Hsu     |
-| Back-End Developer            | Rendell Velasco  |
-| UI/UX Designer                | Hsiao-Kang Chang |
-| Database & Documentation Lead | Hansol Nam       |
+Hansol Nam, Yunjeong Choi,Shu-Ting Hsu, Rendell Velasco, Hsiao-Kang Chang
 
 ## Contributing
 
