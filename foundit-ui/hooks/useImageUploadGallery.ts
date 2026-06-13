@@ -66,8 +66,7 @@ export function useImageUploadGallery({
       ]);
 
       try {
-        const compressedFile = await compressImage(file);
-        const result = await handleImageUpload(compressedFile, accessToken);
+        const result = await handleImageUpload(file, accessToken);
 
         setImages((prev) => {
           const next = prev.map((img) =>
