@@ -27,12 +27,15 @@ export function useSignUpForm() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleEmailBlur() {
     setEmailError(validateEmail(email));
   }
 
   async function handleSignUp() {
+    if (isSubmitting) return;
+
     const emailValidation = validateEmail(email);
     const firstError = validateRequired(firstName);
     const lastError = validateRequired(lastName);
@@ -54,6 +57,7 @@ export function useSignUpForm() {
     ) {
       return;
     }
+    setIsSubmitting(true);
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`,
@@ -88,6 +92,8 @@ export function useSignUpForm() {
       router.push('/signup/success');
     } catch {
       setEmailError('Unable to connect to server.');
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -109,5 +115,6 @@ export function useSignUpForm() {
     confirmPasswordError,
     handleEmailBlur,
     handleSignUp,
+    isSubmitting,
   };
 }
