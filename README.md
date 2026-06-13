@@ -160,7 +160,7 @@ The frontend runs at `http://localhost:3000`.
 
 ## Team
 
-Hansol Nam, Yunjeong Choi,Shu-Ting Hsu, Rendell Velasco, Hsiao-Kang Chang
+Hansol Nam, Yunjeong Choi, Shu-Ting Hsu, Rendell Velasco, Hsiao-Kang Chang
 
 ## Contributing
 
