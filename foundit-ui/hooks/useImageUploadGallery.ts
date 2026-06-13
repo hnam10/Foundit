@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { compressImage } from '../utils/imageCompression';
 import handleImageUpload from '../utils/handleImageUpload';
 
@@ -27,6 +27,15 @@ export function useImageUploadGallery({
 }: UseImageUploadGalleryProps) {
   const [images, setImages] = useState<UploadedImage[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Revoke any remaining object URLs when the component unmounts to avoid
+  // memory leaks. handleRemove already revokes URLs for individually removed
+  // images; this covers images still present at unmount time.
+  useEffect(() => {
+    return () => {
+      images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+    };
+  }, []);
 
   const notifyChange = (next: UploadedImage[]) => {
     const completed = next

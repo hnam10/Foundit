@@ -70,7 +70,7 @@ export default function ImageUploadGallery({
             <GridItem key={img.previewUrl} position="relative">
               <Box
                 position="relative"
-                w="80%%"
+                w="80%"
                 h="80%"
                 borderRadius="sm"
                 overflow="hidden"
@@ -80,8 +80,8 @@ export default function ImageUploadGallery({
                 <Image
                   src={img.previewUrl}
                   alt="uploaded preview"
-                  w="100%"
-                  h="100%"
+                  w="80%"
+                  h="80%"
                   objectFit="cover"
                   opacity={img.status === 'uploading' ? 0.5 : 1}
                 />

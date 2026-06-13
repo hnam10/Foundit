@@ -2,8 +2,8 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { r2 } from '../lib/r2';
-// import { requireAuth } from '../middleware/requireAuth';
+import { r2, R2_BUCKET } from '../lib/r2';
+import authenticate from '../middleware/authenticate';
 
 const router = Router();
 
@@ -35,8 +35,10 @@ const router = Router();
  *         description: Presigned upload URL created
  *       '400':
  *         description: Invalid file information
+ *       '401':
+ *         description: Unauthorized
  */
-router.post('/presigned-url', async (req, res, next) => {
+router.post('/presigned-url', authenticate, async (req, res, next) => {
   try {
     const { fileName, contentType, fileSizeKb } = req.body;
 
@@ -69,13 +71,24 @@ router.post('/presigned-url', async (req, res, next) => {
     const key = `reports/${crypto.randomUUID()}.${ext}`;
 
     const command = new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET!,
+      Bucket: R2_BUCKET,
       Key: key,
       ContentType: contentType,
+      // NOTE: fileSizeKb is client-reported and not independently verified.
+      // Adding ContentLength + signableHeaders pins the presigned URL to this
+      // declared size — if the client sends a different Content-Length header
+      // during the actual PUT, the signature becomes invalid and the upload
+      // is rejected. This does not prevent a client from declaring a small
+      // fileSizeKb and then omitting/spoofing the Content-Length header entirely
+      // in non-browser clients. Full enforcement would require a post-upload
+      // HeadObject check (or R2 lifecycle rule) to verify actual object size
+      // and delete oversized objects. Tracked as a follow-up; out of scope here.
+      ContentLength: fileSizeKb * 1024,
     });
 
     const uploadUrl = await getSignedUrl(r2, command, {
-      expiresIn: 5 * 60 * 60, // 5 hours
+      expiresIn: 60 * 60,
+      signableHeaders: new Set(['content-length']),
     });
 
     res.status(200).json({

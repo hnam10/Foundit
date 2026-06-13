@@ -1,5 +1,5 @@
 import { compressImage } from './imageCompression';
-import type { PresignedUrlResponse } from '../../backend/src/types/uploads';
+import type { PresignedUrlResponse } from '../types/uploads';
 
 async function handleImageUpload(file: File, accessToken: string) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
