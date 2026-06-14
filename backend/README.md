@@ -106,6 +106,7 @@ src/
 ├── validators/
 │   ├── shared.ts               # validate() and validateQuery() middleware helpers
 │   ├── auth.ts                 # Zod schemas: loginSchema, registerSchema, refreshSchema, logoutSchema
+│   ├── claims.ts               # Zod schemas for claim routes
 │   └── users.ts                # Zod schemas: replaceProfileSchema, updateProfileSchema, createUserSchema, listUsersQuerySchema
 ├── lib/
 │   └── email.ts                # Nodemailer transporter and email sender
@@ -120,6 +121,7 @@ src/
 ├── routes/
 │   ├── health.ts               # GET /api/health
 │   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
+│   ├── claims.ts               # Claim lifecycle routes
 │   ├── users.ts                # GET|PUT /api/users/me (done) · PATCH stubs
 │   └── admin/
 │       └── users.ts            # Admin user management stubs
@@ -180,17 +182,17 @@ Global API rules:
 
 ### Claims
 
-| Method | Path                                              | Auth                   | Status  | Description                                              |
-| ------ | ------------------------------------------------- | ---------------------- | ------- | -------------------------------------------------------- |
-| POST   | `/api/claims`                                     | student                | Planned | Submit a lost item claim                                 |
-| GET    | `/api/claims`                                     | student/security/admin | Planned | List claims; student sees own, security/admin can filter |
-| GET    | `/api/claims/:claimId`                            | student/security/admin | Planned | Get claim detail with ownership/authorization checks     |
-| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Planned | Transition claim status using existing DB enum           |
-| DELETE | `/api/claims/:claimId`                            | student                | Planned | Cancel/delete own cancellable claim with audit logging   |
-| PATCH  | `/api/claims/:claimId`                            | security/admin         | Planned | Link a stored item to the claim (`itemId` only)          |
-| GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Planned | Retrieve match suggestions for a claim                   |
-| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Planned | Trigger match scoring and create suggestions             |
-| PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Planned | Confirm or dismiss a match suggestion                    |
+| Method | Path                                              | Auth                   | Status | Description                                              |
+| ------ | ------------------------------------------------- | ---------------------- | ------ | -------------------------------------------------------- |
+| POST   | `/api/claims`                                     | student                | Done   | Submit a lost item claim                                 |
+| GET    | `/api/claims`                                     | student/security/admin | Done   | List claims; student sees own, security/admin can filter |
+| GET    | `/api/claims/:claimId`                            | student/security/admin | Done   | Get claim detail with ownership/authorization checks     |
+| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done   | Transition claim status using existing DB enum           |
+| DELETE | `/api/claims/:claimId`                            | student                | Done   | Cancel/delete own cancellable claim with audit logging   |
+| PATCH  | `/api/claims/:claimId`                            | security/admin         | Done   | Link a stored item to the claim (`itemId` only)          |
+| GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Retrieve match suggestions for a claim                   |
+| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Trigger match scoring and create suggestions             |
+| PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Done   | Confirm or dismiss a match suggestion                    |
 
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
 
@@ -200,8 +202,8 @@ Claim cancellation uses `DELETE /api/claims/:claimId` because the original datab
 | ------ | ------------------------------------------ | -------------- | ------- | ------------------------------------------------------------------- |
 | POST   | `/api/report-links`                        | security/admin | Planned | Generate a one-time QR report link token                            |
 | GET    | `/api/report-links`                        | security/admin | Planned | List report links generated for relevant campus scope               |
-| GET    | `/api/report-links/:token/validate`        | —              | Planned | Validate a token; returns only `{ valid: true/false }`              |
-| POST   | `/api/report-links/:token/submit`          | student        | Planned | Submit a found item report and atomically consume token             |
+| GET    | `/api/report-links/:token/validate`        | —              | Done    | Validate a token and return availability status                     |
+| POST   | `/api/report-links/:token/submit`          | student        | Done    | Submit a found item report and atomically consume token             |
 | GET    | `/api/found-item-reports`                  | security/admin | Planned | List found item reports                                             |
 | GET    | `/api/found-item-reports/:reportId`        | security/admin | Planned | Get found item report detail                                        |
 | PATCH  | `/api/found-item-reports/:reportId/status` | security/admin | Planned | Transition report status (`submitted → processed → linked_to_item`) |
@@ -212,7 +214,8 @@ Report link tokens stay in the URL to match the current database model, but must
 
 | Method | Path                        | Auth           | Status  | Description                                              |
 | ------ | --------------------------- | -------------- | ------- | -------------------------------------------------------- |
-| GET    | `/api/items/category-stats` | —              | Planned | Public item counts per category                          |
+| GET    | `/api/public/items`         | —              | Done    | Browse public-safe stored items with optional filters    |
+| GET    | `/api/items/category-stats` | —              | Done    | Public item counts per category                          |
 | POST   | `/api/items/batch`          | security/admin | Planned | Batch status update for items                            |
 | POST   | `/api/items`                | security/admin | Planned | Register a found item into inventory                     |
 | GET    | `/api/items`                | security/admin | Planned | List items with filters                                  |
