@@ -134,9 +134,11 @@ export function useReportFoundItemForm(token: string) {
     setSubmitError(null);
     if (!validate()) return;
 
+    const loginRedirect = `/login?redirect=${encodeURIComponent(`/report-found/${token}`)}`;
+
     const accessToken = getAccessToken();
     if (!accessToken) {
-      setSubmitError(messageForStatus(401));
+      router.push(loginRedirect);
       return;
     }
 
@@ -170,7 +172,12 @@ export function useReportFoundItemForm(token: string) {
       });
 
       if (res.ok) {
-        router.push('/Report/report-submitted');
+        router.push('/report-found/submitted');
+        return;
+      }
+
+      if (res.status === 401) {
+        router.push(loginRedirect);
         return;
       }
 
