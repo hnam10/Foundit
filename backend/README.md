@@ -153,7 +153,7 @@ Global API rules:
 | ------ | ------------------------ | ---- | ------ | ----------------------------------------------------------- |
 | POST   | `/api/auth/register`     | —    | Done   | Self-register a student or security account                 |
 | POST   | `/api/auth/login`        | —    | Done   | Verify email + password, return JWT access & refresh tokens |
-| POST   | `/api/auth/refresh`      | —    | Stub   | Exchange refresh token for a new access token               |
+| POST   | `/api/auth/refresh`      | —    | Done   | Exchange refresh token for a new access token               |
 | POST   | `/api/auth/logout`       | —    | Stub   | Revoke refresh token                                        |
 | GET    | `/api/auth/verify-email` | —    | Done   | Verify email address via token link                         |
 
@@ -210,19 +210,48 @@ Claim cancellation uses `DELETE /api/claims/:claimId` because the original datab
 
 Report link tokens stay in the URL to match the current database model, but must be treated as one-time secrets: high entropy, rate-limited validation/submission, `Cache-Control: no-store`, redacted logs, and atomic consume on submit.
 
+### Campuses
+
+| Method | Path            | Auth | Status | Description               |
+| ------ | --------------- | ---- | ------ | ------------------------- |
+| GET    | `/api/campuses` | —    | Done   | List campuses for filters |
+
 ### Items
 
 | Method | Path                        | Auth           | Status  | Description                                              |
 | ------ | --------------------------- | -------------- | ------- | -------------------------------------------------------- |
 | GET    | `/api/public/items`         | —              | Done    | Browse public-safe stored items with optional filters    |
 | GET    | `/api/items/category-stats` | —              | Done    | Public item counts per category                          |
+| GET    | `/api/items`                | security/admin | Done    | List items with filters and cursor pagination            |
+| GET    | `/api/items/:itemId`        | security/admin | Done    | Get item detail (internal fields, images, linked claims) |
 | POST   | `/api/items/batch`          | security/admin | Planned | Batch status update for items                            |
 | POST   | `/api/items`                | security/admin | Planned | Register a found item into inventory                     |
-| GET    | `/api/items`                | security/admin | Planned | List items with filters                                  |
-| GET    | `/api/items/:itemId`        | security/admin | Planned | Get item detail                                          |
 | PATCH  | `/api/items/:itemId`        | security/admin | Planned | Update item fields; does not modify status               |
 | DELETE | `/api/items/:itemId`        | admin          | Planned | Permanently delete only erroneous records with audit log |
 | PATCH  | `/api/items/:itemId/status` | security/admin | Planned | Transition item lifecycle status                         |
+
+**`GET /api/items` response:**
+
+```json
+{
+  "data": [
+    {
+      "itemId": "uuid",
+      "campusId": "uuid",
+      "campusName": "Newnham",
+      "category": "Electronics",
+      "title": "Phone",
+      "dateFound": "2026-01-20T00:00:00.000Z",
+      "status": "stored",
+      "retentionExpiryDate": "2026-02-19T00:00:00.000Z",
+      "imageUrl": "https://..."
+    }
+  ],
+  "nextCursor": "uuid-or-null"
+}
+```
+
+**`GET /api/items/:itemId` response:** list fields plus `descriptionPublic`, `descriptionInternal`, `color`, `brand`, `locationFound`, `foundItemReportId`, `createdAt`, `updatedAt`, `images[]`, `registeredBy`, and `claims[]` (summary with `claimId`, `status`, `studentName`).
 
 Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed`; `DELETE /api/items/:itemId` is reserved for admin correction of erroneous records.
 
