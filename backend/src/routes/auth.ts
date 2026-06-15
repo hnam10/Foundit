@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
+import { TokenExpiredError } from 'jsonwebtoken';
 import { prisma } from '../db';
 import { validate } from '../validators/shared';
 import {
@@ -15,6 +16,7 @@ import {
   signAccessToken,
   signRefreshToken,
   hashTokenForStorage,
+  verifyRefreshToken,
 } from '../utils/token';
 import { writeAuditLog } from '../utils/auditLog';
 import {
@@ -384,7 +386,6 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
  *       '400':
  *         description: Token missing, invalid, or expired
  */
-
 router.get('/verify-email', async (req, res, next) => {
   try {
     const token = req.query.token as string;
@@ -396,8 +397,8 @@ router.get('/verify-email', async (req, res, next) => {
       });
       return;
     }
-    const tokenHash = hashTokenForStorage(token);
 
+    const tokenHash = hashTokenForStorage(token);
     const user = await prisma.user.findFirst({
       where: { emailVerifyToken: tokenHash },
     });
@@ -428,7 +429,6 @@ router.get('/verify-email', async (req, res, next) => {
     });
 
     res.redirect(`${process.env.FRONTEND_URL}/email-verified`);
-    return;
   } catch (err) {
     next(err);
   }
@@ -469,12 +469,93 @@ router.get('/verify-email', async (req, res, next) => {
  *       '501':
  *         description: Not yet implemented
  */
-// TODO: Verify refresh token, rotate, issue new access token
-router.post('/refresh', validate(refreshSchema), (_req, res) => {
-  res.status(501).json({
-    code: 'NOT_IMPLEMENTED',
-    message: 'POST /api/auth/refresh not yet implemented',
-  });
+// Verify refresh token, rotate, and issue a new access token
+router.post('/refresh', validate(refreshSchema), async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body as z.infer<typeof refreshSchema>;
+
+    let payload: { userId: string };
+    try {
+      payload = verifyRefreshToken(refreshToken);
+    } catch (err) {
+      if (err instanceof TokenExpiredError) {
+        res.status(401).json({
+          code: 'REFRESH_TOKEN_EXPIRED',
+          message: 'Refresh token has expired. Please log in again.',
+        });
+        return;
+      }
+
+      res.status(401).json({
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'Refresh token is invalid.',
+      });
+      return;
+    }
+
+    const tokenHash = hashTokenForStorage(refreshToken);
+    const log = await prisma.refreshTokenLog.findUnique({
+      where: { tokenHash },
+    });
+
+    if (
+      !log ||
+      log.revoked ||
+      log.expiresAt < new Date() ||
+      log.userId !== payload.userId
+    ) {
+      res.status(401).json({
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'Refresh token is invalid or has been revoked.',
+      });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { userId: payload.userId },
+    });
+
+    if (!user || !user.isActive) {
+      res.status(401).json({
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'Refresh token is invalid or has been revoked.',
+      });
+      return;
+    }
+
+    const accessToken = signAccessToken({
+      user_id: user.userId,
+      role: user.role,
+      campus_id: user.campusId ?? null,
+      email: user.email,
+    });
+
+    const newRefreshToken = signRefreshToken(user.userId);
+    const newTokenHash = hashTokenForStorage(newRefreshToken);
+    const refreshDays =
+      parseInt(process.env.JWT_REFRESH_EXPIRES_DAYS ?? '7') || 7;
+
+    await prisma.$transaction([
+      prisma.refreshTokenLog.update({
+        where: { logId: log.logId },
+        data: { revoked: true },
+      }),
+      prisma.refreshTokenLog.create({
+        data: {
+          userId: user.userId,
+          tokenHash: newTokenHash,
+          expiresAt: new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000),
+        },
+      }),
+    ]);
+
+    res.status(200).json({
+      accessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**

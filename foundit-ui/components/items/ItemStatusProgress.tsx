@@ -1,24 +1,35 @@
 'use client';
 
 import { Box, Flex, Text } from '@chakra-ui/react';
-import type { StoredItemStatus } from '@/constants/mockStoredItems';
+import type { ItemStatus } from '@/types/items';
+import { ITEM_STATUS_LABELS } from '@/types/items';
 
-const STEPS = ['Received', 'Under Review', 'Approved', 'Picked up'] as const;
+const HAPPY_PATH_STEPS: ItemStatus[] = ['pending_report', 'stored', 'claimed'];
 
-const STATUS_STEP_INDEX: Record<StoredItemStatus, number> = {
-  received: 0,
-  under_review: 1,
-  approved: 2,
-  picked_up: 3,
-};
+const TERMINAL_STATUSES = new Set<ItemStatus>(['expired', 'disposed']);
 
 interface ItemStatusProgressProps {
-  status: StoredItemStatus;
+  status: ItemStatus;
 }
 
 export function ItemStatusProgress({ status }: ItemStatusProgressProps) {
-  const activeIndex = STATUS_STEP_INDEX[status];
-  const activeLabel = STEPS[activeIndex];
+  if (TERMINAL_STATUSES.has(status)) {
+    return (
+      <Box w="full" maxW="280px" ml="auto" pt={6}>
+        <Text
+          fontSize="xs"
+          fontWeight="medium"
+          color="gray.600"
+          textAlign="right"
+        >
+          {ITEM_STATUS_LABELS[status]}
+        </Text>
+      </Box>
+    );
+  }
+
+  const activeIndex = HAPPY_PATH_STEPS.indexOf(status);
+  const activeLabel = ITEM_STATUS_LABELS[status];
 
   return (
     <Box w="full" maxW="280px" ml="auto" pt={6}>
@@ -26,7 +37,7 @@ export function ItemStatusProgress({ status }: ItemStatusProgressProps) {
         <Text
           position="absolute"
           top={0}
-          left={`${(activeIndex / (STEPS.length - 1)) * 100}%`}
+          left={`${(activeIndex / (HAPPY_PATH_STEPS.length - 1)) * 100}%`}
           transform="translateX(-50%)"
           fontSize="xs"
           fontWeight="medium"
@@ -44,16 +55,12 @@ export function ItemStatusProgress({ status }: ItemStatusProgressProps) {
           align="center"
           justify="space-between"
         >
-          {STEPS.map((_, index) => {
+          {HAPPY_PATH_STEPS.map((step, index) => {
             const isComplete = index <= activeIndex;
-            const isLast = index === STEPS.length - 1;
+            const isLast = index === HAPPY_PATH_STEPS.length - 1;
 
             return (
-              <Flex
-                key={STEPS[index]}
-                align="center"
-                flex={isLast ? '0 0 auto' : 1}
-              >
+              <Flex key={step} align="center" flex={isLast ? '0 0 auto' : 1}>
                 <Box
                   w="10px"
                   h="10px"

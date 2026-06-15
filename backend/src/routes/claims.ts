@@ -1,0 +1,1455 @@
+import { Router, Response } from 'express';
+import {
+  ClaimStatus,
+  ItemStatus,
+  MatchStatus,
+  NotificationType,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
+import { prisma } from '../db';
+import authenticate from '../middleware/authenticate';
+import requireRole from '../middleware/requireRole';
+import { writeAuditLog } from '../utils/auditLog';
+import {
+  claimAndMatchParamsSchema,
+  claimParamsSchema,
+  createClaimSchema,
+  linkClaimItemSchema,
+  listClaimsQuerySchema,
+  reviewMatchSuggestionSchema,
+  updateClaimStatusSchema,
+} from '../validators/claims';
+import { validate, validateQuery } from '../validators/shared';
+
+const router = Router();
+
+const claimListSelect = {
+  claimId: true,
+  studentId: true,
+  itemId: true,
+  category: true,
+  campusId: true,
+  description: true,
+  dateLost: true,
+  locationLost: true,
+  status: true,
+  reviewedAt: true,
+  rejectionReason: true,
+  pickedUpAt: true,
+  createdAt: true,
+  updatedAt: true,
+  student: {
+    select: {
+      userId: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+    },
+  },
+  item: {
+    select: {
+      itemId: true,
+      campusId: true,
+      category: true,
+      title: true,
+      status: true,
+      brand: true,
+      color: true,
+      locationFound: true,
+      dateFound: true,
+    },
+  },
+} as const;
+
+const claimDetailSelect = {
+  ...claimListSelect,
+  reviewedBy: true,
+  verifiedBy: true,
+  reviewer: {
+    select: {
+      userId: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+    },
+  },
+  verifier: {
+    select: {
+      userId: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+    },
+  },
+} as const;
+
+const matchSuggestionSelect = {
+  matchId: true,
+  claimId: true,
+  itemId: true,
+  matchScore: true,
+  matchCriteria: true,
+  status: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  createdAt: true,
+  item: {
+    select: {
+      itemId: true,
+      campusId: true,
+      category: true,
+      title: true,
+      status: true,
+      brand: true,
+      color: true,
+      locationFound: true,
+      dateFound: true,
+      descriptionPublic: true,
+    },
+  },
+  reviewer: {
+    select: {
+      userId: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+    },
+  },
+} as const;
+
+type RequestUser = {
+  userId: string;
+  role: UserRole;
+  campusId: string | null;
+  firstName: string;
+  lastName: string;
+  email: string;
+  isActive: boolean;
+};
+
+type ClaimListRow = Prisma.ClaimGetPayload<{ select: typeof claimListSelect }>;
+type ClaimDetailRow = Prisma.ClaimGetPayload<{
+  select: typeof claimDetailSelect;
+}>;
+type MatchSuggestionRow = Prisma.MatchSuggestionGetPayload<{
+  select: typeof matchSuggestionSelect;
+}>;
+
+function sendValidationError(res: Response, details: unknown) {
+  res.status(400).json({
+    code: 'VALIDATION_ERROR',
+    message: 'Validation failed',
+    details,
+  });
+}
+
+function toClaimListItemDto(claim: ClaimListRow) {
+  return {
+    claimId: claim.claimId,
+    studentId: claim.studentId,
+    itemId: claim.itemId,
+    category: claim.category,
+    campusId: claim.campusId,
+    description: claim.description,
+    dateLost: claim.dateLost,
+    locationLost: claim.locationLost,
+    status: claim.status,
+    reviewedAt: claim.reviewedAt,
+    rejectionReason: claim.rejectionReason,
+    pickedUpAt: claim.pickedUpAt,
+    createdAt: claim.createdAt,
+    updatedAt: claim.updatedAt,
+    student: {
+      userId: claim.student.userId,
+      firstName: claim.student.firstName,
+      lastName: claim.student.lastName,
+      email: claim.student.email,
+    },
+    item: claim.item
+      ? {
+          itemId: claim.item.itemId,
+          campusId: claim.item.campusId,
+          category: claim.item.category,
+          title: claim.item.title,
+          status: claim.item.status,
+          brand: claim.item.brand,
+          color: claim.item.color,
+          locationFound: claim.item.locationFound,
+          dateFound: claim.item.dateFound,
+        }
+      : null,
+  };
+}
+
+function toClaimDetailDto(claim: ClaimDetailRow) {
+  return {
+    ...toClaimListItemDto(claim),
+    reviewedBy: claim.reviewedBy,
+    verifiedBy: claim.verifiedBy,
+    reviewer: claim.reviewer
+      ? {
+          userId: claim.reviewer.userId,
+          firstName: claim.reviewer.firstName,
+          lastName: claim.reviewer.lastName,
+          email: claim.reviewer.email,
+        }
+      : null,
+    verifier: claim.verifier
+      ? {
+          userId: claim.verifier.userId,
+          firstName: claim.verifier.firstName,
+          lastName: claim.verifier.lastName,
+          email: claim.verifier.email,
+        }
+      : null,
+  };
+}
+
+function toMatchSuggestionDto(match: MatchSuggestionRow) {
+  return {
+    matchId: match.matchId,
+    claimId: match.claimId,
+    itemId: match.itemId,
+    matchScore: Number(match.matchScore),
+    matchCriteria: match.matchCriteria,
+    status: match.status,
+    reviewedBy: match.reviewedBy,
+    reviewedAt: match.reviewedAt,
+    createdAt: match.createdAt,
+    item: {
+      itemId: match.item.itemId,
+      campusId: match.item.campusId,
+      category: match.item.category,
+      title: match.item.title,
+      status: match.item.status,
+      brand: match.item.brand,
+      color: match.item.color,
+      locationFound: match.item.locationFound,
+      dateFound: match.item.dateFound,
+      descriptionPublic: match.item.descriptionPublic,
+    },
+    reviewer: match.reviewer
+      ? {
+          userId: match.reviewer.userId,
+          firstName: match.reviewer.firstName,
+          lastName: match.reviewer.lastName,
+          email: match.reviewer.email,
+        }
+      : null,
+  };
+}
+
+async function loadRequestUser(userId: string): Promise<RequestUser | null> {
+  return prisma.user.findUnique({
+    where: { userId },
+    select: {
+      userId: true,
+      role: true,
+      campusId: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      isActive: true,
+    },
+  });
+}
+
+function ensureActiveRequestUser(
+  user: RequestUser | null,
+  res: Response
+): user is RequestUser {
+  if (!user) {
+    res.status(404).json({
+      code: 'USER_NOT_FOUND',
+      message: 'User account no longer exists.',
+    });
+    return false;
+  }
+
+  if (!user.isActive) {
+    res.status(403).json({
+      code: 'ACCOUNT_INACTIVE',
+      message: 'Your account has been deactivated. Contact an administrator.',
+    });
+    return false;
+  }
+
+  return true;
+}
+
+function canAccessClaim(user: RequestUser, claim: { studentId: string }) {
+  if (user.role === 'student') {
+    return claim.studentId === user.userId;
+  }
+
+  return user.role === 'security' || user.role === 'admin';
+}
+
+function getClaimListWhere(
+  user: RequestUser,
+  query: {
+    status?: ClaimStatus;
+    campusId?: string;
+    studentId?: string;
+    itemId?: string;
+  }
+): Prisma.ClaimWhereInput {
+  if (user.role === 'student') {
+    return {
+      studentId: user.userId,
+      ...(query.status ? { status: query.status } : {}),
+    };
+  }
+
+  return {
+    ...(query.status ? { status: query.status } : {}),
+    ...(query.campusId ? { campusId: query.campusId } : {}),
+    ...(query.studentId ? { studentId: query.studentId } : {}),
+    ...(query.itemId ? { itemId: query.itemId } : {}),
+  };
+}
+
+const cancellableClaimStatuses = new Set<ClaimStatus>([ClaimStatus.submitted]);
+
+const validStatusTransitions: Record<ClaimStatus, ClaimStatus[]> = {
+  [ClaimStatus.submitted]: [ClaimStatus.under_review, ClaimStatus.rejected],
+  [ClaimStatus.under_review]: [ClaimStatus.approved, ClaimStatus.rejected],
+  [ClaimStatus.approved]: [ClaimStatus.picked_up],
+  [ClaimStatus.rejected]: [],
+  [ClaimStatus.picked_up]: [],
+};
+
+function createClaimStatusNotificationInput(
+  claim: ClaimDetailRow,
+  nextStatus: ClaimStatus
+) {
+  const statusText = nextStatus.replace('_', ' ');
+  return {
+    recipientId: claim.studentId,
+    type: NotificationType.claim_status_update,
+    title: `Claim status updated: ${statusText}`,
+    message: `Your claim ${claim.claimId} is now ${statusText}.`,
+    referenceType: 'claim',
+    referenceId: claim.claimId,
+  } as const;
+}
+
+function tokenize(text: string | null | undefined) {
+  if (!text) {
+    return new Set<string>();
+  }
+
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3)
+  );
+}
+
+function intersectionSize(left: Set<string>, right: Set<string>) {
+  let count = 0;
+  for (const token of left) {
+    if (right.has(token)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function scoreCandidateItem(
+  claim: Pick<ClaimDetailRow, 'category' | 'description' | 'locationLost'>,
+  item: {
+    category: string;
+    locationFound: string | null;
+    title: string;
+    descriptionPublic: string | null;
+    brand: string | null;
+    color: string | null;
+  }
+) {
+  let score = 0;
+  const criteria: string[] = [];
+
+  if (claim.category.toLowerCase() === item.category.toLowerCase()) {
+    score += 60;
+    criteria.push('category');
+  }
+
+  const claimLocationTokens = tokenize(claim.locationLost);
+  const itemLocationTokens = tokenize(item.locationFound);
+  if (
+    claimLocationTokens.size > 0 &&
+    intersectionSize(claimLocationTokens, itemLocationTokens) > 0
+  ) {
+    score += 20;
+    criteria.push('location');
+  }
+
+  const claimDescriptionTokens = tokenize(claim.description);
+  const itemDescriptionTokens = new Set<string>([
+    ...tokenize(item.title),
+    ...tokenize(item.descriptionPublic),
+    ...tokenize(item.brand),
+    ...tokenize(item.color),
+  ]);
+  const descriptionMatches = intersectionSize(
+    claimDescriptionTokens,
+    itemDescriptionTokens
+  );
+
+  if (descriptionMatches >= 2) {
+    score += 20;
+    criteria.push('description');
+  } else if (descriptionMatches === 1) {
+    score += 10;
+    criteria.push('description');
+  }
+
+  return {
+    score,
+    criteria: criteria.join(','),
+  };
+}
+
+/**
+ * @openapi
+ * /api/claims:
+ *   post:
+ *     summary: Submit a lost-item claim
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [category, description]
+ *             properties:
+ *               category:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               dateLost:
+ *                 type: string
+ *                 format: date
+ *               locationLost:
+ *                 type: string
+ *     responses:
+ *       '201':
+ *         description: Claim created
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Role or account is not allowed
+ */
+router.post(
+  '/',
+  authenticate,
+  requireRole('student'),
+  validate(createClaimSchema),
+  async (req, res, next) => {
+    try {
+      const actor = await loadRequestUser(req.user!.user_id);
+      if (!ensureActiveRequestUser(actor, res)) {
+        return;
+      }
+
+      if (!actor.campusId) {
+        res.status(409).json({
+          code: 'CLAIM_CAMPUS_REQUIRED',
+          message: 'A campus must be assigned before a claim can be submitted.',
+        });
+        return;
+      }
+
+      const payload = req.body as {
+        category: string;
+        description: string;
+        dateLost?: Date;
+        locationLost?: string;
+      };
+      const claim = await prisma.claim.create({
+        data: {
+          studentId: actor.userId,
+          campusId: actor.campusId,
+          category: payload.category,
+          description: payload.description,
+          dateLost: payload.dateLost,
+          locationLost: payload.locationLost,
+        },
+        select: claimDetailSelect,
+      });
+
+      await writeAuditLog({
+        actorId: actor.userId,
+        action: 'claim_created',
+        entityType: 'claim',
+        entityId: claim.claimId,
+        details: {
+          category: claim.category,
+          campusId: claim.campusId,
+          status: claim.status,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(201).json(toClaimDetailDto(claim));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/claims:
+ *   get:
+ *     summary: List claims for the current role scope
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [submitted, under_review, approved, rejected, picked_up]
+ *       - in: query
+ *         name: campusId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: studentId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: itemId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *     responses:
+ *       '200':
+ *         description: Paginated claim list
+ *       '400':
+ *         description: Invalid query parameters
+ *       '401':
+ *         description: Missing or invalid token
+ */
+router.get(
+  '/',
+  authenticate,
+  validateQuery(listClaimsQuerySchema),
+  async (req, res, next) => {
+    try {
+      const actor = await loadRequestUser(req.user!.user_id);
+      if (!ensureActiveRequestUser(actor, res)) {
+        return;
+      }
+
+      const query = req.query as unknown as {
+        status?: ClaimStatus;
+        campusId?: string;
+        studentId?: string;
+        itemId?: string;
+        cursor?: string;
+        limit: number;
+      };
+
+      const claims = await prisma.claim.findMany({
+        where: getClaimListWhere(actor, query),
+        orderBy: { claimId: 'desc' },
+        take: query.limit + 1,
+        ...(query.cursor
+          ? {
+              cursor: { claimId: query.cursor },
+              skip: 1,
+            }
+          : {}),
+        select: claimListSelect,
+      });
+
+      const nextCursor =
+        claims.length > query.limit ? claims[query.limit].claimId : null;
+      const data = claims
+        .slice(0, query.limit)
+        .map((claim) => toClaimListItemDto(claim));
+
+      res.status(200).json({ data, nextCursor });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/claims/{claimId}:
+ *   get:
+ *     summary: Get claim detail
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       '200':
+ *         description: Claim detail
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Claim not found
+ */
+router.get('/:claimId', authenticate, async (req, res, next) => {
+  try {
+    const params = claimParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      sendValidationError(res, params.error.issues);
+      return;
+    }
+
+    const actor = await loadRequestUser(req.user!.user_id);
+    if (!ensureActiveRequestUser(actor, res)) {
+      return;
+    }
+
+    const claim = await prisma.claim.findUnique({
+      where: { claimId: params.data.claimId },
+      select: claimDetailSelect,
+    });
+
+    if (!claim) {
+      res.status(404).json({
+        code: 'CLAIM_NOT_FOUND',
+        message: 'Claim not found.',
+      });
+      return;
+    }
+
+    if (!canAccessClaim(actor, claim)) {
+      res.status(403).json({
+        code: 'FORBIDDEN',
+        message: 'Insufficient permissions',
+      });
+      return;
+    }
+
+    res.status(200).json(toClaimDetailDto(claim));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/claims/{claimId}:
+ *   delete:
+ *     summary: Delete a cancellable claim
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       '200':
+ *         description: Claim deleted
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Claim not found
+ *       '409':
+ *         description: Claim can no longer be deleted
+ */
+router.delete(
+  '/:claimId',
+  authenticate,
+  requireRole('student'),
+  async (req, res, next) => {
+    try {
+      const params = claimParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        sendValidationError(res, params.error.issues);
+        return;
+      }
+
+      const actor = await loadRequestUser(req.user!.user_id);
+      if (!ensureActiveRequestUser(actor, res)) {
+        return;
+      }
+
+      const claim = await prisma.claim.findUnique({
+        where: { claimId: params.data.claimId },
+        select: claimDetailSelect,
+      });
+
+      if (!claim) {
+        res.status(404).json({
+          code: 'CLAIM_NOT_FOUND',
+          message: 'Claim not found.',
+        });
+        return;
+      }
+
+      if (claim.studentId !== actor.userId) {
+        res.status(403).json({
+          code: 'FORBIDDEN',
+          message: 'Insufficient permissions',
+        });
+        return;
+      }
+
+      if (!cancellableClaimStatuses.has(claim.status)) {
+        res.status(409).json({
+          code: 'CLAIM_NOT_CANCELLABLE',
+          message: 'Only submitted claims can be deleted.',
+        });
+        return;
+      }
+
+      await prisma.$transaction([
+        prisma.matchSuggestion.deleteMany({
+          where: { claimId: claim.claimId },
+        }),
+        prisma.claim.delete({
+          where: { claimId: claim.claimId },
+        }),
+      ]);
+
+      await writeAuditLog({
+        actorId: actor.userId,
+        action: 'claim_deleted',
+        entityType: 'claim',
+        entityId: claim.claimId,
+        details: {
+          previousStatus: claim.status,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json({ deleted: true, claimId: claim.claimId });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/claims/{claimId}:
+ *   patch:
+ *     summary: Link a stored item to a claim
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId]
+ *             properties:
+ *               itemId:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       '200':
+ *         description: Linked claim
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Claim or item not found
+ *       '409':
+ *         description: Item cannot be linked
+ */
+router.patch(
+  '/:claimId',
+  authenticate,
+  requireRole('security', 'admin'),
+  validate(linkClaimItemSchema),
+  async (req, res, next) => {
+    try {
+      const params = claimParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        sendValidationError(res, params.error.issues);
+        return;
+      }
+
+      const actor = await loadRequestUser(req.user!.user_id);
+      if (!ensureActiveRequestUser(actor, res)) {
+        return;
+      }
+
+      const claim = await prisma.claim.findUnique({
+        where: { claimId: params.data.claimId },
+        select: claimDetailSelect,
+      });
+      if (!claim) {
+        res.status(404).json({
+          code: 'CLAIM_NOT_FOUND',
+          message: 'Claim not found.',
+        });
+        return;
+      }
+
+      if (claim.status === ClaimStatus.picked_up) {
+        res.status(409).json({
+          code: 'CLAIM_LOCKED',
+          message: 'A picked-up claim can no longer be relinked.',
+        });
+        return;
+      }
+
+      const { itemId } = req.body as { itemId: string };
+      const item = await prisma.item.findUnique({
+        where: { itemId },
+        select: {
+          itemId: true,
+          campusId: true,
+          status: true,
+        },
+      });
+
+      if (!item) {
+        res.status(404).json({
+          code: 'ITEM_NOT_FOUND',
+          message: 'Item not found.',
+        });
+        return;
+      }
+
+      if (item.status !== ItemStatus.stored) {
+        res.status(409).json({
+          code: 'ITEM_NOT_STORED',
+          message: 'Only stored items can be linked to a claim.',
+        });
+        return;
+      }
+
+      if (item.campusId !== claim.campusId) {
+        res.status(409).json({
+          code: 'ITEM_CAMPUS_MISMATCH',
+          message: 'The item campus must match the claim campus.',
+        });
+        return;
+      }
+
+      const updated = await prisma.claim.update({
+        where: { claimId: claim.claimId },
+        data: { itemId: item.itemId },
+        select: claimDetailSelect,
+      });
+
+      await writeAuditLog({
+        actorId: actor.userId,
+        action: 'claim_item_linked',
+        entityType: 'claim',
+        entityId: claim.claimId,
+        details: {
+          previousItemId: claim.itemId,
+          nextItemId: item.itemId,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json(toClaimDetailDto(updated));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/claims/{claimId}/status:
+ *   patch:
+ *     summary: Transition a claim status
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [submitted, under_review, approved, rejected, picked_up]
+ *               rejectionReason:
+ *                 type: string
+ *     responses:
+ *       '200':
+ *         description: Updated claim
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Claim not found
+ *       '409':
+ *         description: Invalid status transition
+ */
+router.patch(
+  '/:claimId/status',
+  authenticate,
+  requireRole('security', 'admin'),
+  validate(updateClaimStatusSchema),
+  async (req, res, next) => {
+    try {
+      const params = claimParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        sendValidationError(res, params.error.issues);
+        return;
+      }
+
+      const actor = await loadRequestUser(req.user!.user_id);
+      if (!ensureActiveRequestUser(actor, res)) {
+        return;
+      }
+
+      const claim = await prisma.claim.findUnique({
+        where: { claimId: params.data.claimId },
+        select: claimDetailSelect,
+      });
+      if (!claim) {
+        res.status(404).json({
+          code: 'CLAIM_NOT_FOUND',
+          message: 'Claim not found.',
+        });
+        return;
+      }
+
+      const { status, rejectionReason } = req.body as {
+        status: ClaimStatus;
+        rejectionReason?: string;
+      };
+
+      if (!validStatusTransitions[claim.status].includes(status)) {
+        res.status(409).json({
+          code: 'INVALID_STATUS_TRANSITION',
+          message: `Cannot change claim status from ${claim.status} to ${status}.`,
+        });
+        return;
+      }
+
+      if (status === ClaimStatus.rejected && !rejectionReason) {
+        res.status(400).json({
+          code: 'REJECTION_REASON_REQUIRED',
+          message: 'A rejection reason is required when rejecting a claim.',
+        });
+        return;
+      }
+
+      if (
+        (status === ClaimStatus.approved || status === ClaimStatus.picked_up) &&
+        !claim.itemId
+      ) {
+        res.status(409).json({
+          code: 'CLAIM_ITEM_REQUIRED',
+          message: 'A claim must be linked to an item before it can advance.',
+        });
+        return;
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        if (status === ClaimStatus.picked_up && claim.itemId) {
+          const item = await tx.item.findUnique({
+            where: { itemId: claim.itemId },
+            select: { itemId: true, status: true },
+          });
+
+          if (!item) {
+            throw new Error('LINKED_ITEM_NOT_FOUND');
+          }
+
+          if (item.status !== ItemStatus.stored) {
+            const conflictError = new Error('LINKED_ITEM_NOT_STORED');
+            conflictError.name = 'LINKED_ITEM_NOT_STORED';
+            throw conflictError;
+          }
+
+          await tx.item.update({
+            where: { itemId: item.itemId },
+            data: { status: ItemStatus.claimed },
+          });
+        }
+
+        const nextClaim = await tx.claim.update({
+          where: { claimId: claim.claimId },
+          data: {
+            status,
+            rejectionReason:
+              status === ClaimStatus.rejected ? rejectionReason : null,
+            reviewedBy: actor.userId,
+            reviewedAt: new Date(),
+            ...(status === ClaimStatus.picked_up
+              ? {
+                  pickedUpAt: new Date(),
+                  verifiedBy: actor.userId,
+                }
+              : {}),
+          },
+          select: claimDetailSelect,
+        });
+
+        await tx.notification.create({
+          data: createClaimStatusNotificationInput(nextClaim, status),
+        });
+
+        return nextClaim;
+      });
+
+      await writeAuditLog({
+        actorId: actor.userId,
+        action: 'claim_status_updated',
+        entityType: 'claim',
+        entityId: claim.claimId,
+        details: {
+          previousStatus: claim.status,
+          nextStatus: status,
+          rejectionReason: rejectionReason ?? null,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json(toClaimDetailDto(updated));
+    } catch (err) {
+      if (err instanceof Error && err.name === 'LINKED_ITEM_NOT_STORED') {
+        res.status(409).json({
+          code: 'LINKED_ITEM_NOT_STORED',
+          message: 'The linked item must still be stored before pickup.',
+        });
+        return;
+      }
+
+      if (err instanceof Error && err.message === 'LINKED_ITEM_NOT_FOUND') {
+        res.status(404).json({
+          code: 'LINKED_ITEM_NOT_FOUND',
+          message: 'The linked item no longer exists.',
+        });
+        return;
+      }
+
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/claims/{claimId}/match-suggestions:
+ *   get:
+ *     summary: List match suggestions for a claim
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       '200':
+ *         description: Match suggestions
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Claim not found
+ */
+router.get(
+  '/:claimId/match-suggestions',
+  authenticate,
+  requireRole('security', 'admin'),
+  async (req, res, next) => {
+    try {
+      const params = claimParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        sendValidationError(res, params.error.issues);
+        return;
+      }
+
+      const actor = await loadRequestUser(req.user!.user_id);
+      if (!ensureActiveRequestUser(actor, res)) {
+        return;
+      }
+
+      const claim = await prisma.claim.findUnique({
+        where: { claimId: params.data.claimId },
+        select: { claimId: true },
+      });
+      if (!claim) {
+        res.status(404).json({
+          code: 'CLAIM_NOT_FOUND',
+          message: 'Claim not found.',
+        });
+        return;
+      }
+
+      const matches = await prisma.matchSuggestion.findMany({
+        where: { claimId: claim.claimId },
+        orderBy: [{ matchScore: 'desc' }, { createdAt: 'desc' }],
+        select: matchSuggestionSelect,
+      });
+
+      res.status(200).json(matches.map((match) => toMatchSuggestionDto(match)));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/claims/{claimId}/match-suggestions:
+ *   post:
+ *     summary: Generate match suggestions for a claim
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       '200':
+ *         description: Generated match suggestions
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Claim not found
+ */
+router.post(
+  '/:claimId/match-suggestions',
+  authenticate,
+  requireRole('security', 'admin'),
+  async (req, res, next) => {
+    try {
+      const params = claimParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        sendValidationError(res, params.error.issues);
+        return;
+      }
+
+      const actor = await loadRequestUser(req.user!.user_id);
+      if (!ensureActiveRequestUser(actor, res)) {
+        return;
+      }
+
+      const claim = await prisma.claim.findUnique({
+        where: { claimId: params.data.claimId },
+        select: claimDetailSelect,
+      });
+      if (!claim) {
+        res.status(404).json({
+          code: 'CLAIM_NOT_FOUND',
+          message: 'Claim not found.',
+        });
+        return;
+      }
+
+      const candidates = await prisma.item.findMany({
+        where: {
+          campusId: claim.campusId,
+          status: ItemStatus.stored,
+        },
+        select: {
+          itemId: true,
+          category: true,
+          locationFound: true,
+          title: true,
+          descriptionPublic: true,
+          brand: true,
+          color: true,
+          status: true,
+          campusId: true,
+        },
+      });
+
+      const upserts = candidates
+        .map((item) => {
+          const { score, criteria } = scoreCandidateItem(claim, item);
+          return { item, score, criteria };
+        })
+        .filter((candidate) => candidate.score >= 60)
+        .map((candidate) =>
+          prisma.matchSuggestion.upsert({
+            where: {
+              claimId_itemId: {
+                claimId: claim.claimId,
+                itemId: candidate.item.itemId,
+              },
+            },
+            update: {
+              matchScore: candidate.score,
+              matchCriteria: candidate.criteria || null,
+            },
+            create: {
+              claimId: claim.claimId,
+              itemId: candidate.item.itemId,
+              matchScore: candidate.score,
+              matchCriteria: candidate.criteria || null,
+            },
+          })
+        );
+
+      if (upserts.length > 0) {
+        await prisma.$transaction(upserts);
+      }
+
+      await writeAuditLog({
+        actorId: actor.userId,
+        action: 'claim_match_suggestions_generated',
+        entityType: 'claim',
+        entityId: claim.claimId,
+        details: {
+          candidateCount: candidates.length,
+          suggestionCount: upserts.length,
+        },
+        ipAddress: req.ip,
+      });
+
+      const matches = await prisma.matchSuggestion.findMany({
+        where: { claimId: claim.claimId },
+        orderBy: [{ matchScore: 'desc' }, { createdAt: 'desc' }],
+        select: matchSuggestionSelect,
+      });
+
+      res.status(200).json(matches.map((match) => toMatchSuggestionDto(match)));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/claims/{claimId}/match-suggestions/{matchId}:
+ *   patch:
+ *     summary: Review a match suggestion
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: matchId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [confirmed, dismissed, rejected]
+ *     responses:
+ *       '200':
+ *         description: Reviewed match suggestion
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Match suggestion not found
+ *       '409':
+ *         description: Suggested item can no longer be confirmed
+ */
+router.patch(
+  '/:claimId/match-suggestions/:matchId',
+  authenticate,
+  requireRole('security', 'admin'),
+  validate(reviewMatchSuggestionSchema),
+  async (req, res, next) => {
+    try {
+      const params = claimAndMatchParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        sendValidationError(res, params.error.issues);
+        return;
+      }
+
+      const actor = await loadRequestUser(req.user!.user_id);
+      if (!ensureActiveRequestUser(actor, res)) {
+        return;
+      }
+
+      const match = await prisma.matchSuggestion.findFirst({
+        where: {
+          claimId: params.data.claimId,
+          matchId: params.data.matchId,
+        },
+        select: matchSuggestionSelect,
+      });
+
+      if (!match) {
+        res.status(404).json({
+          code: 'MATCH_SUGGESTION_NOT_FOUND',
+          message: 'Match suggestion not found.',
+        });
+        return;
+      }
+
+      const { status } = req.body as { status: MatchStatus };
+
+      const updated = await prisma.$transaction(async (tx) => {
+        if (status === MatchStatus.confirmed) {
+          const item = await tx.item.findUnique({
+            where: { itemId: match.itemId },
+            select: { itemId: true, status: true },
+          });
+
+          if (!item) {
+            throw new Error('MATCH_ITEM_NOT_FOUND');
+          }
+
+          if (item.status !== ItemStatus.stored) {
+            const conflictError = new Error('MATCH_ITEM_NOT_STORED');
+            conflictError.name = 'MATCH_ITEM_NOT_STORED';
+            throw conflictError;
+          }
+
+          await tx.claim.update({
+            where: { claimId: match.claimId },
+            data: { itemId: match.itemId },
+          });
+        }
+
+        await tx.matchSuggestion.updateMany({
+          where: {
+            claimId: match.claimId,
+            matchId: { not: match.matchId },
+            status: MatchStatus.confirmed,
+          },
+          data: {
+            status: MatchStatus.dismissed,
+            reviewedBy: actor.userId,
+            reviewedAt: new Date(),
+          },
+        });
+
+        return tx.matchSuggestion.update({
+          where: { matchId: match.matchId },
+          data: {
+            status,
+            reviewedBy: actor.userId,
+            reviewedAt: new Date(),
+          },
+          select: matchSuggestionSelect,
+        });
+      });
+
+      await writeAuditLog({
+        actorId: actor.userId,
+        action: 'claim_match_suggestion_reviewed',
+        entityType: 'match_suggestion',
+        entityId: match.matchId,
+        details: {
+          claimId: match.claimId,
+          previousStatus: match.status,
+          nextStatus: status,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json(toMatchSuggestionDto(updated));
+    } catch (err) {
+      if (err instanceof Error && err.name === 'MATCH_ITEM_NOT_STORED') {
+        res.status(409).json({
+          code: 'MATCH_ITEM_NOT_STORED',
+          message: 'Only stored items can be confirmed as a match.',
+        });
+        return;
+      }
+
+      if (err instanceof Error && err.message === 'MATCH_ITEM_NOT_FOUND') {
+        res.status(404).json({
+          code: 'MATCH_ITEM_NOT_FOUND',
+          message: 'The matched item no longer exists.',
+        });
+        return;
+      }
+
+      next(err);
+    }
+  }
+);
+
+export default router;

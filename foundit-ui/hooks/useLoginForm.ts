@@ -51,6 +51,7 @@ export function useLoginForm() {
       }
 
       localStorage.setItem('accessToken', result.accessToken);
+      localStorage.setItem('refreshToken', result.refreshToken);
       localStorage.setItem('user', JSON.stringify(result.user));
 
       const role = result.user.role as UserRole;
