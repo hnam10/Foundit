@@ -267,7 +267,8 @@ router.post(
             details: [
               {
                 path: ['campusId'],
-                message: 'campusId is required when admin has no campus assigned',
+                message:
+                  'campusId is required when admin has no campus assigned',
               },
             ],
           });
