@@ -131,6 +131,8 @@ export function useReportFoundItemForm(token: string) {
   }
 
   async function handleSubmit() {
+    if (isSubmitting) return;
+
     setSubmitError(null);
     if (!validate()) return;
 
@@ -182,9 +184,9 @@ export function useReportFoundItemForm(token: string) {
       }
 
       setSubmitError(messageForStatus(res.status));
+      setIsSubmitting(false);
     } catch {
       setSubmitError(messageForStatus(0));
-    } finally {
       setIsSubmitting(false);
     }
   }
