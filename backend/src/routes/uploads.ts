@@ -83,7 +83,6 @@ router.post('/presigned-url', authenticate, async (req, res, next) => {
       // in non-browser clients. Full enforcement would require a post-upload
       // HeadObject check (or R2 lifecycle rule) to verify actual object size
       // and delete oversized objects. Tracked as a follow-up; out of scope here.
-      ContentLength: fileSizeKb * 1024,
     });
 
     const uploadUrl = await getSignedUrl(r2, command, {
