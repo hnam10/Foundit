@@ -4,6 +4,7 @@ import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { validateQuery } from '../validators/shared';
+import { resolveImageUrl } from '../utils/imageUrl';
 import {
   itemParamsSchema,
   listSecurityItemsQuerySchema,
@@ -102,6 +103,19 @@ const securityItemDetailSelect = {
       createdAt: 'desc' as const,
     },
   },
+  foundItemReport: {
+    select: {
+      finder: {
+        select: {
+          userId: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+  },
 } as const;
 
 type SecurityItemListRow = Prisma.ItemGetPayload<{
@@ -158,7 +172,8 @@ function buildSecurityItemListWhere(query: {
   return where;
 }
 
-function toSecurityItemListDto(item: SecurityItemListRow) {
+async function toSecurityItemListDto(item: SecurityItemListRow) {
+  const storedImageUrl = item.images[0]?.imageUrl ?? null;
   return {
     itemId: item.itemId,
     campusId: item.campusId,
@@ -168,11 +183,19 @@ function toSecurityItemListDto(item: SecurityItemListRow) {
     dateFound: item.dateFound,
     status: item.status,
     retentionExpiryDate: item.retentionExpiryDate,
-    imageUrl: item.images[0]?.imageUrl ?? null,
+    imageUrl: storedImageUrl ? await resolveImageUrl(storedImageUrl) : null,
   };
 }
 
-function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
+async function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
+  const storedImageUrl = item.images[0]?.imageUrl ?? null;
+  const resolvedImages = await Promise.all(
+    item.images.map(async (image) => ({
+      imageId: image.imageId,
+      imageUrl: await resolveImageUrl(image.imageUrl),
+    }))
+  );
+
   return {
     itemId: item.itemId,
     campusId: item.campusId,
@@ -190,11 +213,8 @@ function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
     retentionExpiryDate: item.retentionExpiryDate,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
-    imageUrl: item.images[0]?.imageUrl ?? null,
-    images: item.images.map((image) => ({
-      imageId: image.imageId,
-      imageUrl: image.imageUrl,
-    })),
+    imageUrl: storedImageUrl ? await resolveImageUrl(storedImageUrl) : null,
+    images: resolvedImages,
     registeredBy: {
       userId: item.registrar.userId,
       firstName: item.registrar.firstName,
@@ -206,6 +226,15 @@ function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
       studentName:
         `${claim.student.firstName} ${claim.student.lastName}`.trim(),
     })),
+    finder: item.foundItemReport
+      ? {
+          userId: item.foundItemReport.finder.userId,
+          firstName: item.foundItemReport.finder.firstName,
+          lastName: item.foundItemReport.finder.lastName,
+          email: item.foundItemReport.finder.email,
+          phone: item.foundItemReport.finder.phone,
+        }
+      : null,
   };
 }
 
@@ -381,9 +410,9 @@ router.get(
 
       const nextCursor =
         items.length > query.limit ? items[query.limit].itemId : null;
-      const data = items
-        .slice(0, query.limit)
-        .map((item) => toSecurityItemListDto(item));
+      const data = await Promise.all(
+        items.slice(0, query.limit).map((item) => toSecurityItemListDto(item))
+      );
 
       res.status(200).json({ data, nextCursor });
     } catch (err) {
@@ -442,7 +471,7 @@ router.get(
         return;
       }
 
-      res.status(200).json(toSecurityItemDetailDto(item));
+      res.status(200).json(await toSecurityItemDetailDto(item));
     } catch (err) {
       next(err);
     }

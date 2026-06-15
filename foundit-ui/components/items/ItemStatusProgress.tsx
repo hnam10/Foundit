@@ -1,27 +1,40 @@
 'use client';
 
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Badge, Box, Flex, Text } from '@chakra-ui/react';
 import type { ItemStatus } from '@/types/items';
-import { ITEM_STATUS_LABELS } from '@/types/items';
+import { ITEM_STATUS_COLORS, ITEM_STATUS_LABELS } from '@/types/items';
 
 const HAPPY_PATH_STEPS: ItemStatus[] = ['pending_report', 'stored', 'claimed'];
 
 const TERMINAL_STATUSES = new Set<ItemStatus>(['expired', 'disposed']);
 
-interface ItemStatusProgressProps {
+interface ItemStatusProps {
   status: ItemStatus;
 }
 
-export function ItemStatusProgress({ status }: ItemStatusProgressProps) {
+export function ItemStatusBadge({ status }: ItemStatusProps) {
+  const { colorPalette } = ITEM_STATUS_COLORS[status];
+
+  return (
+    <Badge
+      colorPalette={colorPalette}
+      variant="subtle"
+      fontSize="xs"
+      px={2}
+      py={0.5}
+      borderRadius="full"
+      flexShrink={0}
+    >
+      {ITEM_STATUS_LABELS[status]}
+    </Badge>
+  );
+}
+
+export function ItemStatusProgress({ status }: ItemStatusProps) {
   if (TERMINAL_STATUSES.has(status)) {
     return (
-      <Box w="full" maxW="280px" ml="auto" pt={6}>
-        <Text
-          fontSize="xs"
-          fontWeight="medium"
-          color="gray.600"
-          textAlign="right"
-        >
+      <Box w="full" maxW="400px">
+        <Text fontSize="sm" fontWeight="medium" color="gray.600">
           {ITEM_STATUS_LABELS[status]}
         </Text>
       </Box>
@@ -32,7 +45,7 @@ export function ItemStatusProgress({ status }: ItemStatusProgressProps) {
   const activeLabel = ITEM_STATUS_LABELS[status];
 
   return (
-    <Box w="full" maxW="280px" ml="auto" pt={6}>
+    <Box w="full" maxW="400px">
       <Box position="relative" h="52px">
         <Text
           position="absolute"
