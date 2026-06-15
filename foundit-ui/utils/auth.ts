@@ -54,6 +54,17 @@ export function getRoleHome(role: UserRole): string {
   return ROLE_HOME[role];
 }
 
+/** Allow only same-origin relative paths for post-login redirects. */
+export function sanitizeRedirect(
+  path: string | null | undefined
+): string | null {
+  if (!path) return null;
+  if (!path.startsWith('/') || path.startsWith('//') || path.includes(':')) {
+    return null;
+  }
+  return path;
+}
+
 export interface LoggedInUser {
   userId: string;
   email: string;
