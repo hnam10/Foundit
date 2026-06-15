@@ -456,6 +456,7 @@ function ReportForm({
         <Button
           colorPalette="blue"
           w="140px"
+          disabled={form.isSubmitting}
           loading={form.isSubmitting}
           loadingText="Submitting..."
           onClick={form.handleSubmit}

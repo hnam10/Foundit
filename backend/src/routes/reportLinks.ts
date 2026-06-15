@@ -45,6 +45,7 @@ const submitRateLimiter = rateLimit({
 const reportLinkSelect = {
   linkId: true,
   campusId: true,
+  generatedBy: true,
   expiresAt: true,
   isUsed: true,
   usedAt: true,
@@ -115,6 +116,31 @@ function toPrismaTime(value: string | undefined) {
   }
 
   return new Date(`1970-01-01T${value}:00.000Z`);
+}
+
+function itemTitleFromDescription(description: string, category: string): string {
+  const firstLine = description.split(/\r?\n/)[0]?.trim() || description.trim();
+  const title = firstLine || category;
+  return title.slice(0, 100);
+}
+
+function buildDescriptionInternal(
+  itemDescription: string,
+  additionalNotes?: string
+): string {
+  if (additionalNotes) {
+    return `${itemDescription}\n\n${additionalNotes}`;
+  }
+  return itemDescription;
+}
+
+function computeRetentionExpiryDate(
+  dateFound: Date,
+  retentionDays: number
+): Date {
+  const expiry = new Date(dateFound);
+  expiry.setUTCDate(expiry.getUTCDate() + retentionDays);
+  return expiry;
 }
 
 function setNoStoreHeader(res: Response) {
@@ -544,6 +570,15 @@ router.post(
       } = req.body as SubmitFoundItemReportInput;
 
       const result = await prisma.$transaction(async (tx) => {
+        const campus = await tx.campus.findUnique({
+          where: { campusId: link.campusId },
+          select: { retentionDays: true },
+        });
+
+        if (!campus) {
+          throw new Error('CAMPUS_NOT_FOUND');
+        }
+
         const report = await tx.foundItemReport.create({
           data: {
             reportLinkId: link.linkId,
@@ -556,6 +591,46 @@ router.post(
             additionalNotes,
             status: FoundReportStatus.submitted,
           },
+          select: {
+            reportId: true,
+            reportLinkId: true,
+            finderId: true,
+            category: true,
+            locationFound: true,
+            dateFound: true,
+            timeFound: true,
+            status: true,
+            createdAt: true,
+          },
+        });
+
+        const item = await tx.item.create({
+          data: {
+            campusId: link.campusId,
+            category,
+            title: itemTitleFromDescription(itemDescription, category),
+            descriptionInternal: buildDescriptionInternal(
+              itemDescription,
+              additionalNotes
+            ),
+            locationFound,
+            dateFound,
+            status: ItemStatus.stored,
+            foundItemReportId: report.reportId,
+            registeredBy: link.generatedBy,
+            retentionExpiryDate: computeRetentionExpiryDate(
+              dateFound,
+              campus.retentionDays
+            ),
+          },
+          select: {
+            itemId: true,
+          },
+        });
+
+        const linkedReport = await tx.foundItemReport.update({
+          where: { reportId: report.reportId },
+          data: { status: FoundReportStatus.linked_to_item },
           select: {
             reportId: true,
             reportLinkId: true,
@@ -585,25 +660,34 @@ router.post(
           throw new Error('REPORT_LINK_CONFLICT');
         }
 
-        return report;
+        return { report: linkedReport, itemId: item.itemId };
       });
 
       res.status(201).json({
-        reportId: result.reportId,
-        reportLinkId: result.reportLinkId,
-        finderId: result.finderId,
-        category: result.category,
-        locationFound: result.locationFound,
-        dateFound: result.dateFound,
-        timeFound: result.timeFound,
-        status: result.status,
-        createdAt: result.createdAt,
+        reportId: result.report.reportId,
+        reportLinkId: result.report.reportLinkId,
+        finderId: result.report.finderId,
+        itemId: result.itemId,
+        category: result.report.category,
+        locationFound: result.report.locationFound,
+        dateFound: result.report.dateFound,
+        timeFound: result.report.timeFound,
+        status: result.report.status,
+        createdAt: result.report.createdAt,
       });
     } catch (err) {
       if (err instanceof Error && err.message === 'REPORT_LINK_CONFLICT') {
         res.status(409).json({
           code: 'REPORT_LINK_USED',
           message: 'Report link has already been used.',
+        });
+        return;
+      }
+
+      if (err instanceof Error && err.message === 'CAMPUS_NOT_FOUND') {
+        res.status(500).json({
+          code: 'INTERNAL_ERROR',
+          message: 'Report link campus is no longer available.',
         });
         return;
       }
