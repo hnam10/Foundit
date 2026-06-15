@@ -1,4 +1,3 @@
-// ImageUploadGallery.tsx
 import {
   Box,
   chakra,
@@ -15,22 +14,19 @@ import { useImageUploadGallery } from '../hooks/useImageUploadGallery';
 const Label = chakra('label');
 
 interface ImageUploadGalleryProps {
-  accessToken: string;
-  onChange?: (images: { imageUrl: string; fileType: string }[]) => void;
+  onChange?: (files: File[]) => void;
   error?: string;
 }
 
 export default function ImageUploadGallery({
-  accessToken,
   onChange,
   error,
 }: ImageUploadGalleryProps) {
   const { images, canAddMore, maxImages, handleFilesSelected, handleRemove } =
-    useImageUploadGallery({ accessToken, onChange });
+    useImageUploadGallery({ onChange });
 
   return (
     <VStack align="stretch" gap={2}>
-      {/* Upload bar - thin, sits above the previews */}
       <Label
         htmlFor="image-upload-input"
         w="100%"
@@ -52,6 +48,7 @@ export default function ImageUploadGallery({
       >
         <LuUpload size={16} />
         <Text fontSize="sm">Upload Picture</Text>
+
         <input
           id="image-upload-input"
           type="file"
@@ -63,7 +60,6 @@ export default function ImageUploadGallery({
         />
       </Label>
 
-      {/* Thumbnails - max 3, displayed in a single row */}
       {images.length > 0 && (
         <Grid templateColumns="repeat(3, 1fr)" gap={2}>
           {images.map((img) => (
@@ -83,38 +79,7 @@ export default function ImageUploadGallery({
                   w="80%"
                   h="80%"
                   objectFit="cover"
-                  opacity={img.status === 'uploading' ? 0.5 : 1}
                 />
-
-                {img.status === 'uploading' && (
-                  <Box
-                    position="absolute"
-                    inset={0}
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                    bg="blackAlpha.300"
-                  >
-                    <Text fontSize="xs" color="white" fontWeight={500}>
-                      uploading...
-                    </Text>
-                  </Box>
-                )}
-
-                {img.status === 'error' && (
-                  <Box
-                    position="absolute"
-                    inset={0}
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                    bg="red.50"
-                  >
-                    <Text fontSize="xs" color="red.500" fontWeight={500}>
-                      Failed to upload
-                    </Text>
-                  </Box>
-                )}
 
                 <CloseButton
                   size="sm"

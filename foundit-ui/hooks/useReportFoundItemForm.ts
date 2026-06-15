@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getAccessToken } from '@/utils/auth';
 import { ROLE_HOME } from '@/utils/routes';
 import { CAMPUSES } from '@/constants/campuses';
+import handleImageUpload from '@/utils/handleImageUpload';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -24,11 +25,6 @@ function todayISO(): string {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
-
-interface ImageRef {
-  imageUrl: string;
-  fileType: string;
 }
 
 export function useReportFoundItemForm(token: string) {
@@ -51,7 +47,7 @@ export function useReportFoundItemForm(token: string) {
   // Fed by the image gallery (uploaded to R2 on select). Intentionally NOT sent
   // in the submit body — the report-link submit schema has no image field yet
   // (see plan.md 🟠). Wiring is one line once the backend accepts image refs.
-  const [imageRefs, setImageRefs] = useState<ImageRef[]>([]);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -146,6 +142,16 @@ export function useReportFoundItemForm(token: string) {
 
     setIsSubmitting(true);
     try {
+      const uploadedImages = [];
+
+      for (const file of imageFiles) {
+        const result = await handleImageUpload(file, accessToken);
+        uploadedImages.push({
+          imageUrl: result.imageUrl,
+          fileType: result.fileType,
+        });
+      }
+
       const res = await fetch(`${API_BASE}/api/report-links/${token}/submit`, {
         method: 'POST',
         headers: {
@@ -159,6 +165,7 @@ export function useReportFoundItemForm(token: string) {
           dateFound: date,
           // NOTE: contactInformation + campus are intentionally omitted — they
           // are stub fields with no backend column (see state declaration).
+          //      images: uploadedImages,
         }),
       });
 
@@ -194,8 +201,8 @@ export function useReportFoundItemForm(token: string) {
     setContactInformation,
     campus,
     setCampus,
-    imageRefs,
-    setImageRefs,
+    imageFiles,
+    setImageFiles,
     errors,
     clearError,
     isSubmitting,
