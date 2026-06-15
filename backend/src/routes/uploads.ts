@@ -87,7 +87,6 @@ router.post('/presigned-url', authenticate, async (req, res, next) => {
 
     const uploadUrl = await getSignedUrl(r2, command, {
       expiresIn: 60 * 60,
-      signableHeaders: new Set(['content-length']),
     });
 
     res.status(200).json({

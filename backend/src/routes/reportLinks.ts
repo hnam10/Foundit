@@ -1,11 +1,20 @@
+import {
+  FoundReportStatus,
+  ItemStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { Response, Router } from 'express';
-import { FoundReportStatus, ItemStatus } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { prisma } from '../db';
+import { writeAuditLog } from '../utils/auditLog';
+import { generateReportLinkToken } from '../utils/reportLinkToken';
 import { validate } from '../validators/shared';
 import {
+  CreateReportLinkInput,
+  createReportLinkSchema,
   reportLinkTokenParamsSchema,
   SubmitFoundItemReportInput,
   submitFoundItemReportSchema,
@@ -36,9 +45,16 @@ const submitRateLimiter = rateLimit({
 const reportLinkSelect = {
   linkId: true,
   campusId: true,
+  generatedBy: true,
   expiresAt: true,
   isUsed: true,
   usedAt: true,
+  generator: {
+    select: {
+      firstName: true,
+      lastName: true,
+    },
+  },
 } as const;
 
 const submitterSelect = {
@@ -46,6 +62,20 @@ const submitterSelect = {
   campusId: true,
   isActive: true,
 } as const;
+
+const actorSelect = {
+  userId: true,
+  role: true,
+  campusId: true,
+  isActive: true,
+} as const;
+
+type ActorUser = {
+  userId: string;
+  role: UserRole;
+  campusId: string | null;
+  isActive: boolean;
+};
 
 function parseParamsToken(rawToken: unknown): string | null {
   const parsed = reportLinkTokenParamsSchema.safeParse({ token: rawToken });
@@ -94,9 +124,238 @@ function toPrismaTime(value: string | undefined) {
   return new Date(`1970-01-01T${value}:00.000Z`);
 }
 
+function itemTitleFromDescription(
+  description: string,
+  category: string
+): string {
+  const firstLine = description.split(/\r?\n/)[0]?.trim() || description.trim();
+  const title = firstLine || category;
+  return title.slice(0, 100);
+}
+
+function buildDescriptionInternal(
+  itemDescription: string,
+  additionalNotes?: string
+): string {
+  if (additionalNotes) {
+    return `${itemDescription}\n\n${additionalNotes}`;
+  }
+  return itemDescription;
+}
+
+function computeRetentionExpiryDate(
+  dateFound: Date,
+  retentionDays: number
+): Date {
+  const expiry = new Date(dateFound);
+  expiry.setUTCDate(expiry.getUTCDate() + retentionDays);
+  return expiry;
+}
+
 function setNoStoreHeader(res: Response) {
   res.set('Cache-Control', 'no-store');
 }
+
+async function loadActor(userId: string): Promise<ActorUser | null> {
+  return prisma.user.findUnique({
+    where: { userId },
+    select: actorSelect,
+  });
+}
+
+function ensureActiveActor(
+  actor: ActorUser | null,
+  res: Response
+): actor is ActorUser {
+  if (!actor) {
+    res.status(404).json({
+      code: 'USER_NOT_FOUND',
+      message: 'User account no longer exists.',
+    });
+    return false;
+  }
+
+  if (!actor.isActive) {
+    res.status(403).json({
+      code: 'ACCOUNT_INACTIVE',
+      message: 'Your account has been deactivated. Contact an administrator.',
+    });
+    return false;
+  }
+
+  return true;
+}
+
+function buildReportUrl(token: string): string {
+  const base = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(
+    /\/$/,
+    ''
+  );
+  return `${base}/report-found/${token}`;
+}
+
+function isUniqueTokenError(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
+  );
+}
+
+async function createReportLinkRecord(
+  data: {
+    token: string;
+    generatedBy: string;
+    campusId: string;
+    expiresAt: Date;
+  },
+  retryOnCollision = true
+) {
+  try {
+    return await prisma.reportLink.create({
+      data,
+      select: {
+        linkId: true,
+        token: true,
+        campusId: true,
+        expiresAt: true,
+        createdAt: true,
+      },
+    });
+  } catch (err) {
+    if (retryOnCollision && isUniqueTokenError(err)) {
+      return createReportLinkRecord(
+        { ...data, token: generateReportLinkToken() },
+        false
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * @openapi
+ * /api/report-links:
+ *   post:
+ *     summary: Generate a one-time report link for a campus
+ *     tags: [Report Links]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               campusId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Admin only; security uses their assigned campus
+ *               expiresInMinutes:
+ *                 type: integer
+ *                 minimum: 5
+ *                 maximum: 1440
+ *                 default: 30
+ *     responses:
+ *       '201':
+ *         description: Report link created
+ *       '401':
+ *         description: Missing or invalid access token
+ *       '403':
+ *         description: Security or admin role required
+ *       '404':
+ *         description: Campus not found
+ *       '409':
+ *         description: Campus required for security user
+ */
+router.post(
+  '/',
+  authenticate,
+  requireRole('security', 'admin'),
+  validate(createReportLinkSchema),
+  async (req, res, next) => {
+    try {
+      const actor = await loadActor(req.user!.user_id);
+      if (!ensureActiveActor(actor, res)) {
+        return;
+      }
+
+      const { campusId: bodyCampusId, expiresInMinutes } =
+        req.body as CreateReportLinkInput;
+
+      let campusId: string;
+
+      if (actor.role === 'security') {
+        if (!actor.campusId) {
+          res.status(409).json({
+            code: 'REPORT_LINK_CAMPUS_REQUIRED',
+            message:
+              'A campus must be assigned before a report link can be generated.',
+          });
+          return;
+        }
+        campusId = actor.campusId;
+      } else {
+        campusId = bodyCampusId ?? actor.campusId ?? '';
+        if (!campusId) {
+          res.status(400).json({
+            code: 'VALIDATION_ERROR',
+            message: 'Validation failed',
+            details: [
+              {
+                path: ['campusId'],
+                message:
+                  'campusId is required when admin has no campus assigned',
+              },
+            ],
+          });
+          return;
+        }
+
+        const campus = await prisma.campus.findUnique({
+          where: { campusId },
+          select: { campusId: true },
+        });
+
+        if (!campus) {
+          res.status(404).json({
+            code: 'CAMPUS_NOT_FOUND',
+            message: 'Campus not found.',
+          });
+          return;
+        }
+      }
+
+      const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
+      const token = generateReportLinkToken();
+
+      const link = await createReportLinkRecord({
+        token,
+        generatedBy: actor.userId,
+        campusId,
+        expiresAt,
+      });
+
+      await writeAuditLog({
+        actorId: actor.userId,
+        action: 'report_link_created',
+        entityType: 'report_link',
+        entityId: link.linkId,
+        details: { campusId, expiresAt: expiresAt.toISOString() },
+        ipAddress: req.ip,
+      });
+
+      res.status(201).json({
+        linkId: link.linkId,
+        token: link.token,
+        campusId: link.campusId,
+        expiresAt: link.expiresAt.toISOString(),
+        createdAt: link.createdAt.toISOString(),
+        reportUrl: buildReportUrl(link.token),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 /**
  * @openapi
@@ -168,6 +427,12 @@ router.get('/:token/validate', validateRateLimiter, async (req, res, next) => {
     res.status(200).json({
       ...availability,
       campusId: link?.campusId ?? null,
+      registrant: link
+        ? {
+            firstName: link.generator.firstName,
+            lastName: link.generator.lastName,
+          }
+        : null,
     });
   } catch (err) {
     next(err);
@@ -302,13 +567,13 @@ router.post(
         return;
       }
 
-      if (!submitter.campusId || submitter.campusId !== link.campusId) {
-        res.status(403).json({
-          code: 'FORBIDDEN',
-          message: 'You cannot submit reports for this campus.',
-        });
-        return;
-      }
+      // if (!submitter.campusId || submitter.campusId !== link.campusId) {
+      //   res.status(403).json({
+      //     code: 'FORBIDDEN',
+      //     message: 'You cannot submit reports for this campus.',
+      //   });
+      //   return;
+      // }
 
       const {
         itemDescription,
@@ -317,9 +582,19 @@ router.post(
         dateFound,
         timeFound,
         additionalNotes,
+        images,
       } = req.body as SubmitFoundItemReportInput;
 
       const result = await prisma.$transaction(async (tx) => {
+        const campus = await tx.campus.findUnique({
+          where: { campusId: link.campusId },
+          select: { retentionDays: true },
+        });
+
+        if (!campus) {
+          throw new Error('CAMPUS_NOT_FOUND');
+        }
+
         const report = await tx.foundItemReport.create({
           data: {
             reportLinkId: link.linkId,
@@ -332,6 +607,58 @@ router.post(
             additionalNotes,
             status: FoundReportStatus.submitted,
           },
+          select: {
+            reportId: true,
+            reportLinkId: true,
+            finderId: true,
+            category: true,
+            locationFound: true,
+            dateFound: true,
+            timeFound: true,
+            status: true,
+            createdAt: true,
+          },
+        });
+
+        const item = await tx.item.create({
+          data: {
+            campusId: link.campusId,
+            category,
+            title: itemTitleFromDescription(itemDescription, category),
+            descriptionInternal: buildDescriptionInternal(
+              itemDescription,
+              additionalNotes
+            ),
+            locationFound,
+            dateFound,
+            status: ItemStatus.stored,
+            foundItemReportId: report.reportId,
+            registeredBy: link.generatedBy,
+            retentionExpiryDate: computeRetentionExpiryDate(
+              dateFound,
+              campus.retentionDays
+            ),
+          },
+          select: {
+            itemId: true,
+          },
+        });
+
+        if (images.length > 0) {
+          await tx.itemImage.createMany({
+            data: images.map((image) => ({
+              itemId: item.itemId,
+              imageUrl: image.imageUrl,
+              uploadedBy: req.user!.user_id,
+              fileType: image.fileType,
+              fileSizeKb: image.fileSizeKb,
+            })),
+          });
+        }
+
+        const linkedReport = await tx.foundItemReport.update({
+          where: { reportId: report.reportId },
+          data: { status: FoundReportStatus.linked_to_item },
           select: {
             reportId: true,
             reportLinkId: true,
@@ -361,25 +688,34 @@ router.post(
           throw new Error('REPORT_LINK_CONFLICT');
         }
 
-        return report;
+        return { report: linkedReport, itemId: item.itemId };
       });
 
       res.status(201).json({
-        reportId: result.reportId,
-        reportLinkId: result.reportLinkId,
-        finderId: result.finderId,
-        category: result.category,
-        locationFound: result.locationFound,
-        dateFound: result.dateFound,
-        timeFound: result.timeFound,
-        status: result.status,
-        createdAt: result.createdAt,
+        reportId: result.report.reportId,
+        reportLinkId: result.report.reportLinkId,
+        finderId: result.report.finderId,
+        itemId: result.itemId,
+        category: result.report.category,
+        locationFound: result.report.locationFound,
+        dateFound: result.report.dateFound,
+        timeFound: result.report.timeFound,
+        status: result.report.status,
+        createdAt: result.report.createdAt,
       });
     } catch (err) {
       if (err instanceof Error && err.message === 'REPORT_LINK_CONFLICT') {
         res.status(409).json({
           code: 'REPORT_LINK_USED',
           message: 'Report link has already been used.',
+        });
+        return;
+      }
+
+      if (err instanceof Error && err.message === 'CAMPUS_NOT_FOUND') {
+        res.status(500).json({
+          code: 'INTERNAL_ERROR',
+          message: 'Report link campus is no longer available.',
         });
         return;
       }

@@ -13,6 +13,7 @@ import {
   chakra,
 } from '@chakra-ui/react';
 import { IoSearch } from 'react-icons/io5';
+import NextLink from 'next/link';
 import { StoredItemCard } from '@/components/items/StoredItemCard';
 import { fetchCampuses, fetchSecurityItems } from '@/lib/api/items';
 import type { Campus, ItemStatus, SecurityItemListItem } from '@/types/items';
@@ -254,7 +255,17 @@ export default function StoredItemsPage() {
             </Text>
           ) : (
             filteredItems.map((item) => (
-              <StoredItemCard key={item.itemId} item={item} />
+              <Box
+                key={item.itemId}
+                asChild
+                cursor="pointer"
+                transition="transform 0.15s"
+                _hover={{ transform: 'translateY(-1px)' }}
+              >
+                <NextLink href={`/security/items/${item.itemId}`}>
+                  <StoredItemCard item={item} />
+                </NextLink>
+              </Box>
             ))
           )}
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getAccessToken } from '@/utils/auth';
 import { ROLE_HOME } from '@/utils/routes';
 import { CAMPUSES } from '@/constants/campuses';
+import handleImageUpload from '@/utils/handleImageUpload';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -26,11 +27,6 @@ function todayISO(): string {
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
 }
 
-interface ImageRef {
-  imageUrl: string;
-  fileType: string;
-}
-
 export function useReportFoundItemForm(token: string) {
   const router = useRouter();
 
@@ -48,10 +44,8 @@ export function useReportFoundItemForm(token: string) {
   // the columns. See plan.md.
   const [contactInformation, setContactInformation] = useState('');
   const [campus, setCampus] = useState(DEFAULT_CAMPUS);
-  // Fed by the image gallery (uploaded to R2 on select). Intentionally NOT sent
-  // in the submit body — the report-link submit schema has no image field yet
-  // (see plan.md 🟠). Wiring is one line once the backend accepts image refs.
-  const [imageRefs, setImageRefs] = useState<ImageRef[]>([]);
+  // Fed by the image gallery; uploaded to R2 on submit and linked to the item.
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -135,17 +129,32 @@ export function useReportFoundItemForm(token: string) {
   }
 
   async function handleSubmit() {
+    if (isSubmitting) return;
+
     setSubmitError(null);
     if (!validate()) return;
 
+    const loginRedirect = `/login?redirect=${encodeURIComponent(`/report-found/${token}`)}`;
+
     const accessToken = getAccessToken();
     if (!accessToken) {
-      setSubmitError(messageForStatus(401));
+      router.push(loginRedirect);
       return;
     }
 
     setIsSubmitting(true);
     try {
+      const uploadedImages = [];
+
+      for (const file of imageFiles) {
+        const result = await handleImageUpload(file, accessToken);
+        uploadedImages.push({
+          imageUrl: result.imageUrl,
+          fileType: result.fileType,
+          fileSizeKb: result.fileSizeKb,
+        });
+      }
+
       const res = await fetch(`${API_BASE}/api/report-links/${token}/submit`, {
         method: 'POST',
         headers: {
@@ -157,20 +166,38 @@ export function useReportFoundItemForm(token: string) {
           category: category.trim(),
           locationFound: location.trim(),
           dateFound: date,
-          // NOTE: contactInformation + campus are intentionally omitted — they
-          // are stub fields with no backend column (see state declaration).
+          images: uploadedImages,
         }),
       });
 
       if (res.ok) {
-        router.push('/Report/report-submitted');
+        router.push('/report-found/submitted');
+        return;
+      }
+
+      if (res.status === 401) {
+        router.push(loginRedirect);
+        return;
+      }
+
+      if (res.status === 400) {
+        try {
+          const body = (await res.json()) as {
+            details?: { message?: string }[];
+          };
+          const detail = body.details?.[0]?.message;
+          setSubmitError(detail ?? 'Please check your form and try again.');
+        } catch {
+          setSubmitError('Please check your form and try again.');
+        }
+        setIsSubmitting(false);
         return;
       }
 
       setSubmitError(messageForStatus(res.status));
+      setIsSubmitting(false);
     } catch {
       setSubmitError(messageForStatus(0));
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -194,8 +221,8 @@ export function useReportFoundItemForm(token: string) {
     setContactInformation,
     campus,
     setCampus,
-    imageRefs,
-    setImageRefs,
+    imageFiles,
+    setImageFiles,
     errors,
     clearError,
     isSubmitting,
