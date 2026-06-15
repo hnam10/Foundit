@@ -526,13 +526,13 @@ router.post(
         return;
       }
 
-      if (!submitter.campusId || submitter.campusId !== link.campusId) {
-        res.status(403).json({
-          code: 'FORBIDDEN',
-          message: 'You cannot submit reports for this campus.',
-        });
-        return;
-      }
+      // if (!submitter.campusId || submitter.campusId !== link.campusId) {
+      //   res.status(403).json({
+      //     code: 'FORBIDDEN',
+      //     message: 'You cannot submit reports for this campus.',
+      //   });
+      //   return;
+      // }
 
       const {
         itemDescription,

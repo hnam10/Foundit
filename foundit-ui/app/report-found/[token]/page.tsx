@@ -405,8 +405,7 @@ function ReportForm({
               Image
             </Text>
             <ImageUploadGallery
-              accessToken={accessToken}
-              onChange={(images) => form.setImageRefs(images)}
+              onChange={(images) => form.setImageFiles(images)}
             />
           </Box>
         )}
