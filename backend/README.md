@@ -200,7 +200,7 @@ Claim cancellation uses `DELETE /api/claims/:claimId` because the original datab
 
 | Method | Path                                       | Auth           | Status  | Description                                                         |
 | ------ | ------------------------------------------ | -------------- | ------- | ------------------------------------------------------------------- |
-| POST   | `/api/report-links`                        | security/admin | Planned | Generate a one-time QR report link token                            |
+| POST   | `/api/report-links`                        | security/admin | Done    | Generate a one-time QR report link token                            |
 | GET    | `/api/report-links`                        | security/admin | Planned | List report links generated for relevant campus scope               |
 | GET    | `/api/report-links/:token/validate`        | —              | Done    | Validate a token and return availability status                     |
 | POST   | `/api/report-links/:token/submit`          | student        | Done    | Submit a found item report and atomically consume token             |

@@ -8,6 +8,7 @@ import {
   Flex,
   HStack,
   Heading,
+  Link,
   Spinner,
   Stack,
   Text,
@@ -41,9 +42,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 //      • Campus: campusId exists on report_link/user/item (not on the report).
 //        The submit route already DERIVES + validates it from the link, so this
 //        picker is display-only. See the hook's STUB FIELDS note.
-//   2. Finder / Registrant rows — both fall back to the logged-in user. The link
-//      carries no finder identity, and the backend records the submitter as the
-//      finder. Decide the real source (e.g. link should carry the finder name).
+//   2. Finder / Registrant rows — both show the logged-in student. The report
+//      link carries no student identity; the backend records the submitter as
+//      the finder on submit.
 //   3. Campus name can't be resolved from validate().campusId — that's a UUID,
 //      but constants/campuses.ts uses slug ids. Needs a campuses lookup endpoint
 //      to display the link's actual campus.
@@ -292,7 +293,15 @@ function ReportForm({
 
       {!accessToken && (
         <Text fontSize="sm" color="red.600">
-          You must be logged in as a student to submit this report.
+          You must be logged in as a student to submit this report.{' '}
+          <Link
+            href={`/login?redirect=${encodeURIComponent(`/report-found/${token}`)}`}
+            color="blue.600"
+            fontWeight="semibold"
+            textDecoration="underline"
+          >
+            Log in
+          </Link>
         </Text>
       )}
 

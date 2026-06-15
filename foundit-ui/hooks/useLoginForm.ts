@@ -2,9 +2,14 @@
 
 import { useState } from 'react';
 import { validateEmail } from '@/utils/validation';
-import { getRoleHome, setSessionRole, type UserRole } from '@/utils/auth';
+import {
+  getRoleHome,
+  sanitizeRedirect,
+  setSessionRole,
+  type UserRole,
+} from '@/utils/auth';
 
-export function useLoginForm() {
+export function useLoginForm(redirectTo?: string | null) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -57,8 +62,10 @@ export function useLoginForm() {
       const role = result.user.role as UserRole;
       setSessionRole(role);
 
+      const destination = sanitizeRedirect(redirectTo) ?? getRoleHome(role);
+
       // Full navigation so middleware sees the role cookie on the first request.
-      window.location.href = getRoleHome(role);
+      window.location.href = destination;
     } catch {
       setPasswordError('Unable to connect to server.');
     }
