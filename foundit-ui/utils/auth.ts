@@ -85,6 +85,16 @@ export function getAccessToken(): string | null {
   return localStorage.getItem('accessToken');
 }
 
+export function getRefreshToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('refreshToken');
+}
+
+export function setTokens(accessToken: string, refreshToken: string) {
+  localStorage.setItem('accessToken', accessToken);
+  localStorage.setItem('refreshToken', refreshToken);
+}
+
 export function getLoggedInDisplayName(): string | null {
   const user = getLoggedInUser();
   if (!user?.firstName) {

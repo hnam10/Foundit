@@ -1,0 +1,65 @@
+export type ItemStatus =
+  | 'pending_report'
+  | 'stored'
+  | 'claimed'
+  | 'expired'
+  | 'disposed';
+
+export interface Campus {
+  campusId: string;
+  campusName: string;
+}
+
+export interface SecurityItemListItem {
+  itemId: string;
+  campusId: string;
+  campusName: string;
+  category: string;
+  title: string;
+  dateFound: string;
+  status: ItemStatus;
+  retentionExpiryDate: string | null;
+  imageUrl: string | null;
+}
+
+export interface SecurityItemListResponse {
+  data: SecurityItemListItem[];
+  nextCursor: string | null;
+}
+
+export interface SecurityItemImage {
+  imageId: string;
+  imageUrl: string;
+}
+
+export interface SecurityItemClaimSummary {
+  claimId: string;
+  status: string;
+  studentName: string;
+}
+
+export interface SecurityItemDetail extends SecurityItemListItem {
+  descriptionPublic: string | null;
+  descriptionInternal: string | null;
+  color: string | null;
+  brand: string | null;
+  locationFound: string | null;
+  foundItemReportId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  images: SecurityItemImage[];
+  registeredBy: {
+    userId: string;
+    firstName: string;
+    lastName: string;
+  };
+  claims: SecurityItemClaimSummary[];
+}
+
+export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {
+  pending_report: 'Pending report',
+  stored: 'In storage',
+  claimed: 'Claimed',
+  expired: 'Expired',
+  disposed: 'Disposed',
+};
