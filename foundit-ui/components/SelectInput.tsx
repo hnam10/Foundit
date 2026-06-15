@@ -1,0 +1,103 @@
+'use client';
+
+import React from 'react';
+import { Box, Field, HStack, NativeSelect } from '@chakra-ui/react';
+import FieldError from './FieldError';
+
+export interface SelectInputProps {
+  label: string;
+  options: readonly string[];
+  required?: boolean;
+  hint?: string;
+  error?: string;
+  id?: string;
+  placeholder?: string;
+  value?: string;
+  onChange?: React.ChangeEventHandler<HTMLSelectElement>;
+  onBlur?: React.FocusEventHandler<HTMLSelectElement>;
+}
+
+// Two-column <select> field (label left, control right) matching FormTextInput.
+export default function SelectInput({
+  label,
+  options,
+  required = false,
+  hint,
+  error,
+  id,
+  placeholder = 'Select an option',
+  value,
+  onChange,
+  onBlur,
+}: SelectInputProps) {
+  const isInvalid = !!error;
+
+  return (
+    <Field.Root id={id} required={required} invalid={isInvalid} mb={0}>
+      <HStack align="flex-start" gap={4} w="full">
+        <Field.Label
+          w="180px"
+          flexShrink={0}
+          mt={2.5}
+          mb={0}
+          fontSize="1rem"
+          fontWeight="semibold"
+          lineHeight="1.6"
+          color="#1a1a1a"
+          whiteSpace="nowrap"
+        >
+          {label}
+          <Field.RequiredIndicator color="#1a1a1a" />
+        </Field.Label>
+
+        <Box flex={1}>
+          {hint && (
+            <Field.HelperText
+              fontSize="0.875rem"
+              lineHeight="1.6"
+              color="#666666"
+              mt={0}
+              mb={1}
+            >
+              {hint}
+            </Field.HelperText>
+          )}
+
+          <NativeSelect.Root w="full">
+            <NativeSelect.Field
+              value={value}
+              onChange={onChange}
+              onBlur={onBlur}
+              h={12}
+              px={4}
+              fontSize="1rem"
+              color={value ? '#1a1a1a' : '#9ca3af'}
+              bg="white"
+              borderWidth="1px"
+              borderRadius="md"
+              borderColor="#D9D9D9"
+              _invalid={{ borderColor: '#cd0000' }}
+              _focusVisible={{
+                outline: 'none',
+                boxShadow: '0 0 0 2px #009adb',
+                borderColor: 'inherit',
+              }}
+            >
+              <option value="" disabled>
+                {placeholder}
+              </option>
+              {options.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </NativeSelect.Field>
+            <NativeSelect.Indicator />
+          </NativeSelect.Root>
+
+          <FieldError error={error} />
+        </Box>
+      </HStack>
+    </Field.Root>
+  );
+}
