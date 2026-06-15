@@ -163,7 +163,7 @@ export function useReportFoundItemForm(token: string) {
       });
 
       if (res.ok) {
-        router.push(ROLE_HOME.student);
+        router.push('/Report/report-submitted');
         return;
       }
 
