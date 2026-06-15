@@ -38,6 +38,14 @@ export interface SecurityItemClaimSummary {
   studentName: string;
 }
 
+export interface SecurityItemFinder {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+}
+
 export interface SecurityItemDetail extends SecurityItemListItem {
   descriptionPublic: string | null;
   descriptionInternal: string | null;
@@ -53,6 +61,7 @@ export interface SecurityItemDetail extends SecurityItemListItem {
     firstName: string;
     lastName: string;
   };
+  finder: SecurityItemFinder | null;
   claims: SecurityItemClaimSummary[];
 }
 
@@ -63,3 +72,12 @@ export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {
   expired: 'Expired',
   disposed: 'Disposed',
 };
+
+export const ITEM_STATUS_COLORS: Record<ItemStatus, { colorPalette: string }> =
+  {
+    pending_report: { colorPalette: 'orange' },
+    stored: { colorPalette: 'blue' },
+    claimed: { colorPalette: 'green' },
+    expired: { colorPalette: 'gray' },
+    disposed: { colorPalette: 'gray' },
+  };

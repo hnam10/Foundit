@@ -49,6 +49,12 @@ const reportLinkSelect = {
   expiresAt: true,
   isUsed: true,
   usedAt: true,
+  generator: {
+    select: {
+      firstName: true,
+      lastName: true,
+    },
+  },
 } as const;
 
 const submitterSelect = {
@@ -418,6 +424,12 @@ router.get('/:token/validate', validateRateLimiter, async (req, res, next) => {
     res.status(200).json({
       ...availability,
       campusId: link?.campusId ?? null,
+      registrant: link
+        ? {
+            firstName: link.generator.firstName,
+            lastName: link.generator.lastName,
+          }
+        : null,
     });
   } catch (err) {
     next(err);
@@ -567,6 +579,7 @@ router.post(
         dateFound,
         timeFound,
         additionalNotes,
+        images,
       } = req.body as SubmitFoundItemReportInput;
 
       const result = await prisma.$transaction(async (tx) => {
@@ -627,6 +640,18 @@ router.post(
             itemId: true,
           },
         });
+
+        if (images.length > 0) {
+          await tx.itemImage.createMany({
+            data: images.map((image) => ({
+              itemId: item.itemId,
+              imageUrl: image.imageUrl,
+              uploadedBy: req.user!.user_id,
+              fileType: image.fileType,
+              fileSizeKb: image.fileSizeKb,
+            })),
+          });
+        }
 
         const linkedReport = await tx.foundItemReport.update({
           where: { reportId: report.reportId },

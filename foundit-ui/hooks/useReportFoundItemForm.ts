@@ -44,9 +44,7 @@ export function useReportFoundItemForm(token: string) {
   // the columns. See plan.md.
   const [contactInformation, setContactInformation] = useState('');
   const [campus, setCampus] = useState(DEFAULT_CAMPUS);
-  // Fed by the image gallery (uploaded to R2 on select). Intentionally NOT sent
-  // in the submit body — the report-link submit schema has no image field yet
-  // (see plan.md 🟠). Wiring is one line once the backend accepts image refs.
+  // Fed by the image gallery; uploaded to R2 on submit and linked to the item.
   const [imageFiles, setImageFiles] = useState<File[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -153,6 +151,7 @@ export function useReportFoundItemForm(token: string) {
         uploadedImages.push({
           imageUrl: result.imageUrl,
           fileType: result.fileType,
+          fileSizeKb: result.fileSizeKb,
         });
       }
 
@@ -167,9 +166,7 @@ export function useReportFoundItemForm(token: string) {
           category: category.trim(),
           locationFound: location.trim(),
           dateFound: date,
-          // NOTE: contactInformation + campus are intentionally omitted — they
-          // are stub fields with no backend column (see state declaration).
-          //      images: uploadedImages,
+          images: uploadedImages,
         }),
       });
 
@@ -180,6 +177,20 @@ export function useReportFoundItemForm(token: string) {
 
       if (res.status === 401) {
         router.push(loginRedirect);
+        return;
+      }
+
+      if (res.status === 400) {
+        try {
+          const body = (await res.json()) as {
+            details?: { message?: string }[];
+          };
+          const detail = body.details?.[0]?.message;
+          setSubmitError(detail ?? 'Please check your form and try again.');
+        } catch {
+          setSubmitError('Please check your form and try again.');
+        }
+        setIsSubmitting(false);
         return;
       }
 

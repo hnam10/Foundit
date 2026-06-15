@@ -41,15 +41,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 //      • Campus: campusId exists on report_link/user/item (not on the report).
 //        The submit route already DERIVES + validates it from the link, so this
 //        picker is display-only. See the hook's STUB FIELDS note.
-//   2. Finder / Registrant rows — both show the logged-in student. The report
-//      link carries no student identity; the backend records the submitter as
-//      the finder on submit.
+//   2. Finder / Registrant rows — Finder is the logged-in student; Registrant is
+//      the security staff who generated the report link (from validate API).
 //   3. Campus name can't be resolved from validate().campusId — that's a UUID,
 //      but constants/campuses.ts uses slug ids. Needs a campuses lookup endpoint
 //      to display the link's actual campus.
-//   4. Images are uploaded to R2 on select but never linked to the report (the
-//      submit schema has no image field) → orphaned objects. Also needs an R2
-//      CORS policy for http://localhost:3000 before uploads work locally.
+//   4. Images are uploaded to R2 on submit and linked to the created item.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ValidateReason = 'available' | 'not_found' | 'used' | 'expired';
@@ -60,6 +57,10 @@ interface ValidateResult {
   campusId: string | null;
   expiresAt?: string;
   usedAt?: string;
+  registrant?: {
+    firstName: string;
+    lastName: string;
+  } | null;
 }
 
 type LinkState =
@@ -144,7 +145,11 @@ export default function ReportFoundItemPage() {
       {linkState.status === 'ready' &&
         linkState.result.reason === 'available' &&
         (accessToken ? (
-          <ReportForm token={token} displayName={displayName} />
+          <ReportForm
+            token={token}
+            finderName={displayName}
+            registrantName={formatPersonName(linkState.result.registrant)}
+          />
         ) : (
           <Flex align="center" justify="center" py={20} w="full">
             <Spinner size="lg" color="blue.500" />
@@ -269,12 +274,21 @@ function MessageCard({ title, body }: { title: string; body: string }) {
   );
 }
 
+function formatPersonName(
+  person?: { firstName: string; lastName: string } | null
+): string {
+  if (!person) return '';
+  return `${person.firstName} ${person.lastName}`.trim();
+}
+
 function ReportForm({
   token,
-  displayName,
+  finderName,
+  registrantName,
 }: {
   token: string;
-  displayName: string;
+  finderName: string;
+  registrantName: string;
 }) {
   const form = useReportFoundItemForm(token);
   // Teammate auth utils (utils/auth.ts): token drives upload/submit; the user
@@ -303,14 +317,12 @@ function ReportForm({
       </Box>
 
       {/*
-        Read-only identity rows from the design. Registrant is the logged-in
-        student. Finder has no data source yet — the report link only carries a
-        campus, and the backend records the submitter as the finder — so it
-        falls back to the logged-in user. Wire to real link data once available.
+        Read-only identity rows from the design. Finder is the logged-in student;
+        registrant is the security staff who generated the report link.
       */}
       <Stack gap={2}>
-        <ReadonlyRow label="Finder" value={displayName || '—'} />
-        <ReadonlyRow label="Registrant" value={displayName || '—'} />
+        <ReadonlyRow label="Finder" value={finderName || '—'} />
+        <ReadonlyRow label="Registrant" value={registrantName || '—'} />
       </Stack>
 
       {accessToken && !isStudent && (
