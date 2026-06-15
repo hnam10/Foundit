@@ -124,7 +124,10 @@ function toPrismaTime(value: string | undefined) {
   return new Date(`1970-01-01T${value}:00.000Z`);
 }
 
-function itemTitleFromDescription(description: string, category: string): string {
+function itemTitleFromDescription(
+  description: string,
+  category: string
+): string {
   const firstLine = description.split(/\r?\n/)[0]?.trim() || description.trim();
   const title = firstLine || category;
   return title.slice(0, 100);

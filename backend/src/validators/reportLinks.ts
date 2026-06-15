@@ -36,7 +36,11 @@ const reportImageSchema = z.object({
     .max(10)
     .trim()
     .regex(/^(jpe?g|png|webp)$/i),
-  fileSizeKb: z.coerce.number().int().min(1).max(5 * 1024),
+  fileSizeKb: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(5 * 1024),
 });
 
 export const submitFoundItemReportSchema = z.object({
