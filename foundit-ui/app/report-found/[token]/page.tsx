@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
   Button,
   Flex,
   HStack,
   Heading,
-  Link,
   Spinner,
   Stack,
   Text,
@@ -70,9 +69,27 @@ type LinkState =
 
 export default function ReportFoundItemPage() {
   const params = useParams<{ token: string }>();
+  const router = useRouter();
   const token = params?.token ?? '';
   const displayName = useLoggedInDisplayName('');
   const [linkState, setLinkState] = useState<LinkState>({ status: 'loading' });
+  const accessToken = getAccessToken();
+
+  useEffect(() => {
+    if (
+      linkState.status !== 'ready' ||
+      linkState.result.reason !== 'available'
+    ) {
+      return;
+    }
+    if (getAccessToken()) {
+      return;
+    }
+
+    router.replace(
+      `/login?redirect=${encodeURIComponent(`/report-found/${token}`)}`
+    );
+  }, [linkState, token, router]);
 
   useEffect(() => {
     let active = true;
@@ -125,9 +142,14 @@ export default function ReportFoundItemPage() {
         )}
 
       {linkState.status === 'ready' &&
-        linkState.result.reason === 'available' && (
+        linkState.result.reason === 'available' &&
+        (accessToken ? (
           <ReportForm token={token} displayName={displayName} />
-        )}
+        ) : (
+          <Flex align="center" justify="center" py={20} w="full">
+            <Spinner size="lg" color="blue.500" />
+          </Flex>
+        ))}
     </PageShell>
   );
 }
@@ -290,20 +312,6 @@ function ReportForm({
         <ReadonlyRow label="Finder" value={displayName || '—'} />
         <ReadonlyRow label="Registrant" value={displayName || '—'} />
       </Stack>
-
-      {!accessToken && (
-        <Text fontSize="sm" color="red.600">
-          You must be logged in as a student to submit this report.{' '}
-          <Link
-            href={`/login?redirect=${encodeURIComponent(`/report-found/${token}`)}`}
-            color="blue.600"
-            fontWeight="semibold"
-            textDecoration="underline"
-          >
-            Log in
-          </Link>
-        </Text>
-      )}
 
       {accessToken && !isStudent && (
         <Text fontSize="sm" color="red.600">
