@@ -63,7 +63,6 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 
 export default function GenerateQrPage() {
   const loggedInUser = getLoggedInUser();
-  const isAdmin = loggedInUser?.role === 'admin';
 
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [campusId, setCampusId] = useState('');
@@ -114,9 +113,6 @@ export default function GenerateQrPage() {
     );
   }, [campuses, campusId]);
 
-  const campusSelectDisabled =
-    !isAdmin && Boolean(loggedInUser?.campusId && campusId);
-
   useEffect(() => {
     if (!generated) return;
 
@@ -142,7 +138,7 @@ export default function GenerateQrPage() {
 
     try {
       const result = await createReportLink(
-        isAdmin && campusId ? { campusId } : undefined
+        campusId ? { campusId } : undefined
       );
 
       const campusName =
@@ -162,7 +158,7 @@ export default function GenerateQrPage() {
     } finally {
       setGenerating(false);
     }
-  }, [campuses, campusId, isAdmin, selectedCampusName]);
+  }, [campuses, campusId, selectedCampusName]);
 
   const handleCopyLink = async () => {
     if (!generated?.url) return;
@@ -182,8 +178,7 @@ export default function GenerateQrPage() {
     setError('');
   };
 
-  const canGenerate =
-    !loadingCampuses && !generating && (isAdmin ? Boolean(campusId) : true);
+  const canGenerate = !loadingCampuses && !generating && Boolean(campusId);
 
   return (
     <Stack gap={6}>
@@ -227,7 +222,6 @@ export default function GenerateQrPage() {
                 <Select
                   value={campusId}
                   onChange={(e) => setCampusId(e.target.value)}
-                  disabled={campusSelectDisabled}
                   h={12}
                   px={4}
                   fontSize="md"

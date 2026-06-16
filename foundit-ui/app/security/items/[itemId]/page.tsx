@@ -15,7 +15,7 @@ import {
   Text,
   Textarea,
 } from '@chakra-ui/react';
-import { fetchSecurityItem } from '@/lib/api/items';
+import { fetchSecurityItem, updateSecurityItem } from '@/lib/api/items';
 import { CATEGORIES } from '@/constants/categories';
 import type { SecurityItemDetail } from '@/types/items';
 
@@ -109,6 +109,8 @@ export default function SecurityItemDetailPage() {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<EditForm | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (!itemId) return;
@@ -145,12 +147,13 @@ export default function SecurityItemDetailPage() {
 
   function handleStartEdit() {
     if (!item) return;
+    setSaveError('');
     setForm({
       title: item.title,
       category: item.category,
       dateFound: toDateInputValue(item.dateFound),
       locationFound: item.locationFound ?? '',
-      description: item.descriptionPublic ?? item.descriptionInternal ?? '',
+      description: item.descriptionInternal ?? item.descriptionPublic ?? '',
     });
     setEditing(true);
   }
@@ -158,6 +161,7 @@ export default function SecurityItemDetailPage() {
   function handleCancelEdit() {
     setEditing(false);
     setForm(null);
+    setSaveError('');
   }
 
   function handleFormChange<K extends keyof EditForm>(
@@ -167,20 +171,30 @@ export default function SecurityItemDetailPage() {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  // TODO(backend): no PATCH /api/items/:itemId yet — Save only updates local
-  // state so the edit is visible for this session; it does NOT persist.
-  function handleSave() {
-    if (!item || !form) return;
-    setItem({
-      ...item,
-      title: form.title,
-      category: form.category,
-      dateFound: form.dateFound,
-      locationFound: form.locationFound.trim() || null,
-      descriptionPublic: form.description.trim() || null,
-    });
-    setEditing(false);
-    setForm(null);
+  async function handleSave() {
+    if (!item || !form || !itemId || saving) return;
+
+    setSaving(true);
+    setSaveError('');
+
+    try {
+      const updated = await updateSecurityItem(itemId, {
+        title: form.title.trim(),
+        category: form.category.trim(),
+        dateFound: form.dateFound,
+        locationFound: form.locationFound.trim() || null,
+        descriptionInternal: form.description.trim() || null,
+      });
+      setItem(updated);
+      setEditing(false);
+      setForm(null);
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : 'Failed to save item changes.'
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (loading) {
@@ -209,25 +223,14 @@ export default function SecurityItemDetailPage() {
     PLACEHOLDER;
   const pickedUp = item.status === 'claimed' ? 'Yes' : 'No';
   const description =
-    item.descriptionPublic ?? item.descriptionInternal ?? PLACEHOLDER;
+    item.descriptionInternal ?? item.descriptionPublic ?? PLACEHOLDER;
   const photoUrl = item.images[0]?.imageUrl ?? null;
 
-  // ─── NOTES FOR THE TEAM ────────────────────────────────────────────────────
-  // Finder name + Finder Contact have no real data source yet (kept UI-only):
-  //   • GET /api/items/:itemId does not return them. The path would be
-  //     Item -> foundItemReport -> finder (User), exposed via
-  //     securityItemDetailSelect, toSecurityItemDetailDto, and SecurityItemDetail.
-  //   • Caveat: the report link carries no finder identity — the backend records
-  //     the SUBMITTER as the finder (backend/src/routes/reportLinks.ts:326,
-  //     finderId: req.user!.user_id), so "Finder" would just equal the
-  //     registrant/submitter. There is also no contact column on
-  //     found_item_report (closest is user.phone), so "Finder Contact" has no
-  //     true source. Decide the real source before wiring these up.
-  //   • Same gap is documented on the other side in
-  //     app/report-found/[token]/page.tsx ("NOTES FOR THE TEAM").
-  // ───────────────────────────────────────────────────────────────────────────
-  const finderName = PLACEHOLDER;
-  const finderContact = PLACEHOLDER;
+  const finderName = item.finder
+    ? `${item.finder.firstName} ${item.finder.lastName}`.trim() || PLACEHOLDER
+    : PLACEHOLDER;
+  const finderContact =
+    item.finder?.phone?.trim() || item.finder?.email?.trim() || PLACEHOLDER;
 
   return (
     <Box
@@ -414,34 +417,48 @@ export default function SecurityItemDetailPage() {
       </Stack>
 
       {/* Actions */}
-      <Flex justify="center" gap="26px" mt="64px">
-        <Button
-          variant="outline"
-          w="155px"
-          h="42px"
-          borderColor="#ddd"
-          color="#666"
-          fontSize="16px"
-          fontWeight="medium"
-          borderRadius="4px"
-          onClick={editing ? handleCancelEdit : handleCancel}
-        >
-          Cancel
-        </Button>
-        {/* TODO(backend): no PATCH /api/items/:itemId yet — Save updates local
-            state only (no persistence). See handleSave. */}
-        <Button
-          w="155px"
-          h="42px"
-          bg="#3b82f6"
-          color="white"
-          fontSize="16px"
-          fontWeight="medium"
-          borderRadius="4px"
-          onClick={editing ? handleSave : handleStartEdit}
-        >
-          {editing ? 'Save' : 'Edit'}
-        </Button>
+      <Flex
+        justify="center"
+        gap="26px"
+        mt="64px"
+        direction="column"
+        align="center"
+      >
+        {saveError ? (
+          <Text fontSize="sm" color="red.500">
+            {saveError}
+          </Text>
+        ) : null}
+        <Flex justify="center" gap="26px">
+          <Button
+            variant="outline"
+            w="155px"
+            h="42px"
+            borderColor="#ddd"
+            color="#666"
+            fontSize="16px"
+            fontWeight="medium"
+            borderRadius="4px"
+            onClick={editing ? handleCancelEdit : handleCancel}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            w="155px"
+            h="42px"
+            bg="#3b82f6"
+            color="white"
+            fontSize="16px"
+            fontWeight="medium"
+            borderRadius="4px"
+            onClick={editing ? handleSave : handleStartEdit}
+            loading={saving}
+            disabled={saving}
+          >
+            {editing ? 'Save' : 'Edit'}
+          </Button>
+        </Flex>
       </Flex>
     </Box>
   );

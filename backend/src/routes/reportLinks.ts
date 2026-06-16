@@ -248,7 +248,7 @@ async function createReportLinkRecord(
  *               campusId:
  *                 type: string
  *                 format: uuid
- *                 description: Admin only; security uses their assigned campus
+ *                 description: Campus for the report link; defaults to the user's assigned campus
  *               expiresInMinutes:
  *                 type: integer
  *                 minimum: 5
@@ -263,8 +263,6 @@ async function createReportLinkRecord(
  *         description: Security or admin role required
  *       '404':
  *         description: Campus not found
- *       '409':
- *         description: Campus required for security user
  */
 router.post(
   '/',
@@ -281,47 +279,33 @@ router.post(
       const { campusId: bodyCampusId, expiresInMinutes } =
         req.body as CreateReportLinkInput;
 
-      let campusId: string;
+      const campusId = bodyCampusId ?? actor.campusId ?? '';
 
-      if (actor.role === 'security') {
-        if (!actor.campusId) {
-          res.status(409).json({
-            code: 'REPORT_LINK_CAMPUS_REQUIRED',
-            message:
-              'A campus must be assigned before a report link can be generated.',
-          });
-          return;
-        }
-        campusId = actor.campusId;
-      } else {
-        campusId = bodyCampusId ?? actor.campusId ?? '';
-        if (!campusId) {
-          res.status(400).json({
-            code: 'VALIDATION_ERROR',
-            message: 'Validation failed',
-            details: [
-              {
-                path: ['campusId'],
-                message:
-                  'campusId is required when admin has no campus assigned',
-              },
-            ],
-          });
-          return;
-        }
-
-        const campus = await prisma.campus.findUnique({
-          where: { campusId },
-          select: { campusId: true },
+      if (!campusId) {
+        res.status(400).json({
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: [
+            {
+              path: ['campusId'],
+              message: 'campusId is required',
+            },
+          ],
         });
+        return;
+      }
 
-        if (!campus) {
-          res.status(404).json({
-            code: 'CAMPUS_NOT_FOUND',
-            message: 'Campus not found.',
-          });
-          return;
-        }
+      const campus = await prisma.campus.findUnique({
+        where: { campusId },
+        select: { campusId: true },
+      });
+
+      if (!campus) {
+        res.status(404).json({
+          code: 'CAMPUS_NOT_FOUND',
+          message: 'Campus not found.',
+        });
+        return;
       }
 
       const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);

@@ -3,12 +3,15 @@ import { ItemStatus, Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
-import { validateQuery } from '../validators/shared';
+import { validateQuery, validate } from '../validators/shared';
 import { resolveImageUrl } from '../utils/imageUrl';
+import { writeAuditLog } from '../utils/auditLog';
 import {
   itemParamsSchema,
   listSecurityItemsQuerySchema,
   publicItemsQuerySchema,
+  updateSecurityItemSchema,
+  UpdateSecurityItemInput,
 } from '../validators/items';
 
 const router = Router();
@@ -170,6 +173,15 @@ function buildSecurityItemListWhere(query: {
   }
 
   return where;
+}
+
+function computeRetentionExpiryDate(
+  dateFound: Date,
+  retentionDays: number
+): Date {
+  const expiry = new Date(dateFound);
+  expiry.setUTCDate(expiry.getUTCDate() + retentionDays);
+  return expiry;
 }
 
 async function toSecurityItemListDto(item: SecurityItemListRow) {
@@ -472,6 +484,144 @@ router.get(
       }
 
       res.status(200).json(await toSecurityItemDetailDto(item));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/items/{itemId}:
+ *   patch:
+ *     summary: Update item fields for security staff
+ *     tags: [Items]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title, category, dateFound, locationFound, descriptionInternal]
+ *             properties:
+ *               title:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               dateFound:
+ *                 type: string
+ *                 format: date
+ *               locationFound:
+ *                 type: string
+ *                 nullable: true
+ *               descriptionInternal:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       '200':
+ *         description: Updated security item detail
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Item not found
+ */
+router.patch(
+  '/items/:itemId',
+  authenticate,
+  requireRole('security', 'admin'),
+  validate(updateSecurityItemSchema),
+  async (req, res, next) => {
+    try {
+      const params = itemParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        sendValidationError(res, params.error.issues);
+        return;
+      }
+
+      const existing = await prisma.item.findUnique({
+        where: { itemId: params.data.itemId },
+        select: {
+          itemId: true,
+          campusId: true,
+          dateFound: true,
+        },
+      });
+
+      if (!existing) {
+        res.status(404).json({
+          code: 'ITEM_NOT_FOUND',
+          message: 'Item not found.',
+        });
+        return;
+      }
+
+      const { title, category, dateFound, locationFound, descriptionInternal } =
+        req.body as UpdateSecurityItemInput;
+
+      const campus = await prisma.campus.findUnique({
+        where: { campusId: existing.campusId },
+        select: { retentionDays: true },
+      });
+
+      if (!campus) {
+        res.status(500).json({
+          code: 'INTERNAL_ERROR',
+          message: 'Item campus is no longer available.',
+        });
+        return;
+      }
+
+      const dateChanged =
+        existing.dateFound.toISOString().slice(0, 10) !==
+        dateFound.toISOString().slice(0, 10);
+
+      const updated = await prisma.item.update({
+        where: { itemId: existing.itemId },
+        data: {
+          title,
+          category,
+          dateFound,
+          locationFound,
+          descriptionInternal,
+          ...(dateChanged
+            ? {
+                retentionExpiryDate: computeRetentionExpiryDate(
+                  dateFound,
+                  campus.retentionDays
+                ),
+              }
+            : {}),
+        },
+        select: securityItemDetailSelect,
+      });
+
+      await writeAuditLog({
+        actorId: req.user!.user_id,
+        action: 'item_updated',
+        entityType: 'item',
+        entityId: updated.itemId,
+        details: {
+          title,
+          category,
+          dateFound: dateFound.toISOString().slice(0, 10),
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json(await toSecurityItemDetailDto(updated));
     } catch (err) {
       next(err);
     }
