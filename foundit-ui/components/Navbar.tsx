@@ -6,7 +6,7 @@
  * Variants:
  *   'guest'    — not logged in; no username, shows Login button.
  *   'student'  — authenticated student; shows Home, Found Items, My Claims + user dropdown.
- *   'security' — authenticated security staff; shows Home, Items, Claims, QR/Link + user dropdown.
+ *   'security' — authenticated security staff; shows Home, Items, Claims, Report Found Item + user dropdown.
  *
  * Data shape:
  *   The parent calls GET /api/users/me (returns NavUser), then passes
@@ -165,7 +165,7 @@ const navLinksByVariant: Record<
     { label: 'Home', href: '/security/dashboard' },
     { label: 'Items', href: '/security/items' },
     { label: 'Claims', href: '/security/claims' },
-    { label: 'QR / Link', href: '/security/qr' },
+    { label: 'Report Found Item', href: '/security/report-found' },
   ],
 };
 
