@@ -1,5 +1,6 @@
 import { ItemStatus } from '@prisma/client';
 import { z } from 'zod';
+import { reportImageSchema } from './reportLinks';
 
 const itemStatusValues = [
   ItemStatus.pending_report,
@@ -56,3 +57,19 @@ export const updateSecurityItemSchema = z.object({
 });
 
 export type UpdateSecurityItemInput = z.infer<typeof updateSecurityItemSchema>;
+
+export const createSecurityItemSchema = z.object({
+  campusId: z.uuid(),
+  itemDescription: z.string().min(1).max(1000).trim(),
+  category: z.string().min(1).max(50).trim(),
+  locationFound: z.string().min(1).max(100).trim(),
+  dateFound: z.iso
+    .date()
+    .transform((value) => new Date(`${value}T00:00:00.000Z`))
+    .refine((value) => value <= getTodayAtMidnight(), {
+      message: 'dateFound cannot be in the future',
+    }),
+  images: z.array(reportImageSchema).max(10).optional().default([]),
+});
+
+export type CreateSecurityItemInput = z.infer<typeof createSecurityItemSchema>;

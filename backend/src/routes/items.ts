@@ -11,8 +11,15 @@ import {
   listSecurityItemsQuerySchema,
   publicItemsQuerySchema,
   updateSecurityItemSchema,
+  createSecurityItemSchema,
   UpdateSecurityItemInput,
+  CreateSecurityItemInput,
 } from '../validators/items';
+import {
+  buildDescriptionInternal,
+  computeRetentionExpiryDate,
+  itemTitleFromDescription,
+} from '../utils/itemHelpers';
 
 const router = Router();
 const publicItemStatuses = [ItemStatus.stored] as const;
@@ -173,15 +180,6 @@ function buildSecurityItemListWhere(query: {
   }
 
   return where;
-}
-
-function computeRetentionExpiryDate(
-  dateFound: Date,
-  retentionDays: number
-): Date {
-  const expiry = new Date(dateFound);
-  expiry.setUTCDate(expiry.getUTCDate() + retentionDays);
-  return expiry;
 }
 
 async function toSecurityItemListDto(item: SecurityItemListRow) {
@@ -427,6 +425,148 @@ router.get(
       );
 
       res.status(200).json({ data, nextCursor });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/items:
+ *   post:
+ *     summary: Register a found item into inventory (security direct intake)
+ *     tags: [Items]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [campusId, itemDescription, category, locationFound, dateFound]
+ *             properties:
+ *               campusId:
+ *                 type: string
+ *                 format: uuid
+ *               itemDescription:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               locationFound:
+ *                 type: string
+ *               dateFound:
+ *                 type: string
+ *                 format: date
+ *               images:
+ *                 type: array
+ *     responses:
+ *       '201':
+ *         description: Created security item detail
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Campus not found
+ */
+router.post(
+  '/items',
+  authenticate,
+  requireRole('security', 'admin'),
+  validate(createSecurityItemSchema),
+  async (req, res, next) => {
+    try {
+      const {
+        campusId,
+        itemDescription,
+        category,
+        locationFound,
+        dateFound,
+        images,
+      } = req.body as CreateSecurityItemInput;
+
+      const campus = await prisma.campus.findUnique({
+        where: { campusId },
+        select: { campusId: true, retentionDays: true },
+      });
+
+      if (!campus) {
+        res.status(404).json({
+          code: 'CAMPUS_NOT_FOUND',
+          message: 'Campus not found.',
+        });
+        return;
+      }
+
+      const item = await prisma.$transaction(async (tx) => {
+        const created = await tx.item.create({
+          data: {
+            campusId,
+            category,
+            title: itemTitleFromDescription(itemDescription, category),
+            descriptionInternal: buildDescriptionInternal(itemDescription),
+            locationFound,
+            dateFound,
+            status: ItemStatus.stored,
+            foundItemReportId: null,
+            registeredBy: req.user!.user_id,
+            retentionExpiryDate: computeRetentionExpiryDate(
+              dateFound,
+              campus.retentionDays
+            ),
+          },
+          select: {
+            itemId: true,
+          },
+        });
+
+        if (images.length > 0) {
+          await tx.itemImage.createMany({
+            data: images.map((image) => ({
+              itemId: created.itemId,
+              imageUrl: image.imageUrl,
+              uploadedBy: req.user!.user_id,
+              fileType: image.fileType,
+              fileSizeKb: image.fileSizeKb,
+            })),
+          });
+        }
+
+        return created;
+      });
+
+      const detail = await prisma.item.findUnique({
+        where: { itemId: item.itemId },
+        select: securityItemDetailSelect,
+      });
+
+      if (!detail) {
+        res.status(500).json({
+          code: 'INTERNAL_ERROR',
+          message: 'Item was created but could not be loaded.',
+        });
+        return;
+      }
+
+      await writeAuditLog({
+        actorId: req.user!.user_id,
+        action: 'item_created',
+        entityType: 'item',
+        entityId: detail.itemId,
+        details: {
+          title: detail.title,
+          category: detail.category,
+          campusId,
+          dateFound: dateFound.toISOString().slice(0, 10),
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(201).json(await toSecurityItemDetailDto(detail));
     } catch (err) {
       next(err);
     }

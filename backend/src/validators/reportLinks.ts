@@ -20,7 +20,7 @@ export const createReportLinkSchema = z.object({
 
 export type CreateReportLinkInput = z.infer<typeof createReportLinkSchema>;
 
-const reportImageSchema = z.object({
+export const reportImageSchema = z.object({
   imageUrl: z
     .string()
     .min(1)
