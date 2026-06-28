@@ -4,9 +4,8 @@ const categorySchema = z.string().min(1).max(50).trim();
 const locationSchema = z.string().min(1).max(100).trim();
 
 function getTodayAtMidnight() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
 export const reportLinkTokenParamsSchema = z.object({
