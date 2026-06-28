@@ -58,3 +58,57 @@ export async function fetchSecurityItem(
 
   return res.json() as Promise<SecurityItemDetail>;
 }
+
+export interface UpdateSecurityItemInput {
+  title: string;
+  category: string;
+  dateFound: string;
+  locationFound: string | null;
+  descriptionInternal: string | null;
+}
+
+export async function updateSecurityItem(
+  itemId: string,
+  input: UpdateSecurityItemInput
+): Promise<SecurityItemDetail> {
+  const res = await authFetch(`${API_BASE}/api/items/${itemId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<SecurityItemDetail>;
+}
+
+export interface CreateSecurityItemInput {
+  campusId: string;
+  itemDescription: string;
+  category: string;
+  locationFound: string;
+  dateFound: string;
+  images?: {
+    imageUrl: string;
+    fileType: string;
+    fileSizeKb: number;
+  }[];
+}
+
+export async function createSecurityItem(
+  input: CreateSecurityItemInput
+): Promise<SecurityItemDetail> {
+  const res = await authFetch(`${API_BASE}/api/items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<SecurityItemDetail>;
+}
