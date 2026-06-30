@@ -1,7 +1,9 @@
 import { authFetch, parseApiError } from '@/lib/api/client';
 import type {
   Campus,
+  CategoryStat,
   ItemStatus,
+  PublicItem,
   SecurityItemDetail,
   SecurityItemListResponse,
 } from '@/types/items';
@@ -14,6 +16,49 @@ export async function fetchCampuses(): Promise<Campus[]> {
     throw new Error(await parseApiError(res));
   }
   return res.json() as Promise<Campus[]>;
+}
+
+export async function fetchCategoryStats(
+  campusId?: string
+): Promise<CategoryStat[]> {
+  const search = new URLSearchParams();
+  if (campusId) search.set('campusId', campusId);
+
+  const query = search.toString();
+  const res = await fetch(
+    `${API_BASE}/api/items/category-stats${query ? `?${query}` : ''}`
+  );
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<CategoryStat[]>;
+}
+
+export interface FetchPublicItemsParams {
+  category?: string;
+  campusId?: string;
+}
+
+export async function fetchPublicItems(
+  params: FetchPublicItemsParams = {}
+): Promise<PublicItem[]> {
+  const search = new URLSearchParams();
+
+  if (params.category) search.set('category', params.category);
+  if (params.campusId) search.set('campusId', params.campusId);
+
+  const query = search.toString();
+  const res = await fetch(
+    `${API_BASE}/api/public/items${query ? `?${query}` : ''}`
+  );
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<PublicItem[]>;
 }
 
 export interface FetchSecurityItemsParams {
