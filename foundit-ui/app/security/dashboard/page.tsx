@@ -1,62 +1,77 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Heading, Stack } from '@chakra-ui/react';
 import { CampusStatusCard } from '@/components/dashboard/CampusStatusCard';
-import type { ClaimCategoryStatProps } from '@/components/dashboard/ClaimCategoryStat';
-import { CAMPUSES, DEFAULT_CAMPUS_ID } from '@/constants/campuses';
 import { MOCK_SECURITY_DISPLAY_NAME } from '@/constants/mockSession';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
+import { fetchCampuses, fetchCategoryStats } from '@/lib/api/items';
+import type { Campus, CategoryStat } from '@/types/items';
 
-/** Placeholder per-campus stats until dashboard API supports campusId filter. */
-const MOCK_STATS_BY_CAMPUS: Record<
-  string,
-  { totalClaims: number; categoryStats: ClaimCategoryStatProps[] }
-> = {
-  newnham: {
-    totalClaims: 9,
-    categoryStats: [
-      { category: 'Electronics', itemName: 'keyboard', count: 5 },
-      { category: 'Cards', itemName: 'Student ID', count: 5 },
-      { category: 'Clothing', itemName: 'hoodie', count: 2 },
-      { category: 'Electronics', itemName: 'mouse', count: 2 },
-      { category: 'Electronics', itemName: 'charger', count: 5 },
-    ],
-  },
-  'seneca-york': {
-    totalClaims: 4,
-    categoryStats: [
-      { category: 'Electronics', itemName: 'laptop', count: 2 },
-      { category: 'Accessories', itemName: 'water bottle', count: 1 },
-      { category: 'Cards', itemName: 'Student ID', count: 1 },
-    ],
-  },
-  king: {
-    totalClaims: 2,
-    categoryStats: [
-      { category: 'Clothing', itemName: 'jacket', count: 1 },
-      { category: 'Electronics', itemName: 'earbuds', count: 1 },
-    ],
-  },
-  peterborough: {
-    totalClaims: 3,
-    categoryStats: [
-      { category: 'Electronics', itemName: 'phone', count: 2 },
-      { category: 'Other', itemName: 'umbrella', count: 1 },
-    ],
-  },
-};
+/** Placeholder until claims API is wired up. */
+const PLACEHOLDER_TOTAL_CLAIMS = 9;
 
 export default function SecurityDashboardPage() {
-  const [selectedCampusId, setSelectedCampusId] = useState(DEFAULT_CAMPUS_ID);
   const displayName = useLoggedInDisplayName(MOCK_SECURITY_DISPLAY_NAME);
+  const [campuses, setCampuses] = useState<Campus[]>([]);
+  const [campusesLoaded, setCampusesLoaded] = useState(false);
+  const [selectedCampusId, setSelectedCampusId] = useState('');
+  const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const campusStats = useMemo(() => {
-    return (
-      MOCK_STATS_BY_CAMPUS[selectedCampusId] ??
-      MOCK_STATS_BY_CAMPUS[DEFAULT_CAMPUS_ID]
-    );
-  }, [selectedCampusId]);
+  useEffect(() => {
+    let active = true;
+
+    async function loadCampuses() {
+      try {
+        const data = await fetchCampuses();
+        if (!active) return;
+
+        setCampuses(data);
+      } catch {
+        // Campus filter is optional; stats can still load for all campuses.
+      } finally {
+        if (active) setCampusesLoaded(true);
+      }
+    }
+
+    loadCampuses();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!campusesLoaded) return;
+
+    let active = true;
+
+    async function loadCategoryStats() {
+      setLoading(true);
+      setError('');
+
+      try {
+        const data = await fetchCategoryStats(selectedCampusId || undefined);
+        if (!active) return;
+
+        setCategoryStats(data);
+      } catch (err) {
+        if (!active) return;
+        setError(
+          err instanceof Error ? err.message : 'Failed to load found items.'
+        );
+        setCategoryStats([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadCategoryStats();
+    return () => {
+      active = false;
+    };
+  }, [selectedCampusId, campusesLoaded]);
 
   return (
     <Stack gap={8}>
@@ -72,11 +87,13 @@ export default function SecurityDashboardPage() {
       </Heading>
 
       <CampusStatusCard
-        campuses={CAMPUSES}
+        campuses={campuses}
         selectedCampusId={selectedCampusId}
         onCampusChange={setSelectedCampusId}
-        totalClaims={campusStats.totalClaims}
-        categoryStats={campusStats.categoryStats}
+        totalClaims={PLACEHOLDER_TOTAL_CLAIMS}
+        categoryStats={categoryStats}
+        loading={loading}
+        error={error}
       />
     </Stack>
   );

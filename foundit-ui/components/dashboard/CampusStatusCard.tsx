@@ -6,23 +6,24 @@ import {
   Heading,
   HStack,
   SimpleGrid,
+  Spinner,
   Text,
   chakra,
 } from '@chakra-ui/react';
-import type { CampusOption } from '@/constants/campuses';
-import {
-  ClaimCategoryStat,
-  type ClaimCategoryStatProps,
-} from './ClaimCategoryStat';
+import type { Campus, CategoryStat } from '@/types/items';
+import { ClaimCategoryStat } from './ClaimCategoryStat';
 
 const Select = chakra('select');
 
 export interface CampusStatusCardProps {
-  campuses: CampusOption[];
+  campuses: Campus[];
   selectedCampusId: string;
   onCampusChange: (campusId: string) => void;
+  /** Placeholder until claims API is wired up. */
   totalClaims: number;
-  categoryStats: ClaimCategoryStatProps[];
+  categoryStats: CategoryStat[];
+  loading?: boolean;
+  error?: string;
 }
 
 export function CampusStatusCard({
@@ -31,6 +32,8 @@ export function CampusStatusCard({
   onCampusChange,
   totalClaims,
   categoryStats,
+  loading = false,
+  error = '',
 }: CampusStatusCardProps) {
   return (
     <Box
@@ -89,9 +92,10 @@ export function CampusStatusCard({
               boxShadow: '0 0 0 2px #009adb',
             }}
           >
+            <option value="">All campuses</option>
             {campuses.map((campus) => (
-              <option key={campus.id} value={campus.id}>
-                {campus.name}
+              <option key={campus.campusId} value={campus.campusId}>
+                {campus.campusName}
               </option>
             ))}
           </Select>
@@ -117,14 +121,30 @@ export function CampusStatusCard({
       </Flex>
 
       <Box borderTopWidth="1px" borderColor="gray.300" pt={6}>
-        <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} gap={4}>
-          {categoryStats.map((stat) => (
-            <ClaimCategoryStat
-              key={`${stat.category}-${stat.itemName}`}
-              {...stat}
-            />
-          ))}
-        </SimpleGrid>
+        {loading ? (
+          <Box
+            minH="120px"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+          >
+            <Spinner size="lg" color="blue.500" />
+          </Box>
+        ) : error ? (
+          <Text color="red.600" fontSize="sm" textAlign="center" py={8}>
+            {error}
+          </Text>
+        ) : categoryStats.length === 0 ? (
+          <Text color="gray.600" fontSize="sm" textAlign="center" py={8}>
+            No found items in storage.
+          </Text>
+        ) : (
+          <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} gap={4}>
+            {categoryStats.map((stat) => (
+              <ClaimCategoryStat key={stat.category} {...stat} />
+            ))}
+          </SimpleGrid>
+        )}
       </Box>
     </Box>
   );
