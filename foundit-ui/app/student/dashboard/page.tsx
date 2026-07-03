@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Button,
@@ -22,6 +23,7 @@ interface FoundItem {
 }
 
 export default function StudentDashboardPage() {
+  const router = useRouter();
   const displayName = useLoggedInDisplayName(MOCK_STUDENT_DISPLAY_NAME);
   const [foundItems, setFoundItems] = useState<FoundItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,6 +171,7 @@ export default function StudentDashboardPage() {
           w="220px"
           alignSelf="center"
           _hover={{ bg: 'blue.600' }}
+          onClick={() => router.push('/claim-item')}
         >
           Claim Items
         </Button>

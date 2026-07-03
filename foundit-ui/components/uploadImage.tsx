@@ -16,30 +16,37 @@ const Label = chakra('label');
 interface ImageUploadGalleryProps {
   onChange?: (files: File[]) => void;
   error?: string;
+  /**
+   * 'bar' — thin 40px upload strip (default, used by report-found).
+   * 'dropzone' — large light-blue box matching the Claim Item design.
+   */
+  variant?: 'bar' | 'dropzone';
 }
 
 export default function ImageUploadGallery({
   onChange,
   error,
+  variant = 'bar',
 }: ImageUploadGalleryProps) {
   const { images, canAddMore, maxImages, handleFilesSelected, handleRemove } =
     useImageUploadGallery({ onChange });
 
   return (
     <VStack align="stretch" gap={2}>
+      {/* Upload target - thin bar or large drop-zone, sits above the previews */}
       <Label
         htmlFor="image-upload-input"
         w="100%"
-        h="40px"
+        h={variant === 'dropzone' ? '210px' : '40px'}
         display="flex"
         alignItems="center"
         justifyContent="center"
         gap={2}
-        border="1px dashed"
+        border={variant === 'dropzone' ? 'none' : '1px dashed'}
         borderColor={error ? 'red.500' : 'blue.300'}
         bg={error ? 'red.50' : 'blue.50'}
         color="blue.500"
-        borderRadius="sm"
+        borderRadius={variant === 'dropzone' ? 'lg' : 'sm'}
         cursor={canAddMore ? 'pointer' : 'not-allowed'}
         opacity={canAddMore ? 1 : 0.6}
         fontWeight={600}
