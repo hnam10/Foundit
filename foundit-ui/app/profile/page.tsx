@@ -6,7 +6,6 @@ import TextInput from '@/components/TextInput';
 import { useProfileForm } from '@/hooks/useProfileForm';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
 import { getLoggedInUser } from '@/utils/auth';
-import { MOCK_STUDENT_USER, formatDisplayName } from '@/constants/mockSession';
 import {
   Box,
   Button,
@@ -19,8 +18,6 @@ import {
 } from '@chakra-ui/react';
 import { useSyncExternalStore, useState } from 'react';
 import { useRouter } from 'next/navigation';
-
-const FALLBACK_NAME = formatDisplayName(MOCK_STUDENT_USER);
 
 // Returns a primitive string so useSyncExternalStore compares by value.
 // Returning an object creates a new reference each render and causes an
@@ -38,7 +35,7 @@ type ActiveTab = 'profile' | 'notifications';
 export default function ProfileSettingsPage() {
   const router = useRouter();
   const navVariant = useLoggedInRole();
-  const displayName = useLoggedInDisplayName(FALLBACK_NAME);
+  const displayName = useLoggedInDisplayName();
   const [activeTab, setActiveTab] = useState<ActiveTab>('profile');
 
   const {

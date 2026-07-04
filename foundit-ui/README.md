@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Foundit UI
 
-## Getting Started
+Frontend for **Foundit**, a lost-and-found platform for Seneca Polytechnic. Students report lost items and submit claims; campus security staff log found items, manage inventory, and match claims. Built with [Next.js](https://nextjs.org) (App Router) and [Chakra UI v3](https://chakra-ui.com).
 
-First, run the development server:
+The REST API this app talks to lives in [`../backend`](../backend).
+
+## Prerequisites
+
+- Node.js 22+
+- pnpm 11+ (`corepack enable`)
+- The backend running locally (defaults to port 3001) — see [`../backend/README.md`](../backend)
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env.local   # then adjust if your backend runs elsewhere
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable              | Purpose                                        |
+| --------------------- | ---------------------------------------------- |
+| `NEXT_PUBLIC_API_URL` | Base URL of the backend API (no trailing `/`). |
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Script              | What it does                         |
+| ------------------- | ------------------------------------ |
+| `pnpm dev`          | Start the dev server                 |
+| `pnpm build`        | Production build                     |
+| `pnpm start`        | Serve the production build           |
+| `pnpm lint`         | ESLint over the whole package        |
+| `pnpm typecheck`    | TypeScript check (no emit)           |
+| `pnpm test`         | Run the unit test suite (Vitest)     |
+| `pnpm format`       | Prettier write                       |
+| `pnpm format:check` | Prettier check (same as the CI gate) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Husky + lint-staged run ESLint/Prettier on staged files at commit time. CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests, and build on every PR.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project structure
 
-## Deploy on Vercel
+```text
+app/            Routes (App Router). Role areas: /student, /security, /admin
+components/     Shared React components
+components/ui/  Design-system primitives (provider, theme tokens, Button, …)
+constants/      Static option lists (campuses, categories)
+docs/           Feature and architecture notes
+hooks/          Form and data hooks (one per page-level form)
+lib/api/        API client: fetch wrapper, auth/refresh, typed endpoints
+middleware.ts   Role-based route gating (reads the role cookie)
+tests/          Unit tests (Vitest + jsdom), mirroring the source tree
+types/          Shared TypeScript types for API payloads
+utils/          Auth/session helpers, validation, debug logging
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## How auth and roles work
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [docs/architecture.md](docs/architecture.md) for the full picture (login flow, token refresh, role cookie vs. backend authorization, API error conventions).

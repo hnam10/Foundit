@@ -43,11 +43,11 @@ interface EditForm {
 
 const editInputStyles = {
   size: 'sm' as const,
-  borderColor: '#D9D9D9',
+  borderColor: 'border.input',
   borderRadius: 'md',
   _focusVisible: {
     outline: 'none',
-    boxShadow: '0 0 0 2px #009adb',
+    boxShadow: '0 0 0 2px {colors.focusRing}',
     borderColor: 'inherit',
   },
 };
@@ -256,7 +256,7 @@ export default function SecurityItemDetailPage() {
           fontSize="30px"
           fontWeight="bold"
           lineHeight="28px"
-          color="#1a1a1a"
+          color="fg"
         >
           Item Details
         </Heading>
@@ -315,7 +315,7 @@ export default function SecurityItemDetailPage() {
                 <NativeSelect.Root size="sm">
                   <NativeSelect.Field
                     value={form.category}
-                    borderColor="#D9D9D9"
+                    borderColor="border.input"
                     onChange={(e) =>
                       handleFormChange('category', e.target.value)
                     }

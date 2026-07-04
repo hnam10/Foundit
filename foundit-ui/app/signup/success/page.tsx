@@ -50,7 +50,7 @@ export default function SignupSuccessPage() {
               Verify Email
             </Heading>
 
-            <Text mb={12} color="#666666" pt={30}>
+            <Text mb={12} color="fg.muted" pt={30}>
               {' '}
               Verification email sent.
               <br />

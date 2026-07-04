@@ -52,6 +52,7 @@ import NextLink from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { signOut } from '@/utils/auth';
+import type { UserRole } from '@/utils/routes';
 
 /**
  * Partial view of the user object returned by GET /api/users/me.
@@ -61,7 +62,7 @@ import { signOut } from '@/utils/auth';
 export interface NavUser {
   firstName: string;
   lastName: string;
-  role: 'student' | 'security' | 'admin';
+  role: UserRole;
 }
 
 export type NavbarVariant = 'guest' | 'student' | 'security';

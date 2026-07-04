@@ -1,4 +1,4 @@
-import { authFetch, parseApiError } from '@/lib/api/client';
+import { apiFetch } from '@/lib/api/client';
 import type {
   Campus,
   ItemStatus,
@@ -6,14 +6,24 @@ import type {
   SecurityItemListResponse,
 } from '@/types/items';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-
 export async function fetchCampuses(): Promise<Campus[]> {
-  const res = await fetch(`${API_BASE}/api/campuses`);
-  if (!res.ok) {
-    throw new Error(await parseApiError(res));
-  }
-  return res.json() as Promise<Campus[]>;
+  return apiFetch<Campus[]>('/api/campuses', { auth: false });
+}
+
+export interface CategoryStat {
+  category: string;
+  count: number;
+}
+
+// Public counts of claimable (status=stored) items grouped by category —
+// backend GET /api/items/category-stats.
+export async function fetchCategoryStats(
+  campusId?: string
+): Promise<CategoryStat[]> {
+  const query = campusId ? `?campusId=${encodeURIComponent(campusId)}` : '';
+  return apiFetch<CategoryStat[]>(`/api/items/category-stats${query}`, {
+    auth: false,
+  });
 }
 
 export interface FetchSecurityItemsParams {
@@ -36,27 +46,15 @@ export async function fetchSecurityItems(
   if (params.limit) search.set('limit', String(params.limit));
 
   const query = search.toString();
-  const res = await authFetch(
-    `${API_BASE}/api/items${query ? `?${query}` : ''}`
+  return apiFetch<SecurityItemListResponse>(
+    `/api/items${query ? `?${query}` : ''}`
   );
-
-  if (!res.ok) {
-    throw new Error(await parseApiError(res));
-  }
-
-  return res.json() as Promise<SecurityItemListResponse>;
 }
 
 export async function fetchSecurityItem(
   itemId: string
 ): Promise<SecurityItemDetail> {
-  const res = await authFetch(`${API_BASE}/api/items/${itemId}`);
-
-  if (!res.ok) {
-    throw new Error(await parseApiError(res));
-  }
-
-  return res.json() as Promise<SecurityItemDetail>;
+  return apiFetch<SecurityItemDetail>(`/api/items/${itemId}`);
 }
 
 export interface UpdateSecurityItemInput {
@@ -71,17 +69,10 @@ export async function updateSecurityItem(
   itemId: string,
   input: UpdateSecurityItemInput
 ): Promise<SecurityItemDetail> {
-  const res = await authFetch(`${API_BASE}/api/items/${itemId}`, {
+  return apiFetch<SecurityItemDetail>(`/api/items/${itemId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-
-  if (!res.ok) {
-    throw new Error(await parseApiError(res));
-  }
-
-  return res.json() as Promise<SecurityItemDetail>;
 }
 
 export interface CreateSecurityItemInput {
@@ -100,15 +91,8 @@ export interface CreateSecurityItemInput {
 export async function createSecurityItem(
   input: CreateSecurityItemInput
 ): Promise<SecurityItemDetail> {
-  const res = await authFetch(`${API_BASE}/api/items`, {
+  return apiFetch<SecurityItemDetail>('/api/items', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-
-  if (!res.ok) {
-    throw new Error(await parseApiError(res));
-  }
-
-  return res.json() as Promise<SecurityItemDetail>;
 }

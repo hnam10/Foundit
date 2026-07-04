@@ -81,12 +81,12 @@ export function CampusStatusCard({
             fontSize="sm"
             bg="white"
             borderWidth="1px"
-            borderColor="#D9D9D9"
+            borderColor="border.input"
             borderRadius="md"
-            color="#1a1a1a"
+            color="fg"
             _focusVisible={{
               outline: 'none',
-              boxShadow: '0 0 0 2px #009adb',
+              boxShadow: '0 0 0 2px {colors.focusRing}',
             }}
           >
             {campuses.map((campus) => (

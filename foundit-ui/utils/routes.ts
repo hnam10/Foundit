@@ -1,4 +1,11 @@
-export type UserRole = 'student' | 'security' | 'admin';
+export const ROLES = ['student', 'security', 'admin'] as const;
+
+export type UserRole = (typeof ROLES)[number];
+
+/** Narrows an untrusted string (cookie, JSON) to a known role, else null. */
+export function parseRole(value: string | null | undefined): UserRole | null {
+  return ROLES.includes(value as UserRole) ? (value as UserRole) : null;
+}
 
 export const ROLE_HOME: Record<UserRole, string> = {
   student: '/student/dashboard',

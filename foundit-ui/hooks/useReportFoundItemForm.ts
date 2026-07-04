@@ -3,11 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAccessToken } from '@/utils/auth';
-import { ROLE_HOME } from '@/utils/routes';
 import { CAMPUSES } from '@/constants/campuses';
 import handleImageUpload from '@/utils/handleImageUpload';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+import { API_BASE } from '@/lib/api/client';
 
 // Backend itemDescription cap (submitFoundItemReportSchema).
 const DESCRIPTION_MAX = 1000;

@@ -13,55 +13,48 @@ import {
   Stack,
   Text,
 } from '@chakra-ui/react';
-import { MOCK_STUDENT_DISPLAY_NAME } from '@/constants/mockSession';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
-
-interface FoundItem {
-  category: string;
-  item: string;
-  count: number;
-}
+import { fetchCategoryStats, type CategoryStat } from '@/lib/api/items';
+import { ApiError } from '@/lib/api/client';
+import { debugError } from '@/utils/debug';
 
 export default function StudentDashboardPage() {
   const router = useRouter();
-  const displayName = useLoggedInDisplayName(MOCK_STUDENT_DISPLAY_NAME);
-  const [foundItems, setFoundItems] = useState<FoundItem[]>([]);
+  const displayName = useLoggedInDisplayName();
+  // Keeps the Claim Items button in a spinner state while the route
+  // transition to /student/claim-item is in flight (cleared on unmount).
+  const [isNavigatingToClaim, setIsNavigatingToClaim] = useState(false);
+  // Counts of claimable (stored) items per category, from the public
+  // GET /api/items/category-stats endpoint.
+  const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchFoundItems() {
+    let active = true;
+
+    async function loadCategoryStats() {
       try {
-        // API Integration Note:
-        // This fetch call connects the frontend dashboard to the backend API.
-        // Current API endpoint: http://localhost:3001/api/found-items
-        // Expected backend response format:
-        // [
-        //   {
-        //     category: 'Electronics',
-        //     item: 'Keyboard',
-        //     count: 5
-        //   }
-        // ]
-        // Later, this URL can be moved into an environment variable,
-        // for example: process.env.NEXT_PUBLIC_API_URL
-        const response = await fetch('http://localhost:3001/api/found-items');
-        const data = await response.json();
-        setFoundItems(data);
-      } catch (error) {
-        console.error('Failed to fetch found items:', error);
-        // Temporary fallback data:
-        // Remove or replace this after the backend is fully connected.
-        setFoundItems([
-          { category: 'Electronics', item: 'Keyboard', count: 5 },
-          { category: 'Cards', item: 'Student ID', count: 5 },
-          { category: 'Clothing', item: 'Hoodie', count: 2 },
-        ]);
+        const stats = await fetchCategoryStats();
+        if (active) setCategoryStats(stats);
+      } catch (err) {
+        debugError('student-dashboard', 'category stats fetch failed', err);
+        if (active) {
+          setStatsError(
+            err instanceof ApiError && err.status === 0
+              ? err.message
+              : 'Unable to load found items right now. Please try again later.'
+          );
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
 
-    fetchFoundItems();
+    loadCategoryStats();
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (loading) {
@@ -99,7 +92,7 @@ export default function StudentDashboardPage() {
             Found item dash board
           </Text>
           <Heading as="h1" fontSize="40px" fontWeight="700" lineHeight="48px">
-            Hello, {displayName}
+            Hello{displayName ? `, ${displayName}` : ''}
           </Heading>
         </Box>
 
@@ -127,39 +120,44 @@ export default function StudentDashboardPage() {
             </NativeSelect.Root>
           </HStack>
 
-          {/* Found Items Display Area */}
+          {/* Found Items Display Area — one card per category with the
+              number of stored (claimable) items in it. */}
           <Box
             bg="gray.100"
             borderRadius="md"
             p={{ base: 4, md: 8 }}
             minH="230px"
           >
-            <SimpleGrid columns={{ base: 1, md: 3 }} gap={8}>
-              {foundItems.map((foundItem, index) => (
-                <HStack
-                  key={index}
-                  bg="blue.50"
-                  borderRadius="md"
-                  px={4}
-                  py={2}
-                  justify="space-between"
-                  fontSize="sm"
-                >
-                  <Text>
+            {statsError ? (
+              <Text fontSize="sm" color="red.600">
+                {statsError}
+              </Text>
+            ) : categoryStats.length === 0 ? (
+              <Text fontSize="sm" color="fg.muted">
+                No found items are available to claim right now.
+              </Text>
+            ) : (
+              <SimpleGrid columns={{ base: 1, md: 3 }} gap={8}>
+                {categoryStats.map((stat) => (
+                  <HStack
+                    key={stat.category}
+                    bg="blue.50"
+                    borderRadius="md"
+                    px={4}
+                    py={2}
+                    justify="space-between"
+                    fontSize="sm"
+                  >
                     <Text as="span" color="blue.500" fontWeight="bold">
-                      {foundItem.category}
-                    </Text>{' '}
-                    |{' '}
-                    <Text as="span" fontWeight="bold">
-                      {foundItem.item}
+                      {stat.category}
                     </Text>
-                  </Text>
-                  <Text color="blue.500" fontWeight="bold">
-                    {foundItem.count}
-                  </Text>
-                </HStack>
-              ))}
-            </SimpleGrid>
+                    <Text color="blue.500" fontWeight="bold">
+                      {stat.count}
+                    </Text>
+                  </HStack>
+                ))}
+              </SimpleGrid>
+            )}
           </Box>
         </Box>
 
@@ -171,7 +169,11 @@ export default function StudentDashboardPage() {
           w="220px"
           alignSelf="center"
           _hover={{ bg: 'blue.600' }}
-          onClick={() => router.push('/claim-item')}
+          loading={isNavigatingToClaim}
+          onClick={() => {
+            setIsNavigatingToClaim(true);
+            router.push('/student/claim-item');
+          }}
         >
           Claim Items
         </Button>

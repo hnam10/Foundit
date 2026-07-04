@@ -2,12 +2,20 @@
 
 import { useState } from 'react';
 import { validateEmail } from '@/utils/validation';
+import { ApiError, apiFetch } from '@/lib/api/client';
 import {
   getRoleHome,
   sanitizeRedirect,
   setSessionRole,
-  type UserRole,
+  setTokens,
+  type LoggedInUser,
 } from '@/utils/auth';
+
+interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: LoggedInUser;
+}
 
 export function useLoginForm(redirectTo?: string | null) {
   const [email, setEmail] = useState('');
@@ -31,43 +39,28 @@ export function useLoginForm(redirectTo?: string | null) {
       return;
     }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    if (!apiUrl) {
-      setPasswordError(
-        'API URL is not configured. Set NEXT_PUBLIC_API_URL in foundit-ui/.env.local.'
-      );
-      return;
-    }
-
     try {
-      const response = await fetch(`${apiUrl}/api/auth/login`, {
+      const result = await apiFetch<LoginResponse>('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        auth: false,
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        setPasswordError(result.message || 'Login failed.');
-        return;
-      }
-
-      localStorage.setItem('accessToken', result.accessToken);
-      localStorage.setItem('refreshToken', result.refreshToken);
+      setTokens(result.accessToken, result.refreshToken);
       localStorage.setItem('user', JSON.stringify(result.user));
 
-      const role = result.user.role as UserRole;
+      const role = result.user.role;
       setSessionRole(role);
 
       const destination = sanitizeRedirect(redirectTo) ?? getRoleHome(role);
 
       // Full navigation so middleware sees the role cookie on the first request.
       window.location.href = destination;
-    } catch {
-      setPasswordError('Unable to connect to server.');
+    } catch (err) {
+      // ApiError carries the backend message (or the config/network reason).
+      setPasswordError(
+        err instanceof ApiError && err.message ? err.message : 'Login failed.'
+      );
     }
   }
 
