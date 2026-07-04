@@ -31,7 +31,7 @@ describe('useLoginForm', () => {
     expect(apiFetchMock).not.toHaveBeenCalled();
   });
 
-  it('shows the backend message when login is rejected', async () => {
+  it('shows a connection error when login is rejected', async () => {
     apiFetchMock.mockRejectedValueOnce(
       new ApiError(401, 'Invalid email or password.')
     );
@@ -43,7 +43,8 @@ describe('useLoginForm', () => {
     });
     await act(() => result.current.handleLogin());
 
-    expect(result.current.passwordError).toBe('Invalid email or password.');
+    expect(result.current.passwordError).toBe('Unable to connect to server.');
+    expect(result.current.isSubmitting).toBe(false);
     expect(getAccessToken()).toBeNull();
   });
 

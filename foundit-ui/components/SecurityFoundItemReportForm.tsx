@@ -5,7 +5,7 @@ import FormTextInput from '@/components/FormTextInput';
 import FoundItemFormShell from '@/components/FoundItemFormShell';
 import SelectInput from '@/components/SelectInput';
 import TextAreaInput from '@/components/TextAreaInput';
-import ImageUploadGallery from '@/components/uploadImage';
+import ImageUploadGallery from '@/components/ImageUploadGallery';
 import { LuCircleAlert } from 'react-icons/lu';
 import { CATEGORIES } from '@/constants/categories';
 import { useSecurityFoundItemForm } from '@/hooks/useSecurityFoundItemForm';

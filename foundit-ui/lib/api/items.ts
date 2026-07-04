@@ -8,13 +8,10 @@ import type {
   SecurityItemListResponse,
 } from '@/types/items';
 
+export type { CategoryStat } from '@/types/items';
+
 export async function fetchCampuses(): Promise<Campus[]> {
   return apiFetch<Campus[]>('/api/campuses', { auth: false });
-}
-
-export interface CategoryStat {
-  category: string;
-  count: number;
 }
 
 // Public counts of claimable (status=stored) items grouped by category —
@@ -26,24 +23,6 @@ export async function fetchCategoryStats(
   return apiFetch<CategoryStat[]>(`/api/items/category-stats${query}`, {
     auth: false,
   });
-}
-
-export async function fetchCategoryStats(
-  campusId?: string
-): Promise<CategoryStat[]> {
-  const search = new URLSearchParams();
-  if (campusId) search.set('campusId', campusId);
-
-  const query = search.toString();
-  const res = await fetch(
-    `${API_BASE}/api/items/category-stats${query ? `?${query}` : ''}`
-  );
-
-  if (!res.ok) {
-    throw new Error(await parseApiError(res));
-  }
-
-  return res.json() as Promise<CategoryStat[]>;
 }
 
 export interface FetchPublicItemsParams {
@@ -60,15 +39,12 @@ export async function fetchPublicItems(
   if (params.campusId) search.set('campusId', params.campusId);
 
   const query = search.toString();
-  const res = await fetch(
-    `${API_BASE}/api/public/items${query ? `?${query}` : ''}`
+  return apiFetch<PublicItem[]>(
+    `/api/public/items${query ? `?${query}` : ''}`,
+    {
+      auth: false,
+    }
   );
-
-  if (!res.ok) {
-    throw new Error(await parseApiError(res));
-  }
-
-  return res.json() as Promise<PublicItem[]>;
 }
 
 export interface FetchSecurityItemsParams {
