@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { validateEmail } from '@/utils/validation';
-import { ApiError, apiFetch } from '@/lib/api/client';
+import { apiFetch } from '@/lib/api/client';
 import {
   getRoleHome,
   sanitizeRedirect,
@@ -23,12 +23,15 @@ export function useLoginForm(redirectTo?: string | null) {
 
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleEmailBlur() {
     setEmailError(validateEmail(email));
   }
 
   async function handleLogin() {
+    if (isSubmitting) return;
+
     const emailValidation = validateEmail(email);
     const passwordValidation = !password ? 'Please enter your password.' : '';
 
@@ -39,6 +42,15 @@ export function useLoginForm(redirectTo?: string | null) {
       return;
     }
 
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl) {
+      setPasswordError(
+        'API URL is not configured. Set NEXT_PUBLIC_API_URL in foundit-ui/.env.local.'
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       const result = await apiFetch<LoginResponse>('/api/auth/login', {
         method: 'POST',
@@ -56,11 +68,10 @@ export function useLoginForm(redirectTo?: string | null) {
 
       // Full navigation so middleware sees the role cookie on the first request.
       window.location.href = destination;
-    } catch (err) {
-      // ApiError carries the backend message (or the config/network reason).
-      setPasswordError(
-        err instanceof ApiError && err.message ? err.message : 'Login failed.'
-      );
+    } catch {
+      setPasswordError('Unable to connect to server.');
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -73,5 +84,6 @@ export function useLoginForm(redirectTo?: string | null) {
     passwordError,
     handleEmailBlur,
     handleLogin,
+    isSubmitting,
   };
 }

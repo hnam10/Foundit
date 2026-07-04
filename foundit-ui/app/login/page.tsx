@@ -20,6 +20,7 @@ function LoginForm() {
     passwordError,
     handleEmailBlur,
     handleLogin,
+    isSubmitting,
   } = useLoginForm(redirectTo);
 
   return (
@@ -76,6 +77,9 @@ function LoginForm() {
         fontSize="16px"
         colorPalette="blue"
         alignSelf="center"
+        disabled={isSubmitting}
+        loading={isSubmitting}
+        loadingText="Logging in..."
       >
         Login
       </Button>

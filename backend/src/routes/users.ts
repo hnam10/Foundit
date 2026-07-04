@@ -31,7 +31,9 @@ const userProfileSelect = {
   updatedAt: true,
 } as const;
 
-type UserProfileRow = Pick<User, keyof typeof userProfileSelect>;
+type UserProfileRow = Pick<User, keyof typeof userProfileSelect> & {
+  campus?: { campusName: string } | null;
+};
 
 function toUserProfileDto(user: UserProfileRow) {
   return {
@@ -42,6 +44,7 @@ function toUserProfileDto(user: UserProfileRow) {
     firstName: user.firstName,
     lastName: user.lastName,
     campusId: user.campusId,
+    campusName: user.campus?.campusName ?? null,
     phone: user.phone,
     studentNumber:
       user.studentNumber !== null ? Number(user.studentNumber) : null,
@@ -59,7 +62,10 @@ async function loadActiveUserProfile(
 ): Promise<UserProfileRow | null> {
   const user = await prisma.user.findUnique({
     where: { userId },
-    select: userProfileSelect,
+    select: {
+      ...userProfileSelect,
+      campus: { select: { campusName: true } },
+    },
   });
 
   if (!user) {
@@ -210,7 +216,10 @@ router.put(
       const updated = await prisma.user.update({
         where: { userId },
         data: { firstName, lastName, phone },
-        select: userProfileSelect,
+        select: {
+          ...userProfileSelect,
+          campus: { select: { campusName: true } },
+        },
       });
 
       await writeAuditLog({
