@@ -15,12 +15,15 @@ export function useLoginForm(redirectTo?: string | null) {
 
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleEmailBlur() {
     setEmailError(validateEmail(email));
   }
 
   async function handleLogin() {
+    if (isSubmitting) return;
+
     const emailValidation = validateEmail(email);
     const passwordValidation = !password ? 'Please enter your password.' : '';
 
@@ -39,6 +42,7 @@ export function useLoginForm(redirectTo?: string | null) {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
@@ -68,6 +72,8 @@ export function useLoginForm(redirectTo?: string | null) {
       window.location.href = destination;
     } catch {
       setPasswordError('Unable to connect to server.');
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -80,5 +86,6 @@ export function useLoginForm(redirectTo?: string | null) {
     passwordError,
     handleEmailBlur,
     handleLogin,
+    isSubmitting,
   };
 }
