@@ -3,7 +3,12 @@
 import React from 'react';
 import { Box, Field, HStack, NativeSelect } from '@chakra-ui/react';
 import FieldError from './FieldError';
-import { inlineFieldLabelStyles } from './ui/field-styles';
+import {
+  fieldControlStyles,
+  fieldHelperStyles,
+  fieldLabelStyles,
+  inlineFieldLabelStyles,
+} from './ui/field-styles';
 
 export interface SelectOption {
   value: string;
@@ -52,13 +57,7 @@ export default function SelectInput({
     : options.map((option) => ({ value: option, label: option }));
 
   const hintEl = hint ? (
-    <Field.HelperText
-      fontSize="0.875rem"
-      lineHeight="1.6"
-      color="#666666"
-      mt={0}
-      mb={1}
-    >
+    <Field.HelperText {...fieldHelperStyles} mt={0} mb={1}>
       {hint}
     </Field.HelperText>
   ) : null;
@@ -69,24 +68,14 @@ export default function SelectInput({
           option text never runs under the chevron (matters most with
           selectWidth="fit-content", where width is intrinsic). */}
       <NativeSelect.Field
+        {...fieldControlStyles}
         value={value}
         onChange={onChange}
         onBlur={onBlur}
         h={12}
         ps={4}
         pe={10}
-        fontSize="1rem"
-        color={value ? '#1a1a1a' : '#9ca3af'}
-        bg="white"
-        borderWidth="1px"
-        borderRadius="md"
-        borderColor="#D9D9D9"
-        _invalid={{ borderColor: '#cd0000' }}
-        _focusVisible={{
-          outline: 'none',
-          boxShadow: '0 0 0 2px #009adb',
-          borderColor: 'inherit',
-        }}
+        color={value ? 'fg' : 'gray.400'}
       >
         <option value="" disabled>
           {placeholder}
@@ -104,15 +93,9 @@ export default function SelectInput({
   if (stacked) {
     return (
       <Field.Root id={id} required={required} invalid={isInvalid} mb={0}>
-        <Field.Label
-          mb={1}
-          fontSize="1rem"
-          fontWeight="semibold"
-          lineHeight="1.6"
-          color="#1a1a1a"
-        >
+        <Field.Label {...fieldLabelStyles} mb={1}>
           {label}
-          <Field.RequiredIndicator color="#1a1a1a" />
+          <Field.RequiredIndicator color="fg" />
         </Field.Label>
         {hintEl}
         {selectEl}
