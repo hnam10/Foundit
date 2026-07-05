@@ -1009,7 +1009,7 @@ router.patch(
       }
 
       const updated = await prisma.$transaction(async (tx) => {
-        if (status === ClaimStatus.picked_up && claim.itemId) {
+        if (status === ClaimStatus.approved && claim.itemId) {
           const item = await tx.item.findUnique({
             where: { itemId: claim.itemId },
             select: { itemId: true, status: true },
@@ -1074,7 +1074,7 @@ router.patch(
       if (err instanceof Error && err.name === 'LINKED_ITEM_NOT_STORED') {
         res.status(409).json({
           code: 'LINKED_ITEM_NOT_STORED',
-          message: 'The linked item must still be stored before pickup.',
+          message: 'The linked item must still be stored before approval.',
         });
         return;
       }
