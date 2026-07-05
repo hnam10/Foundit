@@ -1,13 +1,4 @@
-import {
-  Box,
-  chakra,
-  CloseButton,
-  Grid,
-  GridItem,
-  Image,
-  Text,
-  VStack,
-} from '@chakra-ui/react';
+import { Box, Text, VStack, chakra } from '@chakra-ui/react';
 import { LuUpload } from 'react-icons/lu';
 import { useImageUploadGallery } from '../hooks/useImageUploadGallery';
 
@@ -22,8 +13,14 @@ export default function ImageUploadGallery({
   onChange,
   error,
 }: ImageUploadGalleryProps) {
-  const { images, canAddMore, maxImages, handleFilesSelected, handleRemove } =
-    useImageUploadGallery({ onChange });
+  const {
+    images,
+    inputRef,
+    canAddMore,
+    maxImages,
+    handleFilesSelected,
+    handleRemove,
+  } = useImageUploadGallery({ onChange });
 
   return (
     <VStack align="stretch" gap={2}>
@@ -48,9 +45,9 @@ export default function ImageUploadGallery({
       >
         <LuUpload size={16} />
         <Text fontSize="sm">Upload Picture</Text>
-
         <input
           id="image-upload-input"
+          ref={inputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
           multiple
@@ -61,9 +58,9 @@ export default function ImageUploadGallery({
       </Label>
 
       {images.length > 0 && (
-        <Grid templateColumns="repeat(3, 1fr)" gap={2}>
+        <Box display="grid" gridTemplateColumns="repeat(3, 1fr)" gap={2}>
           {images.map((img) => (
-            <GridItem key={img.previewUrl} position="relative">
+            <Box key={img.previewUrl} position="relative">
               <Box
                 position="relative"
                 w="80%"
@@ -73,7 +70,7 @@ export default function ImageUploadGallery({
                 border="1px solid"
                 borderColor="gray.200"
               >
-                <Image
+                <chakra.img
                   src={img.previewUrl}
                   alt="uploaded preview"
                   w="80%"
@@ -81,21 +78,28 @@ export default function ImageUploadGallery({
                   objectFit="cover"
                 />
 
-                <CloseButton
-                  size="sm"
+                <chakra.button
+                  type="button"
                   position="absolute"
                   top={1}
                   right={1}
+                  w={6}
+                  h={6}
                   borderRadius="full"
                   bg="blackAlpha.600"
                   color="white"
+                  fontSize="sm"
+                  lineHeight={1}
                   _hover={{ bg: 'blackAlpha.800' }}
                   onClick={() => handleRemove(img.previewUrl)}
-                />
+                  aria-label="Remove image"
+                >
+                  ×
+                </chakra.button>
               </Box>
-            </GridItem>
+            </Box>
           ))}
-        </Grid>
+        </Box>
       )}
 
       {error && (

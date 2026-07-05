@@ -6,11 +6,12 @@ import FoundItemFormShell from '@/components/FoundItemFormShell';
 import SelectInput from '@/components/SelectInput';
 import TextAreaInput from '@/components/TextAreaInput';
 import ImageUploadGallery from '@/components/uploadImage';
+import SecurityPhonePhotos from '@/components/SecurityPhonePhotos';
 import { Button } from '@/components/ui/Button';
 import { LuCircleAlert } from 'react-icons/lu';
 import { CATEGORIES } from '@/constants/categories';
 import { useSecurityFoundItemForm } from '@/hooks/useSecurityFoundItemForm';
-import { getAccessToken } from '@/utils/auth';
+import { useAccessToken } from '@/hooks/useAccessToken';
 import type { Campus } from '@/types/items';
 
 export interface SecurityFoundItemReportFormProps {
@@ -25,7 +26,7 @@ export default function SecurityFoundItemReportForm({
   campusesLoading = false,
 }: SecurityFoundItemReportFormProps) {
   const form = useSecurityFoundItemForm(defaultCampusId);
-  const accessToken = getAccessToken();
+  const accessToken = useAccessToken();
 
   const campusOptions = campuses.map((campus) => ({
     value: campus.campusId,
@@ -125,9 +126,21 @@ export default function SecurityFoundItemReportForm({
             <Text mb={2} fontSize="1rem" fontWeight="semibold" color="gray.800">
               Photos
             </Text>
-            <ImageUploadGallery
-              onChange={(images) => form.setImageFiles(images)}
-            />
+            <Stack gap={4}>
+              <SecurityPhonePhotos
+                onSessionImagesChange={form.setSessionImages}
+              />
+              <HStack gap={3} align="center">
+                <Box flex={1} h="1px" bg="gray.200" />
+                <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                  or upload from this device
+                </Text>
+                <Box flex={1} h="1px" bg="gray.200" />
+              </HStack>
+              <ImageUploadGallery
+                onChange={(images) => form.setImageFiles(images)}
+              />
+            </Stack>
           </Box>
         )}
 

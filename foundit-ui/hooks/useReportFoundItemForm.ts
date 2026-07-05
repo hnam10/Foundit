@@ -3,59 +3,29 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAccessToken } from '@/utils/auth';
-import { ROLE_HOME } from '@/utils/routes';
 import { CAMPUSES } from '@/constants/campuses';
 import handleImageUpload from '@/utils/handleImageUpload';
+import { todayISO, validateFoundItemFields } from '@/utils/foundItemForm';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
-// Backend itemDescription cap (submitFoundItemReportSchema).
-const DESCRIPTION_MAX = 1000;
-
-// Default for the Campus stub (matches the design's "Newnham" default).
 const DEFAULT_CAMPUS = CAMPUSES[0].name;
-
-// Matches the Figma error copy: "{Field} is a required field".
-function requiredMsg(label: string): string {
-  return `${label} is a required field`;
-}
-
-// Local YYYY-MM-DD, used both for the date input `max` and the not-in-future check.
-function todayISO(): string {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
 
 export function useReportFoundItemForm(token: string) {
   const router = useRouter();
 
   const [itemName, setItemName] = useState('');
   const [category, setCategory] = useState('');
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(todayISO);
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
-  // ── STUB FIELDS ──────────────────────────────────────────────────────────
-  // Contact Information and Campus are shown for design parity but are NOT
-  // persisted: the backend (submitFoundItemReportSchema) has no contact column,
-  // and campus is fixed server-side by the report link. They are validated
-  // client-side (the design marks them required) but excluded from the submit
-  // body. Remove the stub note + wire into the payload once the backend grows
-  // the columns. See plan.md.
   const [contactInformation, setContactInformation] = useState('');
   const [campus, setCampus] = useState(DEFAULT_CAMPUS);
-  // Fed by the image gallery; uploaded to R2 on submit and linked to the item.
   const [imageFiles, setImageFiles] = useState<File[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // The backend has no item-name column, so Item Name is folded into
-  // itemDescription as the first line (no data lost). See plan.md.
-  function buildItemDescription(): string {
-    return [itemName.trim(), description.trim()].filter(Boolean).join('\n\n');
-  }
 
   function clearError(field: string) {
     setErrors((prev) => {
@@ -66,46 +36,16 @@ export function useReportFoundItemForm(token: string) {
     });
   }
 
-  // Mirrors submitFoundItemReportSchema so the client fails fast before the POST.
   function validate(): boolean {
-    const next: Record<string, string> = {};
-
-    if (!itemName.trim()) {
-      next.itemName = requiredMsg('Item Name');
-    } else if (itemName.trim().length > 100) {
-      next.itemName = 'Item Name must be 100 characters or fewer';
-    }
-
-    if (!category.trim()) {
-      next.category = requiredMsg('Category');
-    }
-
-    if (!date.trim()) {
-      next.date = requiredMsg('Date');
-    } else if (date > todayISO()) {
-      next.date = 'Date cannot be in the future';
-    }
-
-    if (!location.trim()) {
-      next.location = requiredMsg('Location');
-    } else if (location.trim().length > 100) {
-      next.location = 'Location must be 100 characters or fewer';
-    }
-
-    // Stub fields — validated for design parity, not sent to the backend.
-    if (!contactInformation.trim()) {
-      next.contactInformation = requiredMsg('Contact Information');
-    }
-
-    if (!campus.trim()) {
-      next.campus = requiredMsg('Campus');
-    }
-
-    if (!description.trim()) {
-      next.description = requiredMsg('Description');
-    } else if (buildItemDescription().length > DESCRIPTION_MAX) {
-      next.description = `Item Name and Description together must be ${DESCRIPTION_MAX} characters or fewer`;
-    }
+    const next = validateFoundItemFields(
+      { itemName, category, date, location, description },
+      {
+        requireContact: true,
+        requireCampus: true,
+        contactInformation,
+        campus,
+      }
+    );
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -162,7 +102,8 @@ export function useReportFoundItemForm(token: string) {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          itemDescription: buildItemDescription(),
+          title: itemName.trim(),
+          description: description.trim(),
           category: category.trim(),
           locationFound: location.trim(),
           dateFound: date,

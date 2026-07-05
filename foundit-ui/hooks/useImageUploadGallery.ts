@@ -18,9 +18,6 @@ export function useImageUploadGallery({
   const [images, setImages] = useState<UploadedImage[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Revoke any remaining object URLs when the component unmounts to avoid
-  // memory leaks. handleRemove already revokes URLs for individually removed
-  // images; this covers images still present at unmount time.
   useEffect(() => {
     return () => {
       images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
@@ -43,7 +40,6 @@ export function useImageUploadGallery({
     for (const file of filesToProcess) {
       const previewUrl = URL.createObjectURL(file);
 
-      // Add a placeholder entry immediately so the user sees progress
       setImages((prev) => {
         const next = [
           ...prev,
@@ -55,7 +51,6 @@ export function useImageUploadGallery({
       });
     }
 
-    // Reset input so the same file can be re-selected if needed
     if (inputRef.current) inputRef.current.value = '';
   };
 
