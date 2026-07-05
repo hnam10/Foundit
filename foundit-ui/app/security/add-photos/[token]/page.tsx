@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Box,
@@ -16,8 +16,6 @@ import { validatePhotoSession } from '@/lib/api/photoSessions';
 import { uploadPhotoToSession } from '@/utils/uploadPhotoSessionImage';
 
 const Label = chakra('label');
-
-const MAX_IMAGES = 3;
 
 type PageState =
   | { status: 'loading' }
@@ -36,6 +34,7 @@ export default function AddPhotosPage() {
 
   const [pageState, setPageState] = useState<PageState>({ status: 'loading' });
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
+  const photosRef = useRef(photos);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -73,15 +72,19 @@ export default function AddPhotosPage() {
   }, [token]);
 
   useEffect(() => {
-    return () => {
-      photos.forEach((p) => URL.revokeObjectURL(p.previewUrl));
-    };
+    photosRef.current = photos;
   }, [photos]);
+
+  useEffect(() => {
+    return () => {
+      photosRef.current.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+    };
+  }, []);
 
   const canAddMore =
     pageState.status === 'ready' &&
     pageState.reason === 'available' &&
-    photos.length < MAX_IMAGES;
+    photos.length < pageState.maxImages;
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -140,6 +143,12 @@ export default function AddPhotosPage() {
       />
     );
   }
+
+  if (pageState.reason !== 'available') {
+    return null;
+  }
+
+  const { maxImages } = pageState;
 
   return (
     <Flex minH="100dvh" direction="column" bg="gray.50" px={4} py={8}>
@@ -210,7 +219,7 @@ export default function AddPhotosPage() {
         )}
 
         <Text fontSize="xs" color="gray.500" textAlign="center">
-          {photos.length} / {MAX_IMAGES} photos. You can close this page when
+          {photos.length} / {maxImages} photos. You can close this page when
           done.
         </Text>
       </Stack>

@@ -19,6 +19,15 @@ import {
 
 const MAX_IMAGES_PER_SESSION = 3;
 
+class PhotoSessionFullError extends Error {
+  readonly code = 'PHOTO_SESSION_FULL';
+
+  constructor() {
+    super(`Maximum ${MAX_IMAGES_PER_SESSION} images per session.`);
+    this.name = 'PhotoSessionFullError';
+  }
+}
+
 const router = Router();
 
 const publicRateLimiter = rateLimit({
@@ -79,20 +88,23 @@ async function findActiveSession(token: string) {
 }
 
 async function createPresignedReportUpload(
+  key: string,
   contentType: string,
-  fileSizeKb: number
+  fileSizeKb: number,
+  fileSizeBytes: number
 ) {
   const ext = contentType.split('/')[1];
-  const key = `reports/${crypto.randomUUID()}.${ext}`;
 
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET,
     Key: key,
     ContentType: contentType,
+    ContentLength: fileSizeBytes,
   });
 
   const uploadUrl = await getSignedUrl(r2, command, {
     expiresIn: 60 * 60,
+    signableHeaders: new Set(['content-type', 'content-length']),
   });
 
   return {
@@ -211,21 +223,59 @@ router.post(
         return;
       }
 
-      if (session._count.images >= MAX_IMAGES_PER_SESSION) {
-        res.status(409).json({
-          code: 'PHOTO_SESSION_FULL',
-          message: `Maximum ${MAX_IMAGES_PER_SESSION} images per session.`,
-        });
-        return;
-      }
-
-      const { contentType, fileSizeKb } = req.body as {
+      const { contentType, fileSizeKb, fileSizeBytes } = req.body as {
         contentType: string;
         fileSizeKb: number;
+        fileSizeBytes: number;
       };
 
-      const result = await createPresignedReportUpload(contentType, fileSizeKb);
-      res.status(200).json(result);
+      try {
+        const placeholder = await prisma.$transaction(async (tx) => {
+          const imageCount = await tx.photoSessionImage.count({
+            where: { sessionId: session.sessionId },
+          });
+          if (imageCount >= MAX_IMAGES_PER_SESSION) {
+            throw new PhotoSessionFullError();
+          }
+
+          const ext = contentType.split('/')[1];
+          const key = `reports/${crypto.randomUUID()}.${ext}`;
+
+          return tx.photoSessionImage.create({
+            data: {
+              sessionId: session.sessionId,
+              imageUrl: key,
+              fileType: ext,
+              fileSizeKb,
+            },
+            select: { imageId: true, imageUrl: true },
+          });
+        });
+
+        try {
+          const result = await createPresignedReportUpload(
+            placeholder.imageUrl,
+            contentType,
+            fileSizeKb,
+            fileSizeBytes
+          );
+          res.status(200).json(result);
+        } catch (err) {
+          await prisma.photoSessionImage.delete({
+            where: { imageId: placeholder.imageId },
+          });
+          throw err;
+        }
+      } catch (err) {
+        if (err instanceof PhotoSessionFullError) {
+          res.status(409).json({
+            code: err.code,
+            message: err.message,
+          });
+          return;
+        }
+        throw err;
+      }
     } catch (err) {
       next(err);
     }
@@ -258,26 +308,16 @@ router.post(
         return;
       }
 
-      if (session._count.images >= MAX_IMAGES_PER_SESSION) {
-        res.status(409).json({
-          code: 'PHOTO_SESSION_FULL',
-          message: `Maximum ${MAX_IMAGES_PER_SESSION} images per session.`,
-        });
-        return;
-      }
-
       const { imageUrl, fileType, fileSizeKb } = req.body as {
         imageUrl: string;
         fileType: string;
         fileSizeKb: number;
       };
 
-      const image = await prisma.photoSessionImage.create({
-        data: {
+      const image = await prisma.photoSessionImage.findFirst({
+        where: {
           sessionId: session.sessionId,
           imageUrl,
-          fileType,
-          fileSizeKb,
         },
         select: {
           imageId: true,
@@ -287,6 +327,23 @@ router.post(
           createdAt: true,
         },
       });
+
+      if (!image) {
+        res.status(404).json({
+          code: 'PHOTO_SESSION_IMAGE_NOT_FOUND',
+          message:
+            'No pending upload found for this image. Request a new upload URL.',
+        });
+        return;
+      }
+
+      if (image.fileType !== fileType || image.fileSizeKb !== fileSizeKb) {
+        res.status(400).json({
+          code: 'VALIDATION_ERROR',
+          message: 'Image metadata does not match the reserved upload.',
+        });
+        return;
+      }
 
       res.status(201).json(image);
     } catch (err) {

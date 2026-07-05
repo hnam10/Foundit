@@ -745,30 +745,25 @@ router.patch(
         return;
       }
 
-      const approvedClaim = await prisma.claim.findFirst({
-        where: {
-          itemId: existing.itemId,
-          status: ClaimStatus.approved,
-        },
-        select: { claimId: true },
-      });
-
-      if (approvedClaim) {
-        res.status(409).json({
-          code: 'ITEM_HAS_APPROVED_CLAIM',
-          message:
-            'This item has an approved claim awaiting pickup and cannot be expired or disposed.',
-        });
-        return;
-      }
-
       const rejectionReason =
         note ??
         (targetStatus === ItemStatus.expired
           ? 'Item was marked expired by security.'
           : 'Item was marked disposed by security.');
 
-      const updated = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx) => {
+        const approvedClaim = await tx.claim.findFirst({
+          where: {
+            itemId: existing.itemId,
+            status: ClaimStatus.approved,
+          },
+          select: { claimId: true },
+        });
+
+        if (approvedClaim) {
+          return { blocked: true as const };
+        }
+
         await tx.claim.updateMany({
           where: {
             itemId: existing.itemId,
@@ -788,12 +783,25 @@ router.patch(
           },
         });
 
-        return tx.item.update({
+        const item = await tx.item.update({
           where: { itemId: existing.itemId },
           data: { status: targetStatus },
           select: securityItemDetailSelect,
         });
+
+        return { blocked: false as const, item };
       });
+
+      if (result.blocked) {
+        res.status(409).json({
+          code: 'ITEM_HAS_APPROVED_CLAIM',
+          message:
+            'This item has an approved claim awaiting pickup and cannot be expired or disposed.',
+        });
+        return;
+      }
+
+      const updated = result.item;
 
       await writeAuditLog({
         actorId: req.user!.user_id,
@@ -1032,7 +1040,7 @@ router.post(
 
       const existing = await prisma.item.findUnique({
         where: { itemId: params.data.itemId },
-        select: { itemId: true, status: true },
+        select: { itemId: true },
       });
 
       if (!existing) {
@@ -1043,7 +1051,53 @@ router.post(
         return;
       }
 
-      if (existing.status !== ItemStatus.stored) {
+      const releasedAt = new Date();
+
+      const result = await prisma.$transaction(async (tx) => {
+        const updateResult = await tx.item.updateMany({
+          where: {
+            itemId: existing.itemId,
+            status: ItemStatus.stored,
+          },
+          data: { status: ItemStatus.claimed },
+        });
+
+        if (updateResult.count === 0) {
+          return { released: false as const };
+        }
+
+        const updated = await tx.item.findUniqueOrThrow({
+          where: { itemId: existing.itemId },
+          select: securityItemDetailSelect,
+        });
+
+        await writeAuditLog(
+          {
+            actorId: actor.userId,
+            action: 'item_walk_in_released',
+            entityType: 'item',
+            entityId: updated.itemId,
+            details: {
+              releaseType: 'walk_in_no_claim',
+              studentFullName,
+              idVerified,
+              contactNumber,
+              verificationNote: verificationNote ?? null,
+              releasedAt: releasedAt.toISOString(),
+              releasedBy: {
+                userId: actor.userId,
+                name: `${actor.firstName} ${actor.lastName}`.trim(),
+              },
+            },
+            ipAddress: req.ip,
+          },
+          tx
+        );
+
+        return { released: true as const, item: updated };
+      });
+
+      if (!result.released) {
         res.status(409).json({
           code: 'ITEM_NOT_STORED',
           message: 'Only items in storage can be released.',
@@ -1051,35 +1105,7 @@ router.post(
         return;
       }
 
-      const releasedAt = new Date();
-
-      const updated = await prisma.item.update({
-        where: { itemId: existing.itemId },
-        data: { status: ItemStatus.claimed },
-        select: securityItemDetailSelect,
-      });
-
-      await writeAuditLog({
-        actorId: actor.userId,
-        action: 'item_walk_in_released',
-        entityType: 'item',
-        entityId: updated.itemId,
-        details: {
-          releaseType: 'walk_in_no_claim',
-          studentFullName,
-          idVerified,
-          contactNumber,
-          verificationNote: verificationNote ?? null,
-          releasedAt: releasedAt.toISOString(),
-          releasedBy: {
-            userId: actor.userId,
-            name: `${actor.firstName} ${actor.lastName}`.trim(),
-          },
-        },
-        ipAddress: req.ip,
-      });
-
-      res.status(200).json(await toSecurityItemDetailDto(updated));
+      res.status(200).json(await toSecurityItemDetailDto(result.item));
     } catch (err) {
       next(err);
     }

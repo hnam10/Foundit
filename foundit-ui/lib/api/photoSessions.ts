@@ -91,7 +91,12 @@ export async function deletePhotoSessionImage(
 
 export async function requestPhotoSessionPresignedUrl(
   token: string,
-  body: { fileName: string; contentType: string; fileSizeKb: number }
+  body: {
+    fileName: string;
+    contentType: string;
+    fileSizeKb: number;
+    fileSizeBytes: number;
+  }
 ) {
   const res = await fetch(
     `${API_BASE}/api/photo-sessions/${token}/presigned-url`,

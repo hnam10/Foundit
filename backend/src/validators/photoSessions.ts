@@ -9,15 +9,25 @@ export const createPhotoSessionSchema = z.object({
 
 export type CreatePhotoSessionInput = z.infer<typeof createPhotoSessionSchema>;
 
-export const photoSessionPresignSchema = z.object({
-  fileName: z.string().min(1).max(255).trim(),
-  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
-  fileSizeKb: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(5 * 1024),
-});
+export const photoSessionPresignSchema = z
+  .object({
+    fileName: z.string().min(1).max(255).trim(),
+    contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+    fileSizeKb: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(5 * 1024),
+    fileSizeBytes: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(5 * 1024 * 1024),
+  })
+  .refine((data) => data.fileSizeKb === Math.ceil(data.fileSizeBytes / 1024), {
+    message: 'fileSizeKb must match fileSizeBytes',
+    path: ['fileSizeKb'],
+  });
 
 export const registerPhotoSessionImageSchema = reportImageSchema;
 
