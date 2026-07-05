@@ -5,11 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getAccessToken } from '@/utils/auth';
 import handleImageUpload from '@/utils/handleImageUpload';
 import { createSecurityItem } from '@/lib/api/items';
-import {
-  buildItemDescription,
-  todayISO,
-  validateFoundItemFields,
-} from '@/utils/foundItemForm';
+import { todayISO, validateFoundItemFields } from '@/utils/foundItemForm';
 
 export function useSecurityFoundItemForm(defaultCampusId = '') {
   const router = useRouter();
@@ -80,7 +76,8 @@ export function useSecurityFoundItemForm(defaultCampusId = '') {
 
       await createSecurityItem({
         campusId,
-        itemDescription: buildItemDescription(itemName, description),
+        title: itemName.trim(),
+        description: description.trim(),
         category: category.trim(),
         locationFound: location.trim(),
         dateFound: date,

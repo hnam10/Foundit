@@ -19,13 +19,15 @@ import {
   CreateSecurityItemInput,
   WalkInReleaseInput,
 } from '../validators/items';
-import {
-  buildDescriptionInternal,
-  computeRetentionExpiryDate,
-  formatItemDescriptionForResponse,
-  itemTitleFromDescription,
-  stripTitlePrefixFromDescription,
-} from '../utils/itemHelpers';
+
+function computeRetentionExpiryDate(
+  dateFound: Date,
+  retentionDays: number
+): Date {
+  const expiry = new Date(dateFound);
+  expiry.setUTCDate(expiry.getUTCDate() + retentionDays);
+  return expiry;
+}
 
 const router = Router();
 const publicItemStatuses = [ItemStatus.stored] as const;
@@ -229,14 +231,8 @@ async function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
     campusName: item.campus.campusName,
     category: item.category,
     title: item.title,
-    descriptionPublic: formatItemDescriptionForResponse(
-      item.title,
-      item.descriptionPublic
-    ),
-    descriptionInternal: formatItemDescriptionForResponse(
-      item.title,
-      item.descriptionInternal
-    ),
+    descriptionPublic: item.descriptionPublic,
+    descriptionInternal: item.descriptionInternal,
     color: item.color,
     brand: item.brand,
     locationFound: item.locationFound,
@@ -469,12 +465,14 @@ router.get(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [campusId, itemDescription, category, locationFound, dateFound]
+ *             required: [campusId, title, description, category, locationFound, dateFound]
  *             properties:
  *               campusId:
  *                 type: string
  *                 format: uuid
- *               itemDescription:
+ *               title:
+ *                 type: string
+ *               description:
  *                 type: string
  *               category:
  *                 type: string
@@ -506,7 +504,8 @@ router.post(
     try {
       const {
         campusId,
-        itemDescription,
+        title,
+        description,
         category,
         locationFound,
         dateFound,
@@ -527,15 +526,12 @@ router.post(
       }
 
       const item = await prisma.$transaction(async (tx) => {
-        const title = itemTitleFromDescription(itemDescription, category);
         const created = await tx.item.create({
           data: {
             campusId,
             category,
             title,
-            descriptionInternal: buildDescriptionInternal(
-              stripTitlePrefixFromDescription(title, itemDescription)
-            ),
+            descriptionInternal: description.trim(),
             locationFound,
             dateFound,
             status: ItemStatus.stored,

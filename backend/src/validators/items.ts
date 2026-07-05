@@ -60,7 +60,8 @@ export type UpdateSecurityItemInput = z.infer<typeof updateSecurityItemSchema>;
 
 export const createSecurityItemSchema = z.object({
   campusId: z.uuid(),
-  itemDescription: z.string().min(1).max(1000).trim(),
+  title: z.string().min(1).max(100).trim(),
+  description: z.string().min(1).max(1000).trim(),
   category: z.string().min(1).max(50).trim(),
   locationFound: z.string().min(1).max(100).trim(),
   dateFound: z.iso

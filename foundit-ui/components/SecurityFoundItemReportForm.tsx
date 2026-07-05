@@ -1,11 +1,12 @@
 'use client';
 
-import { Box, Button, HStack, Spinner, Stack, Text } from '@chakra-ui/react';
+import { Box, HStack, Spinner, Stack, Text } from '@chakra-ui/react';
 import FormTextInput from '@/components/FormTextInput';
 import FoundItemFormShell from '@/components/FoundItemFormShell';
 import SelectInput from '@/components/SelectInput';
 import TextAreaInput from '@/components/TextAreaInput';
 import ImageUploadGallery from '@/components/uploadImage';
+import { Button } from '@/components/ui/Button';
 import { LuCircleAlert } from 'react-icons/lu';
 import { CATEGORIES } from '@/constants/categories';
 import { useSecurityFoundItemForm } from '@/hooks/useSecurityFoundItemForm';
@@ -166,8 +167,7 @@ export default function SecurityFoundItemReportForm({
 
       <HStack justify="center" gap={4} pt={2}>
         <Button
-          variant="outline"
-          borderColor="gray.300"
+          variant="muted"
           minW="140px"
           onClick={form.handleCancel}
           disabled={form.isSubmitting}
@@ -175,7 +175,7 @@ export default function SecurityFoundItemReportForm({
           Cancel
         </Button>
         <Button
-          colorPalette="blue"
+          variant="primary"
           minW="140px"
           disabled={form.isSubmitting || campusesLoading}
           loading={form.isSubmitting}

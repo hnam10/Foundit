@@ -131,7 +131,8 @@ export async function updateSecurityItem(
 
 export interface CreateSecurityItemInput {
   campusId: string;
-  itemDescription: string;
+  title: string;
+  description: string;
   category: string;
   locationFound: string;
   dateFound: string;
