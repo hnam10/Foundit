@@ -1049,9 +1049,25 @@ router.patch(
           select: claimDetailSelect,
         });
 
-        await tx.notification.create({
+        const notification = await tx.notification.create({
           data: createClaimStatusNotificationInput(nextClaim, status),
         });
+
+        await writeAuditLog(
+          {
+            actorId: actor.userId,
+            action: 'claim_notification_sent',
+            entityType: 'notification',
+            entityId: notification.notificationId,
+            details: {
+              claimId: nextClaim.claimId,
+              recipientId: nextClaim.studentId,
+              claimStatus: status,
+            },
+            ipAddress: req.ip,
+          },
+          tx
+        );
 
         return nextClaim;
       });
