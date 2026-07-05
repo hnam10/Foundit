@@ -23,7 +23,7 @@ const chakraVariantMap: Record<
     variant: 'outline',
     colorPalette: 'gray',
     borderWidth: 1.5,
-    color: 'gray.400',
+    color: 'gray.700',
   },
   danger: { variant: 'solid', colorPalette: 'red' },
 };

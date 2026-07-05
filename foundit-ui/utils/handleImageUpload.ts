@@ -33,6 +33,7 @@ async function handleImageUpload(file: File, accessToken: string) {
 
   const { uploadUrl, imageUrl, fileType, fileSizeKb } =
     (await presignedUrlResponse.json()) as PresignedUrlResponse;
+  console.log('uploadUrl', uploadUrl);
 
   // Upload the compressed file directly to the presigned URL (bucket storage)
   const uploadResponse = await fetch(uploadUrl, {

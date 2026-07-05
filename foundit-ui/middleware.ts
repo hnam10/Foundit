@@ -28,6 +28,10 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  if (pathname.startsWith('/security/add-photos/')) {
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith('/security')) {
     if (!role) {
       return NextResponse.redirect(new URL('/login', request.url));

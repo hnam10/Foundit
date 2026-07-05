@@ -10,6 +10,24 @@ export interface Campus {
   campusName: string;
 }
 
+export interface CategoryStat {
+  category: string;
+  count: number;
+}
+
+export interface PublicItem {
+  itemId: string;
+  campusId: string;
+  category: string;
+  title: string;
+  descriptionPublic: string | null;
+  color: string | null;
+  brand: string | null;
+  locationFound: string | null;
+  dateFound: string;
+  status: ItemStatus;
+}
+
 export interface SecurityItemListItem {
   itemId: string;
   campusId: string;
@@ -68,7 +86,7 @@ export interface SecurityItemDetail extends SecurityItemListItem {
 export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {
   pending_report: 'Pending report',
   stored: 'In storage',
-  claimed: 'Claimed',
+  claimed: 'Released',
   expired: 'Expired',
   disposed: 'Disposed',
 };

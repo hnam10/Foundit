@@ -20,6 +20,34 @@ import {
   submitFoundItemReportSchema,
 } from '../validators/reportLinks';
 
+function buildDescriptionInternal(
+  description: string,
+  additionalNotes?: string
+): string {
+  const base = description.trim();
+  if (additionalNotes?.trim()) {
+    return `${base}\n${additionalNotes.trim()}`;
+  }
+  return base;
+}
+
+/** Combined snapshot stored on found-item reports for audit. */
+function combineReportItemDescription(
+  title: string,
+  description: string
+): string {
+  return [title.trim(), description.trim()].filter(Boolean).join('\n\n');
+}
+
+function computeRetentionExpiryDate(
+  dateFound: Date,
+  retentionDays: number
+): Date {
+  const expiry = new Date(dateFound);
+  expiry.setUTCDate(expiry.getUTCDate() + retentionDays);
+  return expiry;
+}
+
 const router = Router();
 const validateRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -124,34 +152,6 @@ function toPrismaTime(value: string | undefined) {
   return new Date(`1970-01-01T${value}:00.000Z`);
 }
 
-function itemTitleFromDescription(
-  description: string,
-  category: string
-): string {
-  const firstLine = description.split(/\r?\n/)[0]?.trim() || description.trim();
-  const title = firstLine || category;
-  return title.slice(0, 100);
-}
-
-function buildDescriptionInternal(
-  itemDescription: string,
-  additionalNotes?: string
-): string {
-  if (additionalNotes) {
-    return `${itemDescription}\n\n${additionalNotes}`;
-  }
-  return itemDescription;
-}
-
-function computeRetentionExpiryDate(
-  dateFound: Date,
-  retentionDays: number
-): Date {
-  const expiry = new Date(dateFound);
-  expiry.setUTCDate(expiry.getUTCDate() + retentionDays);
-  return expiry;
-}
-
 function setNoStoreHeader(res: Response) {
   res.set('Cache-Control', 'no-store');
 }
@@ -248,7 +248,7 @@ async function createReportLinkRecord(
  *               campusId:
  *                 type: string
  *                 format: uuid
- *                 description: Admin only; security uses their assigned campus
+ *                 description: Campus for the report link; defaults to the user's assigned campus
  *               expiresInMinutes:
  *                 type: integer
  *                 minimum: 5
@@ -263,8 +263,6 @@ async function createReportLinkRecord(
  *         description: Security or admin role required
  *       '404':
  *         description: Campus not found
- *       '409':
- *         description: Campus required for security user
  */
 router.post(
   '/',
@@ -281,47 +279,33 @@ router.post(
       const { campusId: bodyCampusId, expiresInMinutes } =
         req.body as CreateReportLinkInput;
 
-      let campusId: string;
+      const campusId = bodyCampusId ?? actor.campusId ?? '';
 
-      if (actor.role === 'security') {
-        if (!actor.campusId) {
-          res.status(409).json({
-            code: 'REPORT_LINK_CAMPUS_REQUIRED',
-            message:
-              'A campus must be assigned before a report link can be generated.',
-          });
-          return;
-        }
-        campusId = actor.campusId;
-      } else {
-        campusId = bodyCampusId ?? actor.campusId ?? '';
-        if (!campusId) {
-          res.status(400).json({
-            code: 'VALIDATION_ERROR',
-            message: 'Validation failed',
-            details: [
-              {
-                path: ['campusId'],
-                message:
-                  'campusId is required when admin has no campus assigned',
-              },
-            ],
-          });
-          return;
-        }
-
-        const campus = await prisma.campus.findUnique({
-          where: { campusId },
-          select: { campusId: true },
+      if (!campusId) {
+        res.status(400).json({
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: [
+            {
+              path: ['campusId'],
+              message: 'campusId is required',
+            },
+          ],
         });
+        return;
+      }
 
-        if (!campus) {
-          res.status(404).json({
-            code: 'CAMPUS_NOT_FOUND',
-            message: 'Campus not found.',
-          });
-          return;
-        }
+      const campus = await prisma.campus.findUnique({
+        where: { campusId },
+        select: { campusId: true },
+      });
+
+      if (!campus) {
+        res.status(404).json({
+          code: 'CAMPUS_NOT_FOUND',
+          message: 'Campus not found.',
+        });
+        return;
       }
 
       const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
@@ -459,9 +443,11 @@ router.get('/:token/validate', validateRateLimiter, async (req, res, next) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [itemDescription, category, locationFound, dateFound]
+ *             required: [title, description, category, locationFound, dateFound]
  *             properties:
- *               itemDescription:
+ *               title:
+ *                 type: string
+ *               description:
  *                 type: string
  *               category:
  *                 type: string
@@ -576,7 +562,8 @@ router.post(
       // }
 
       const {
-        itemDescription,
+        title,
+        description,
         category,
         locationFound,
         dateFound,
@@ -599,7 +586,7 @@ router.post(
           data: {
             reportLinkId: link.linkId,
             finderId: req.user!.user_id,
-            itemDescription,
+            itemDescription: combineReportItemDescription(title, description),
             category,
             locationFound,
             dateFound,
@@ -624,9 +611,9 @@ router.post(
           data: {
             campusId: link.campusId,
             category,
-            title: itemTitleFromDescription(itemDescription, category),
+            title,
             descriptionInternal: buildDescriptionInternal(
-              itemDescription,
+              description,
               additionalNotes
             ),
             locationFound,

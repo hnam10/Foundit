@@ -4,9 +4,10 @@ const categorySchema = z.string().min(1).max(50).trim();
 const locationSchema = z.string().min(1).max(100).trim();
 
 function getTodayAtMidnight() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  );
 }
 
 export const reportLinkTokenParamsSchema = z.object({
@@ -20,7 +21,7 @@ export const createReportLinkSchema = z.object({
 
 export type CreateReportLinkInput = z.infer<typeof createReportLinkSchema>;
 
-const reportImageSchema = z.object({
+export const reportImageSchema = z.object({
   imageUrl: z
     .string()
     .min(1)
@@ -44,7 +45,8 @@ const reportImageSchema = z.object({
 });
 
 export const submitFoundItemReportSchema = z.object({
-  itemDescription: z.string().min(1).max(1000).trim(),
+  title: z.string().min(1).max(100).trim(),
+  description: z.string().min(1).max(1000).trim(),
   category: categorySchema,
   locationFound: locationSchema,
   dateFound: z.iso
