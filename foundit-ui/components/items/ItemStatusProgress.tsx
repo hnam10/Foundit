@@ -4,24 +4,27 @@ import { Badge, Box, Flex, Text } from '@chakra-ui/react';
 import type { ItemStatus } from '@/types/items';
 import { ITEM_STATUS_COLORS, ITEM_STATUS_LABELS } from '@/types/items';
 
-const HAPPY_PATH_STEPS: ItemStatus[] = ['pending_report', 'stored', 'claimed'];
+const HAPPY_PATH_STEPS: ItemStatus[] = ['stored', 'claimed'];
 
 const TERMINAL_STATUSES = new Set<ItemStatus>(['expired', 'disposed']);
 
 interface ItemStatusProps {
   status: ItemStatus;
+  size?: 'sm' | 'md';
 }
 
-export function ItemStatusBadge({ status }: ItemStatusProps) {
+export function ItemStatusBadge({ status, size = 'sm' }: ItemStatusProps) {
   const { colorPalette } = ITEM_STATUS_COLORS[status];
+  const isMd = size === 'md';
 
   return (
     <Badge
       colorPalette={colorPalette}
       variant="subtle"
-      fontSize="xs"
-      px={2}
-      py={0.5}
+      fontSize={isMd ? 'sm' : 'xs'}
+      fontWeight={isMd ? 'semibold' : 'medium'}
+      px={isMd ? 3 : 2}
+      py={isMd ? 1 : 0.5}
       borderRadius="full"
       flexShrink={0}
     >
@@ -41,7 +44,7 @@ export function ItemStatusProgress({ status }: ItemStatusProps) {
     );
   }
 
-  const activeIndex = HAPPY_PATH_STEPS.indexOf(status);
+  const activeIndex = Math.max(0, HAPPY_PATH_STEPS.indexOf(status));
   const activeLabel = ITEM_STATUS_LABELS[status];
 
   return (

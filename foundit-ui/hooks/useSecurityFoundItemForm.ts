@@ -5,11 +5,8 @@ import { useRouter } from 'next/navigation';
 import { getAccessToken } from '@/utils/auth';
 import handleImageUpload from '@/utils/handleImageUpload';
 import { createSecurityItem } from '@/lib/api/items';
-import {
-  buildItemDescription,
-  todayISO,
-  validateFoundItemFields,
-} from '@/utils/foundItemForm';
+import type { SubmitImageRef } from '@/lib/api/photoSessions';
+import { todayISO, validateFoundItemFields } from '@/utils/foundItemForm';
 
 export function useSecurityFoundItemForm(defaultCampusId = '') {
   const router = useRouter();
@@ -22,6 +19,7 @@ export function useSecurityFoundItemForm(defaultCampusId = '') {
   const [campusIdOverride, setCampusId] = useState<string | null>(null);
   const campusId = campusIdOverride ?? defaultCampusId;
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [sessionImages, setSessionImages] = useState<SubmitImageRef[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,7 +65,7 @@ export function useSecurityFoundItemForm(defaultCampusId = '') {
 
     setIsSubmitting(true);
     try {
-      const uploadedImages = [];
+      const uploadedImages: SubmitImageRef[] = [...sessionImages];
 
       for (const file of imageFiles) {
         const result = await handleImageUpload(file, accessToken);
@@ -80,7 +78,8 @@ export function useSecurityFoundItemForm(defaultCampusId = '') {
 
       await createSecurityItem({
         campusId,
-        itemDescription: buildItemDescription(itemName, description),
+        title: itemName.trim(),
+        description: description.trim(),
         category: category.trim(),
         locationFound: location.trim(),
         dateFound: date,
@@ -117,6 +116,8 @@ export function useSecurityFoundItemForm(defaultCampusId = '') {
     setCampusId,
     imageFiles,
     setImageFiles,
+    sessionImages,
+    setSessionImages,
     errors,
     clearError,
     isSubmitting,

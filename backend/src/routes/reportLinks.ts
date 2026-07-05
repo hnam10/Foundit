@@ -20,6 +20,34 @@ import {
   submitFoundItemReportSchema,
 } from '../validators/reportLinks';
 
+function buildDescriptionInternal(
+  description: string,
+  additionalNotes?: string
+): string {
+  const base = description.trim();
+  if (additionalNotes?.trim()) {
+    return `${base}\n${additionalNotes.trim()}`;
+  }
+  return base;
+}
+
+/** Combined snapshot stored on found-item reports for audit. */
+function combineReportItemDescription(
+  title: string,
+  description: string
+): string {
+  return [title.trim(), description.trim()].filter(Boolean).join('\n\n');
+}
+
+function computeRetentionExpiryDate(
+  dateFound: Date,
+  retentionDays: number
+): Date {
+  const expiry = new Date(dateFound);
+  expiry.setUTCDate(expiry.getUTCDate() + retentionDays);
+  return expiry;
+}
+
 const router = Router();
 const validateRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -122,34 +150,6 @@ function toPrismaTime(value: string | undefined) {
   }
 
   return new Date(`1970-01-01T${value}:00.000Z`);
-}
-
-function itemTitleFromDescription(
-  description: string,
-  category: string
-): string {
-  const firstLine = description.split(/\r?\n/)[0]?.trim() || description.trim();
-  const title = firstLine || category;
-  return title.slice(0, 100);
-}
-
-function buildDescriptionInternal(
-  itemDescription: string,
-  additionalNotes?: string
-): string {
-  if (additionalNotes) {
-    return `${itemDescription}\n\n${additionalNotes}`;
-  }
-  return itemDescription;
-}
-
-function computeRetentionExpiryDate(
-  dateFound: Date,
-  retentionDays: number
-): Date {
-  const expiry = new Date(dateFound);
-  expiry.setUTCDate(expiry.getUTCDate() + retentionDays);
-  return expiry;
 }
 
 function setNoStoreHeader(res: Response) {
@@ -443,9 +443,11 @@ router.get('/:token/validate', validateRateLimiter, async (req, res, next) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [itemDescription, category, locationFound, dateFound]
+ *             required: [title, description, category, locationFound, dateFound]
  *             properties:
- *               itemDescription:
+ *               title:
+ *                 type: string
+ *               description:
  *                 type: string
  *               category:
  *                 type: string
@@ -560,7 +562,8 @@ router.post(
       // }
 
       const {
-        itemDescription,
+        title,
+        description,
         category,
         locationFound,
         dateFound,
@@ -583,7 +586,7 @@ router.post(
           data: {
             reportLinkId: link.linkId,
             finderId: req.user!.user_id,
-            itemDescription,
+            itemDescription: combineReportItemDescription(title, description),
             category,
             locationFound,
             dateFound,
@@ -608,9 +611,9 @@ router.post(
           data: {
             campusId: link.campusId,
             category,
-            title: itemTitleFromDescription(itemDescription, category),
+            title,
             descriptionInternal: buildDescriptionInternal(
-              itemDescription,
+              description,
               additionalNotes
             ),
             locationFound,

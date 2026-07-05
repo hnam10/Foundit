@@ -117,7 +117,8 @@ src/
 |   ├── emailVerification.ts    # Token generation and expiry helpers
 │   └── username.ts             # Unique username generator
 ├── jobs/
-│   └── cleanupUnverifiedUsers.ts  # Daily cron job to delete unverified accounts
+│   ├── cleanupUnverifiedUsers.ts  # Daily cron job to delete unverified accounts
+│   └── expireRetainedItems.ts     # Daily cron: stored → expired when retention ends
 ├── routes/
 │   ├── health.ts               # GET /api/health
 │   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
@@ -254,6 +255,16 @@ Report link tokens stay in the URL to match the current database model, but must
 **`GET /api/items/:itemId` response:** list fields plus `descriptionPublic`, `descriptionInternal`, `color`, `brand`, `locationFound`, `foundItemReportId`, `createdAt`, `updatedAt`, `images[]`, `registeredBy`, and `claims[]` (summary with `claimId`, `status`, `studentName`).
 
 Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed`; `DELETE /api/items/:itemId` is reserved for admin correction of erroneous records.
+
+**`PATCH /api/items/:itemId/status` request:**
+
+```json
+{ "status": "expired", "note": "Retention period ended" }
+```
+
+Allowed targets: `expired`, `disposed`. Transitions: `stored → expired|disposed`, `expired → disposed`. Blocked when item is `claimed`, `disposed`, or has an approved claim awaiting pickup. Returns updated item detail; rejects active linked claims in the same transaction.
+
+A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed (skips items with an approved claim awaiting pickup). Security should use `disposed` to record physical disposal after expiry.
 
 ### Notifications
 

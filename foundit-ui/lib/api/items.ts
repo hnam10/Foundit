@@ -131,7 +131,8 @@ export async function updateSecurityItem(
 
 export interface CreateSecurityItemInput {
   campusId: string;
-  itemDescription: string;
+  title: string;
+  description: string;
   category: string;
   locationFound: string;
   dateFound: string;
@@ -150,6 +151,33 @@ export async function createSecurityItem(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<SecurityItemDetail>;
+}
+
+export interface WalkInReleaseInput {
+  studentFullName: string;
+  idVerified: string;
+  contactNumber?: string | null;
+  verificationNote?: string | null;
+}
+
+export async function walkInReleaseItem(
+  itemId: string,
+  input: WalkInReleaseInput
+): Promise<SecurityItemDetail> {
+  const res = await authFetch(
+    `${API_BASE}/api/items/${itemId}/walk-in-release`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }
+  );
 
   if (!res.ok) {
     throw new Error(await parseApiError(res));

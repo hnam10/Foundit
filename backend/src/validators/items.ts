@@ -60,7 +60,8 @@ export type UpdateSecurityItemInput = z.infer<typeof updateSecurityItemSchema>;
 
 export const createSecurityItemSchema = z.object({
   campusId: z.uuid(),
-  itemDescription: z.string().min(1).max(1000).trim(),
+  title: z.string().min(1).max(100).trim(),
+  description: z.string().min(1).max(1000).trim(),
   category: z.string().min(1).max(50).trim(),
   locationFound: z.string().min(1).max(100).trim(),
   dateFound: z.iso
@@ -73,3 +74,38 @@ export const createSecurityItemSchema = z.object({
 });
 
 export type CreateSecurityItemInput = z.infer<typeof createSecurityItemSchema>;
+
+export const walkInReleaseSchema = z.object({
+  studentFullName: z.string().trim().min(1).max(200),
+  idVerified: z.string().trim().min(1).max(100),
+  contactNumber: z
+    .string()
+    .max(30)
+    .trim()
+    .optional()
+    .transform((value) => value || null)
+    .nullable(),
+  verificationNote: z
+    .string()
+    .max(2000)
+    .trim()
+    .transform((value) => value || null)
+    .nullable()
+    .optional(),
+});
+
+export type WalkInReleaseInput = z.infer<typeof walkInReleaseSchema>;
+
+export const updateSecurityItemStatusSchema = z.object({
+  status: z.enum([ItemStatus.expired, ItemStatus.disposed]),
+  note: z
+    .string()
+    .max(500)
+    .trim()
+    .optional()
+    .transform((value) => value || null),
+});
+
+export type UpdateSecurityItemStatusInput = z.infer<
+  typeof updateSecurityItemStatusSchema
+>;

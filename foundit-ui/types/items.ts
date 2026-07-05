@@ -86,7 +86,7 @@ export interface SecurityItemDetail extends SecurityItemListItem {
 export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {
   pending_report: 'Pending report',
   stored: 'In storage',
-  claimed: 'Claimed',
+  claimed: 'Released',
   expired: 'Expired',
   disposed: 'Disposed',
 };
