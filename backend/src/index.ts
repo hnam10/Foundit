@@ -13,6 +13,7 @@ import usersRouter from './routes/users';
 import adminUsersRouter from './routes/admin/users';
 import errorHandler from './middleware/errorHandler';
 import { startCleanupJob } from './jobs/cleanupUnverifiedUsers';
+import { startExpireRetainedItemsJob } from './jobs/expireRetainedItems';
 import uploadsRouter from './routes/uploads';
 
 // Fail fast if required JWT secrets are missing
@@ -45,4 +46,5 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   startCleanupJob();
+  startExpireRetainedItemsJob();
 });

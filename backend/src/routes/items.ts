@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { ItemStatus, Prisma } from '@prisma/client';
+import { ClaimStatus, ItemStatus, Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
@@ -13,7 +13,9 @@ import {
   updateSecurityItemSchema,
   createSecurityItemSchema,
   walkInReleaseSchema,
+  updateSecurityItemStatusSchema,
   UpdateSecurityItemInput,
+  UpdateSecurityItemStatusInput,
   CreateSecurityItemInput,
   WalkInReleaseInput,
 } from '../validators/items';
@@ -27,6 +29,14 @@ import {
 
 const router = Router();
 const publicItemStatuses = [ItemStatus.stored] as const;
+
+const validItemStatusTransitions: Record<ItemStatus, ItemStatus[]> = {
+  [ItemStatus.pending_report]: [ItemStatus.expired, ItemStatus.disposed],
+  [ItemStatus.stored]: [ItemStatus.expired, ItemStatus.disposed],
+  [ItemStatus.expired]: [ItemStatus.disposed],
+  [ItemStatus.claimed]: [],
+  [ItemStatus.disposed]: [],
+};
 
 const publicItemSelect = {
   itemId: true,
@@ -173,6 +183,9 @@ function buildSecurityItemListWhere(query: {
 
   if (query.status) {
     where.status = query.status;
+  } else {
+    // Default list: inventory still in workflow (excludes released and discarded).
+    where.status = { notIn: [ItemStatus.claimed, ItemStatus.disposed] };
   }
 
   if (query.campusId) {
@@ -356,6 +369,7 @@ router.get(
  * /api/items:
  *   get:
  *     summary: List items for security staff
+ *     description: When status is omitted, released (claimed) and disposed items are excluded.
  *     tags: [Items]
  *     security:
  *       - bearerAuth: []
@@ -637,6 +651,170 @@ router.get(
       }
 
       res.status(200).json(await toSecurityItemDetailDto(item));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/items/{itemId}/status:
+ *   patch:
+ *     summary: Update item inventory status (expire or dispose)
+ *     tags: [Items]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [expired, disposed]
+ *               note:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       '200':
+ *         description: Updated security item detail
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Item not found
+ *       '409':
+ *         description: Invalid transition or item has approved claim
+ */
+router.patch(
+  '/items/:itemId/status',
+  authenticate,
+  requireRole('security', 'admin'),
+  validate(updateSecurityItemStatusSchema),
+  async (req, res, next) => {
+    try {
+      const params = itemParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        sendValidationError(res, params.error.issues);
+        return;
+      }
+
+      const existing = await prisma.item.findUnique({
+        where: { itemId: params.data.itemId },
+        select: {
+          itemId: true,
+          status: true,
+          retentionExpiryDate: true,
+        },
+      });
+
+      if (!existing) {
+        res.status(404).json({
+          code: 'ITEM_NOT_FOUND',
+          message: 'Item not found.',
+        });
+        return;
+      }
+
+      const { status: targetStatus, note } =
+        req.body as UpdateSecurityItemStatusInput;
+
+      const allowedTargets = validItemStatusTransitions[existing.status];
+      if (!allowedTargets.includes(targetStatus)) {
+        const isTerminal =
+          existing.status === ItemStatus.claimed ||
+          existing.status === ItemStatus.disposed;
+        res.status(409).json({
+          code: isTerminal
+            ? 'ITEM_ALREADY_TERMINAL'
+            : 'INVALID_STATUS_TRANSITION',
+          message: isTerminal
+            ? 'This item status can no longer be changed.'
+            : `Cannot change item status from ${existing.status} to ${targetStatus}.`,
+        });
+        return;
+      }
+
+      const approvedClaim = await prisma.claim.findFirst({
+        where: {
+          itemId: existing.itemId,
+          status: ClaimStatus.approved,
+        },
+        select: { claimId: true },
+      });
+
+      if (approvedClaim) {
+        res.status(409).json({
+          code: 'ITEM_HAS_APPROVED_CLAIM',
+          message:
+            'This item has an approved claim awaiting pickup and cannot be expired or disposed.',
+        });
+        return;
+      }
+
+      const rejectionReason =
+        note ??
+        (targetStatus === ItemStatus.expired
+          ? 'Item was marked expired by security.'
+          : 'Item was marked disposed by security.');
+
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.claim.updateMany({
+          where: {
+            itemId: existing.itemId,
+            status: {
+              in: [
+                ClaimStatus.submitted,
+                ClaimStatus.under_review,
+                ClaimStatus.approved,
+              ],
+            },
+          },
+          data: {
+            status: ClaimStatus.rejected,
+            rejectionReason,
+            reviewedBy: req.user!.user_id,
+            reviewedAt: new Date(),
+          },
+        });
+
+        return tx.item.update({
+          where: { itemId: existing.itemId },
+          data: { status: targetStatus },
+          select: securityItemDetailSelect,
+        });
+      });
+
+      await writeAuditLog({
+        actorId: req.user!.user_id,
+        action: 'item_status_updated',
+        entityType: 'item',
+        entityId: updated.itemId,
+        details: {
+          previousStatus: existing.status,
+          nextStatus: targetStatus,
+          note,
+          retentionExpiryDate:
+            existing.retentionExpiryDate?.toISOString() ?? null,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json(await toSecurityItemDetailDto(updated));
     } catch (err) {
       next(err);
     }

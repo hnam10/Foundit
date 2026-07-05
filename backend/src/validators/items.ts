@@ -94,3 +94,17 @@ export const walkInReleaseSchema = z.object({
 });
 
 export type WalkInReleaseInput = z.infer<typeof walkInReleaseSchema>;
+
+export const updateSecurityItemStatusSchema = z.object({
+  status: z.enum([ItemStatus.expired, ItemStatus.disposed]),
+  note: z
+    .string()
+    .max(500)
+    .trim()
+    .optional()
+    .transform((value) => value || null),
+});
+
+export type UpdateSecurityItemStatusInput = z.infer<
+  typeof updateSecurityItemStatusSchema
+>;
