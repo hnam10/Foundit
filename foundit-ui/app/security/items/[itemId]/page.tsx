@@ -16,7 +16,7 @@ import {
   Textarea,
 } from '@chakra-ui/react';
 import { ItemDetailRow } from '@/components/items/ItemDetailField';
-import { ItemDetailImageGallery } from '@/components/items/ItemDetailImageGallery';
+import { DetailImageGallery } from '@/components/DetailImageGallery';
 import { ItemStatusBadge } from '@/components/items/ItemStatusProgress';
 import { Button } from '@/components/ui/Button';
 import { fetchSecurityItem, updateSecurityItem } from '@/lib/api/items';
@@ -396,7 +396,7 @@ export default function SecurityItemDetailPage() {
             )}
           </Stack>
 
-          <ItemDetailImageGallery images={item.images} alt={item.title} />
+          <DetailImageGallery images={item.images} alt={item.title} />
         </Grid>
       </Box>
 
