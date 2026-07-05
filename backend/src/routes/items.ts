@@ -20,7 +20,9 @@ import {
 import {
   buildDescriptionInternal,
   computeRetentionExpiryDate,
+  formatItemDescriptionForResponse,
   itemTitleFromDescription,
+  stripTitlePrefixFromDescription,
 } from '../utils/itemHelpers';
 
 const router = Router();
@@ -214,8 +216,14 @@ async function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
     campusName: item.campus.campusName,
     category: item.category,
     title: item.title,
-    descriptionPublic: item.descriptionPublic,
-    descriptionInternal: item.descriptionInternal,
+    descriptionPublic: formatItemDescriptionForResponse(
+      item.title,
+      item.descriptionPublic
+    ),
+    descriptionInternal: formatItemDescriptionForResponse(
+      item.title,
+      item.descriptionInternal
+    ),
     color: item.color,
     brand: item.brand,
     locationFound: item.locationFound,
@@ -505,12 +513,15 @@ router.post(
       }
 
       const item = await prisma.$transaction(async (tx) => {
+        const title = itemTitleFromDescription(itemDescription, category);
         const created = await tx.item.create({
           data: {
             campusId,
             category,
-            title: itemTitleFromDescription(itemDescription, category),
-            descriptionInternal: buildDescriptionInternal(itemDescription),
+            title,
+            descriptionInternal: buildDescriptionInternal(
+              stripTitlePrefixFromDescription(title, itemDescription)
+            ),
             locationFound,
             dateFound,
             status: ItemStatus.stored,
@@ -829,12 +840,8 @@ router.post(
         return;
       }
 
-      const {
-        studentFullName,
-        idVerified,
-        contactNumber,
-        verificationNote,
-      } = req.body as WalkInReleaseInput;
+      const { studentFullName, idVerified, contactNumber, verificationNote } =
+        req.body as WalkInReleaseInput;
 
       const actor = await prisma.user.findUnique({
         where: { userId: req.user!.user_id },

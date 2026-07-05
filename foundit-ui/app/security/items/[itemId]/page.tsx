@@ -180,8 +180,8 @@ export default function SecurityItemDetailPage() {
         <Text color="red.500" fontSize="md">
           {error || 'Item not found.'}
         </Text>
-        <Button variant="outline" onClick={handleCancel}>
-          Back to items
+        <Button variant="muted" onClick={handleCancel}>
+          Back to List
         </Button>
       </Stack>
     );
@@ -411,7 +411,7 @@ export default function SecurityItemDetailPage() {
           <>
             <Button
               {...actionButtonStyles}
-              variant="outline"
+              variant="muted"
               onClick={handleCancelEdit}
               disabled={saving}
             >
@@ -432,7 +432,7 @@ export default function SecurityItemDetailPage() {
           <>
             <Button
               {...actionButtonStyles}
-              variant="outline"
+              variant="muted"
               onClick={handleCancel}
             >
               Back to List

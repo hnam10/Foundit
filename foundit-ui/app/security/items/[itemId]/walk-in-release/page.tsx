@@ -220,7 +220,7 @@ export default function WalkInReleasePage() {
         contactNumber: form.contactNumber.trim() || null,
         verificationNote: form.verificationNote.trim() || null,
       });
-      router.push(`/security/items/${itemId}`);
+      router.push('/security/items');
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : 'Failed to confirm release.'
@@ -482,14 +482,11 @@ export default function WalkInReleasePage() {
       ) : null}
 
       <Flex justify="flex-end" gap={3} wrap="wrap">
-        <Button variant="muted" onClick={() => router.push('/security/items')}>
-          Cancel
-        </Button>
         <Button
-          variant="outline"
+          variant="muted"
           onClick={() => router.push(`/security/items/${itemId}`)}
         >
-          Back to Item
+          Cancel
         </Button>
         <Button
           variant="danger"
