@@ -244,11 +244,8 @@ export default function WalkInReleasePage() {
         <Text color="red.500" fontSize="md">
           {error || 'Item not found.'}
         </Text>
-        <Button
-          variant="outline"
-          onClick={() => router.push('/security/items')}
-        >
-          Back to items
+        <Button variant="muted" onClick={() => router.push('/security/items')}>
+          Back to List
         </Button>
       </Stack>
     );

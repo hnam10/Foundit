@@ -199,7 +199,7 @@ export default function StoredItemsPage() {
             boxShadow: '0 0 0 2px #009adb',
           }}
         >
-          <option value="">All statuses</option>
+          <option value="">Active items</option>
           {ITEM_STATUSES.map((status) => (
             <option key={status} value={status}>
               {ITEM_STATUS_LABELS[status]}

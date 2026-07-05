@@ -250,7 +250,7 @@ export default function SecurityDashboardPage() {
           icon={<IoBagHandleOutline size={28} />}
         />
         <DashboardMetricCard
-          title="Expiring Soon"
+          title="Retention Expired"
           value={statsLoading ? '—' : '-'}
           subtitle="Items"
           accentColor="green.600"
