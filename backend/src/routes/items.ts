@@ -12,8 +12,10 @@ import {
   publicItemsQuerySchema,
   updateSecurityItemSchema,
   createSecurityItemSchema,
+  walkInReleaseSchema,
   UpdateSecurityItemInput,
   CreateSecurityItemInput,
+  WalkInReleaseInput,
 } from '../validators/items';
 import {
   buildDescriptionInternal,
@@ -757,6 +759,141 @@ router.patch(
           title,
           category,
           dateFound: dateFound.toISOString().slice(0, 10),
+        },
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json(await toSecurityItemDetailDto(updated));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/items/{itemId}/walk-in-release:
+ *   post:
+ *     summary: Release an item to a walk-in student without a prior claim
+ *     tags: [Items]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [studentFullName, idVerified, contactNumber]
+ *             properties:
+ *               studentFullName:
+ *                 type: string
+ *               idVerified:
+ *                 type: string
+ *               contactNumber:
+ *                 type: string
+ *               verificationNote:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       '200':
+ *         description: Updated security item detail
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ *       '404':
+ *         description: Item not found
+ *       '409':
+ *         description: Item is not in storage
+ */
+router.post(
+  '/items/:itemId/walk-in-release',
+  authenticate,
+  requireRole('security', 'admin'),
+  validate(walkInReleaseSchema),
+  async (req, res, next) => {
+    try {
+      const params = itemParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        sendValidationError(res, params.error.issues);
+        return;
+      }
+
+      const {
+        studentFullName,
+        idVerified,
+        contactNumber,
+        verificationNote,
+      } = req.body as WalkInReleaseInput;
+
+      const actor = await prisma.user.findUnique({
+        where: { userId: req.user!.user_id },
+        select: { userId: true, firstName: true, lastName: true },
+      });
+
+      if (!actor) {
+        res.status(401).json({
+          code: 'USER_NOT_FOUND',
+          message: 'Authenticated user not found.',
+        });
+        return;
+      }
+
+      const existing = await prisma.item.findUnique({
+        where: { itemId: params.data.itemId },
+        select: { itemId: true, status: true },
+      });
+
+      if (!existing) {
+        res.status(404).json({
+          code: 'ITEM_NOT_FOUND',
+          message: 'Item not found.',
+        });
+        return;
+      }
+
+      if (existing.status !== ItemStatus.stored) {
+        res.status(409).json({
+          code: 'ITEM_NOT_STORED',
+          message: 'Only items in storage can be released.',
+        });
+        return;
+      }
+
+      const releasedAt = new Date();
+
+      const updated = await prisma.item.update({
+        where: { itemId: existing.itemId },
+        data: { status: ItemStatus.claimed },
+        select: securityItemDetailSelect,
+      });
+
+      await writeAuditLog({
+        actorId: actor.userId,
+        action: 'item_walk_in_released',
+        entityType: 'item',
+        entityId: updated.itemId,
+        details: {
+          releaseType: 'walk_in_no_claim',
+          studentFullName,
+          idVerified,
+          contactNumber,
+          verificationNote: verificationNote ?? null,
+          releasedAt: releasedAt.toISOString(),
+          releasedBy: {
+            userId: actor.userId,
+            name: `${actor.firstName} ${actor.lastName}`.trim(),
+          },
         },
         ipAddress: req.ip,
       });

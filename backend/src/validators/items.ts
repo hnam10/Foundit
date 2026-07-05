@@ -73,3 +73,24 @@ export const createSecurityItemSchema = z.object({
 });
 
 export type CreateSecurityItemInput = z.infer<typeof createSecurityItemSchema>;
+
+export const walkInReleaseSchema = z.object({
+  studentFullName: z.string().min(1).max(200).trim(),
+  idVerified: z.string().min(1).max(100).trim(),
+  contactNumber: z
+    .string()
+    .max(30)
+    .trim()
+    .optional()
+    .transform((value) => value || null)
+    .nullable(),
+  verificationNote: z
+    .string()
+    .max(2000)
+    .trim()
+    .transform((value) => value || null)
+    .nullable()
+    .optional(),
+});
+
+export type WalkInReleaseInput = z.infer<typeof walkInReleaseSchema>;
