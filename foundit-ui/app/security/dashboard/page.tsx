@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Box,
   Flex,
   Grid,
   Heading,
@@ -210,7 +209,7 @@ export default function SecurityDashboardPage() {
               color="gray.800"
               _focusVisible={{
                 outline: 'none',
-                boxShadow: '0 0 0 2px #009adb',
+                boxShadow: '0 0 0 2px {colors.focusRing}',
               }}
             >
               <option value="">All campuses</option>

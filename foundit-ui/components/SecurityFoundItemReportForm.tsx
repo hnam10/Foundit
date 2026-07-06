@@ -5,7 +5,7 @@ import FormTextInput from '@/components/FormTextInput';
 import FoundItemFormShell from '@/components/FoundItemFormShell';
 import SelectInput from '@/components/SelectInput';
 import TextAreaInput from '@/components/TextAreaInput';
-import ImageUploadGallery from '@/components/uploadImage';
+import ImageUploadGallery from '@/components/ImageUploadGallery';
 import SecurityPhonePhotos from '@/components/SecurityPhonePhotos';
 import { Button } from '@/components/ui/Button';
 import { LuCircleAlert } from 'react-icons/lu';

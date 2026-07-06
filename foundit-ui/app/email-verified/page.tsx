@@ -50,7 +50,7 @@ export default function SignupSuccessPage() {
               Welcome
             </Heading>
 
-            <Text mb={12} color="#666666" pt={10}>
+            <Text mb={12} color="fg.muted" pt={10}>
               Your account is now verified.
               <br />
               Please log in to continue.

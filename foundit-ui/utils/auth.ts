@@ -1,4 +1,4 @@
-import { ROLE_HOME, type UserRole } from './routes';
+import { parseRole, ROLE_HOME, type UserRole } from './routes';
 
 export type { UserRole };
 export { ROLE_HOME };
@@ -42,12 +42,7 @@ export function getSessionRole(): UserRole | null {
     return null;
   }
 
-  const value = match.split('=')[1] as UserRole;
-  if (value === 'student' || value === 'security' || value === 'admin') {
-    return value;
-  }
-
-  return null;
+  return parseRole(match.split('=')[1]);
 }
 
 export function getRoleHome(role: UserRole): string {

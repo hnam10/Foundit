@@ -24,7 +24,14 @@ function LoginForm() {
   } = useLoginForm(redirectTo);
 
   return (
+    // A real <form> so Enter submits from either field (and password
+    // managers recognize the login form).
     <Stack
+      as="form"
+      onSubmit={(e: React.FormEvent) => {
+        e.preventDefault();
+        handleLogin();
+      }}
       bg="white"
       p={8}
       my={12}
@@ -35,7 +42,7 @@ function LoginForm() {
       align="stretch"
       padding={85}
     >
-      <Heading fontSize="40px" textAlign="center" color="#1a1a1a">
+      <Heading fontSize="40px" textAlign="center" color="fg">
         Login
       </Heading>
       <Stack gap="20px" alignItems="center" pt={62} pb={62}>
@@ -63,12 +70,12 @@ function LoginForm() {
         />
       </Stack>
       <Button
+        type="submit"
         w="172px"
         h="48px"
         rounded="12px"
         fontSize="16px"
         colorPalette="blue"
-        onClick={handleLogin}
         alignSelf="center"
         disabled={isSubmitting}
         loading={isSubmitting}

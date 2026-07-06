@@ -185,7 +185,7 @@ export default function StoredItemsPage() {
           color="gray.800"
           _focusVisible={{
             outline: 'none',
-            boxShadow: '0 0 0 2px #009adb',
+            boxShadow: '0 0 0 2px {colors.focusRing}',
           }}
         >
           <option value="">All campuses</option>
@@ -211,7 +211,7 @@ export default function StoredItemsPage() {
           color="gray.800"
           _focusVisible={{
             outline: 'none',
-            boxShadow: '0 0 0 2px #009adb',
+            boxShadow: '0 0 0 2px {colors.focusRing}',
           }}
         >
           <option value="">Active items</option>
@@ -233,7 +233,7 @@ export default function StoredItemsPage() {
             borderColor="gray.300"
             _focusVisible={{
               outline: 'none',
-              boxShadow: '0 0 0 2px #009adb',
+              boxShadow: '0 0 0 2px {colors.focusRing}',
             }}
           />
           <Box
