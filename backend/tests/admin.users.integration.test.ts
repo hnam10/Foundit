@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import adminUsersRouter from '../src/routes/admin/users';
 
 const mocks = vi.hoisted(() => ({
-  authUser: { user_id: 'admin-1', role: 'admin' } as
-    | { user_id: string; role: string }
-    | null,
+  authUser: { user_id: 'admin-1', role: 'admin' } as {
+    user_id: string;
+    role: string;
+  } | null,
 }));
 
 vi.mock('../src/middleware/authenticate', () => ({
@@ -85,7 +86,9 @@ describe('admin users routes', () => {
   test('GET /api/admin/users returns 501 because it is not implemented yet', async () => {
     const app = createTestApp();
 
-    const res = await request(app).get('/api/admin/users?role=student&limit=10');
+    const res = await request(app).get(
+      '/api/admin/users?role=student&limit=10'
+    );
 
     expect(res.status).toBe(501);
     expect(res.body.code).toBe('NOT_IMPLEMENTED');

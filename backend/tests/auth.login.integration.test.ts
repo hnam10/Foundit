@@ -155,12 +155,12 @@ describe('POST /api/auth/login', () => {
     vi.mocked(signRefreshToken).mockReturnValueOnce('fake-refresh-token');
     vi.mocked(hashTokenForStorage).mockReturnValueOnce('fake-token-hash');
     vi.mocked(prisma.refreshTokenLog.create).mockResolvedValueOnce({
-        logId: 'log-1',
-        userId: 'user-1',
-        tokenHash: 'fake-token-hash',
-        expiresAt: new Date(),
-        revoked: false,
-        createdAt: new Date(),
+      logId: 'log-1',
+      userId: 'user-1',
+      tokenHash: 'fake-token-hash',
+      expiresAt: new Date(),
+      revoked: false,
+      createdAt: new Date(),
     });
 
     const app = createTestApp();

@@ -28,7 +28,10 @@ vi.mock('../src/lib/r2', () => ({
 }));
 
 vi.mock('@aws-sdk/client-s3', () => ({
-  PutObjectCommand: vi.fn().mockImplementation(function (this: { input: unknown }, input) {
+  PutObjectCommand: vi.fn().mockImplementation(function (
+    this: { input: unknown },
+    input
+  ) {
     this.input = input;
   }),
 }));
@@ -106,7 +109,9 @@ describe('uploads routes', () => {
   });
 
   test('POST /api/uploads/presigned-url returns presigned upload data', async () => {
-    vi.mocked(getSignedUrl).mockResolvedValueOnce('https://fake-upload-url.com');
+    vi.mocked(getSignedUrl).mockResolvedValueOnce(
+      'https://fake-upload-url.com'
+    );
 
     const app = createTestApp();
 

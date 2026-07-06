@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import reportLinksRouter from '../src/routes/reportLinks';
 
 const mocks = vi.hoisted(() => ({
-  authUser: { user_id: 'security-1', role: 'security' } as
-    | { user_id: string; role: string }
-    | null,
+  authUser: { user_id: 'security-1', role: 'security' } as {
+    user_id: string;
+    role: string;
+  } | null,
 }));
 
 vi.mock('../src/middleware/authenticate', () => ({
@@ -218,14 +219,16 @@ describe('report links routes', () => {
 
     const app = createTestApp();
 
-    const res = await request(app).post(`/api/report-links/${token}/submit`).send({
-      title: 'iPhone',
-      description: 'Black iPhone',
-      category: 'Electronics',
-      locationFound: 'Library',
-      dateFound: '2026-07-01',
-      images: [],
-    });
+    const res = await request(app)
+      .post(`/api/report-links/${token}/submit`)
+      .send({
+        title: 'iPhone',
+        description: 'Black iPhone',
+        category: 'Electronics',
+        locationFound: 'Library',
+        dateFound: '2026-07-01',
+        images: [],
+      });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('FORBIDDEN');
@@ -238,14 +241,16 @@ describe('report links routes', () => {
 
     const app = createTestApp();
 
-    const res = await request(app).post(`/api/report-links/${token}/submit`).send({
-      title: 'iPhone',
-      description: 'Black iPhone',
-      category: 'Electronics',
-      locationFound: 'Library',
-      dateFound: '2026-07-01',
-      images: [],
-    });
+    const res = await request(app)
+      .post(`/api/report-links/${token}/submit`)
+      .send({
+        title: 'iPhone',
+        description: 'Black iPhone',
+        category: 'Electronics',
+        locationFound: 'Library',
+        dateFound: '2026-07-01',
+        images: [],
+      });
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('REPORT_LINK_NOT_FOUND');
@@ -269,14 +274,16 @@ describe('report links routes', () => {
 
     const app = createTestApp();
 
-    const res = await request(app).post(`/api/report-links/${token}/submit`).send({
-      title: 'iPhone',
-      description: 'Black iPhone',
-      category: 'Electronics',
-      locationFound: 'Library',
-      dateFound: '2026-07-01',
-      images: [],
-    });
+    const res = await request(app)
+      .post(`/api/report-links/${token}/submit`)
+      .send({
+        title: 'iPhone',
+        description: 'Black iPhone',
+        category: 'Electronics',
+        locationFound: 'Library',
+        dateFound: '2026-07-01',
+        images: [],
+      });
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('REPORT_LINK_USED');
@@ -341,14 +348,16 @@ describe('report links routes', () => {
 
     const app = createTestApp();
 
-    const res = await request(app).post(`/api/report-links/${token}/submit`).send({
-      title: 'iPhone',
-      description: 'Black iPhone',
-      category: 'Electronics',
-      locationFound: 'Library',
-      dateFound: '2026-07-01',
-      images: [],
-    });
+    const res = await request(app)
+      .post(`/api/report-links/${token}/submit`)
+      .send({
+        title: 'iPhone',
+        description: 'Black iPhone',
+        category: 'Electronics',
+        locationFound: 'Library',
+        dateFound: '2026-07-01',
+        images: [],
+      });
 
     expect(res.status).toBe(201);
     expect(res.body.reportId).toBe('report-1');

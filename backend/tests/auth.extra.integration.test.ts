@@ -92,7 +92,9 @@ describe('auth extra routes', () => {
   });
 
   test('POST /api/auth/register returns 409 if email already exists', async () => {
-    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ userId: 'user-1' });
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      userId: 'user-1',
+    });
 
     const app = createTestApp();
 

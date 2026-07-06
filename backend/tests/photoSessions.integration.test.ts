@@ -45,7 +45,10 @@ vi.mock('../src/lib/r2', () => ({
 }));
 
 vi.mock('@aws-sdk/client-s3', () => ({
-  PutObjectCommand: vi.fn().mockImplementation(function (this: { input: unknown }, input) {
+  PutObjectCommand: vi.fn().mockImplementation(function (
+    this: { input: unknown },
+    input
+  ) {
     this.input = input;
   }),
 }));
@@ -243,7 +246,9 @@ describe('photoSessions routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.uploadUrl).toBe('https://fake-upload-url.com');
-    expect(res.body.imageUrl).toBe('reports/550e8400-e29b-41d4-a716-446655440000.png');
+    expect(res.body.imageUrl).toBe(
+      'reports/550e8400-e29b-41d4-a716-446655440000.png'
+    );
     expect(res.body.fileType).toBe('png');
     expect(res.body.fileSizeKb).toBe(500);
   });
@@ -296,7 +301,9 @@ describe('photoSessions routes', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.imageId).toBe('image-1');
-    expect(res.body.imageUrl).toBe('reports/550e8400-e29b-41d4-a716-446655440000.png');
+    expect(res.body.imageUrl).toBe(
+      'reports/550e8400-e29b-41d4-a716-446655440000.png'
+    );
   });
 
   test('GET /api/photo-sessions/:token/images returns 403 if session belongs to another user', async () => {
@@ -327,7 +334,9 @@ describe('photoSessions routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.valid).toBe(true);
     expect(res.body.images).toHaveLength(1);
-    expect(res.body.images[0].previewUrl).toBe('signed-reports/550e8400-e29b-41d4-a716-446655440000.png');
+    expect(res.body.images[0].previewUrl).toBe(
+      'signed-reports/550e8400-e29b-41d4-a716-446655440000.png'
+    );
   });
 
   test('DELETE /api/photo-sessions/:token/images/:imageId returns 204', async () => {

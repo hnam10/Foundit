@@ -5,9 +5,10 @@ import itemsRouter from '../src/routes/items';
 import { ItemStatus } from '@prisma/client';
 
 const mocks = vi.hoisted(() => ({
-  authUser: { user_id: 'security-1', role: 'security' } as
-    | { user_id: string; role: string }
-    | null,
+  authUser: { user_id: 'security-1', role: 'security' } as {
+    user_id: string;
+    role: string;
+  } | null,
 }));
 
 vi.mock('../src/middleware/authenticate', () => ({
@@ -115,9 +116,7 @@ describe('items routes', () => {
   });
 
   test('GET /api/public/items returns public stored items', async () => {
-    vi.mocked(prisma.item.findMany).mockResolvedValueOnce([
-      itemListRow,
-    ]);
+    vi.mocked(prisma.item.findMany).mockResolvedValueOnce([itemListRow]);
 
     const app = createTestApp();
 
@@ -130,7 +129,7 @@ describe('items routes', () => {
     expect(prisma.item.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-           status: { in: [ItemStatus.stored] },
+          status: { in: [ItemStatus.stored] },
         },
       })
     );
