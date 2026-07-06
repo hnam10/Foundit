@@ -12,3 +12,6 @@ export const ROLE_HOME: Record<UserRole, string> = {
   security: '/security/dashboard',
   admin: '/admin/dashboard',
 };
+
+/** Confirmation screen shown after a student submits a claim. */
+export const CLAIM_SUBMITTED_PATH = '/student/claim-item/submitted';

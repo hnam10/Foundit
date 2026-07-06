@@ -59,7 +59,7 @@ describe('useClaimItemForm', () => {
     expect(result.current.notificationPreference).toBe('email');
   });
 
-  it('submits trimmed values and navigates to the student dashboard', async () => {
+  it('submits trimmed values and navigates to the confirmation screen', async () => {
     apiFetchMock.mockResolvedValueOnce({ claimId: 'claim-1' });
     const { result } = renderHook(() => useClaimItemForm());
 
@@ -79,7 +79,7 @@ describe('useClaimItemForm', () => {
         description: 'Black backpack',
       }),
     });
-    expect(pushMock).toHaveBeenCalledWith('/student/dashboard');
+    expect(pushMock).toHaveBeenCalledWith('/student/claim-item/submitted');
     // Stays true through the route transition to block duplicate submits.
     expect(result.current.isSubmitting).toBe(true);
   });

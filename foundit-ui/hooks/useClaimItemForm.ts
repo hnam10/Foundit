@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ApiError, apiFetch } from '@/lib/api/client';
-import { ROLE_HOME } from '@/utils/routes';
+import { CLAIM_SUBMITTED_PATH } from '@/utils/routes';
 import { debugError, debugLog, debugWarn } from '@/utils/debug';
 
 // Backend caps (createClaimSchema): category ≤ 50, description ≤ 2000.
@@ -146,7 +146,7 @@ export function useClaimItemForm() {
       // isSubmitting deliberately stays true: router.push isn't awaited,
       // and re-enabling the button during the transition would allow a
       // duplicate claim. The component unmounts on navigation.
-      router.push(ROLE_HOME.student);
+      router.push(CLAIM_SUBMITTED_PATH);
     } catch (err) {
       if (err instanceof ApiError && err.status > 0) {
         debugWarn('claim-form', `claim rejected by backend (${err.status})`);
