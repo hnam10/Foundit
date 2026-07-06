@@ -27,12 +27,21 @@ export function useSignUpForm() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [agreedToLegal, setAgreedToLegal] = useState(false);
+  const [legalAgreementError, setLegalAgreementError] = useState('');
 
   function handleEmailBlur() {
     setEmailError(validateEmail(email));
   }
+  function handleLegalAgreementChange(checked: boolean) {
+    setAgreedToLegal(checked);
 
+    if (checked) {
+      setLegalAgreementError('');
+    }
+  }
   async function handleSignUp() {
     if (isSubmitting) return;
 
@@ -41,7 +50,8 @@ export function useSignUpForm() {
     const lastError = validateRequired(lastName);
     const passError = validatePassword(password);
     const confirmError = validatePasswordMatch(password, confirmPassword);
-
+    const legalError = validateRequired(agreedToLegal ? 'agreed' : '');
+    setLegalAgreementError(legalError);
     setEmailError(emailValidation);
     setFirstNameError(firstError);
     setLastNameError(lastError);
@@ -53,7 +63,8 @@ export function useSignUpForm() {
       firstError ||
       lastError ||
       passError ||
-      confirmError
+      confirmError ||
+      legalError
     ) {
       return;
     }
@@ -116,5 +127,9 @@ export function useSignUpForm() {
     handleEmailBlur,
     handleSignUp,
     isSubmitting,
+    agreedToLegal,
+    setAgreedToLegal,
+    legalAgreementError,
+    handleLegalAgreementChange,
   };
 }
