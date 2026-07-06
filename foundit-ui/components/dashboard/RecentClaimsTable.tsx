@@ -14,6 +14,11 @@ import { IoImageOutline } from 'react-icons/io5';
 import NextLink from 'next/link';
 import type { SecurityClaimListItem } from '@/types/claims';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
+import {
+  getClaimDisplayStatus,
+  getClaimItemName,
+  claimNeedsSecurityAction,
+} from '@/utils/claimDisplay';
 
 export interface RecentClaimsTableProps {
   claims: SecurityClaimListItem[];
@@ -21,43 +26,8 @@ export interface RecentClaimsTableProps {
   error?: string;
 }
 
-interface ClaimDisplayStatus {
-  label: string;
-  colorPalette: string;
-}
-
-function getClaimDisplayStatus(
-  claim: SecurityClaimListItem
-): ClaimDisplayStatus {
-  if (!claim.itemId && !['rejected', 'picked_up'].includes(claim.status)) {
-    return { label: 'Unmatched', colorPalette: 'purple' };
-  }
-
-  switch (claim.status) {
-    case 'approved':
-      return { label: 'Pending Pickup', colorPalette: 'orange' };
-    case 'picked_up':
-      return { label: 'Returned', colorPalette: 'green' };
-    case 'rejected':
-      return { label: 'Rejected', colorPalette: 'red' };
-    case 'under_review':
-      return { label: 'Under Review', colorPalette: 'blue' };
-    default:
-      return { label: 'Submitted', colorPalette: 'gray' };
-  }
-}
-
-function getClaimItemName(claim: SecurityClaimListItem): string {
-  if (claim.item?.title) return claim.item.title;
-
-  const trimmed = claim.description.trim();
-  if (!trimmed) return 'Lost item claim';
-
-  return trimmed.length > 48 ? `${trimmed.slice(0, 48)}…` : trimmed;
-}
-
 function isActionNeeded(claim: SecurityClaimListItem): boolean {
-  return !['rejected', 'picked_up'].includes(claim.status);
+  return claimNeedsSecurityAction(claim);
 }
 
 function compareClaimsByRecency(

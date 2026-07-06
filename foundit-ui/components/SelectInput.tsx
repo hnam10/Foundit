@@ -68,6 +68,7 @@ export default function SelectInput({
           option text never runs under the chevron (matters most with
           selectWidth="fit-content", where width is intrinsic). */}
       <NativeSelect.Field
+        id={id}
         {...fieldControlStyles}
         value={value}
         onChange={onChange}
@@ -92,8 +93,8 @@ export default function SelectInput({
 
   if (stacked) {
     return (
-      <Field.Root id={id} required={required} invalid={isInvalid} mb={0}>
-        <Field.Label {...fieldLabelStyles} mb={1}>
+      <Field.Root required={required} invalid={isInvalid} mb={0}>
+        <Field.Label {...fieldLabelStyles} mb={1} htmlFor={id}>
           {label}
           <Field.RequiredIndicator color="fg" />
         </Field.Label>
@@ -105,9 +106,9 @@ export default function SelectInput({
   }
 
   return (
-    <Field.Root id={id} required={required} invalid={isInvalid} mb={0}>
+    <Field.Root required={required} invalid={isInvalid} mb={0}>
       <HStack align="flex-start" gap={4} w="full">
-        <Field.Label {...inlineFieldLabelStyles}>
+        <Field.Label {...inlineFieldLabelStyles} htmlFor={id}>
           {label}
           <Field.RequiredIndicator color="fg" />
         </Field.Label>
