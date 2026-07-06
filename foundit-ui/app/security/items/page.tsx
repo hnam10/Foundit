@@ -14,6 +14,7 @@ import {
 } from '@chakra-ui/react';
 import { IoSearch } from 'react-icons/io5';
 import NextLink from 'next/link';
+import { Button as PrimaryButton } from '@/components/ui/Button';
 import { StoredItemCard } from '@/components/items/StoredItemCard';
 import { fetchCampuses, fetchSecurityItems } from '@/lib/api/items';
 import type { Campus, ItemStatus, SecurityItemListItem } from '@/types/items';
@@ -22,7 +23,6 @@ import { ITEM_STATUS_LABELS } from '@/types/items';
 const Select = chakra('select');
 
 const ITEM_STATUSES: ItemStatus[] = [
-  'pending_report',
   'stored',
   'claimed',
   'expired',
@@ -134,20 +134,35 @@ export default function StoredItemsPage() {
 
   return (
     <Stack gap={6}>
-      <Stack gap={2}>
-        <Heading
-          as="h1"
-          fontSize={{ base: '2xl', md: '3xl' }}
-          fontWeight="bold"
-          color="gray.900"
+      <Flex
+        justify="space-between"
+        align={{ base: 'flex-start', md: 'center' }}
+        direction={{ base: 'column', md: 'row' }}
+        gap={4}
+      >
+        <Stack gap={2}>
+          <Heading
+            as="h1"
+            fontSize={{ base: '2xl', md: '3xl' }}
+            fontWeight="bold"
+            color="gray.900"
+          >
+            Stored Items
+          </Heading>
+          <Text fontSize="sm" color="gray.500">
+            Please note that lost items will be stored for 30 days only.
+            Unclaimed items will be disposed of after this period.
+          </Text>
+        </Stack>
+        <PrimaryButton
+          asChild
+          variant="primary"
+          fontWeight="semibold"
+          flexShrink={0}
         >
-          Stored Items
-        </Heading>
-        <Text fontSize="sm" color="gray.500">
-          Please note that lost items will be stored for 30 days only. Unclaimed
-          items will be disposed of after this period.
-        </Text>
-      </Stack>
+          <NextLink href="/security/report-found">+ Add Found Item</NextLink>
+        </PrimaryButton>
+      </Flex>
 
       <Flex
         direction={{ base: 'column', sm: 'row' }}
@@ -199,7 +214,7 @@ export default function StoredItemsPage() {
             boxShadow: '0 0 0 2px {colors.focusRing}',
           }}
         >
-          <option value="">All statuses</option>
+          <option value="">Active items</option>
           {ITEM_STATUSES.map((status) => (
             <option key={status} value={status}>
               {ITEM_STATUS_LABELS[status]}

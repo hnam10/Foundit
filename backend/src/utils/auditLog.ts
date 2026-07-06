@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
+import { logger } from '../lib/logger';
 
 interface AuditLogParams {
   actorId?: string;
@@ -11,10 +12,13 @@ interface AuditLogParams {
 }
 
 // Writes a single audit log entry to the database.
-// Fire-and-forget safe — callers may await or not depending on whether they
-// need confirmation. Errors should be caught by the caller or global handler.
-export async function writeAuditLog(params: AuditLogParams): Promise<void> {
-  await prisma.auditLog.create({
+// Pass a transaction client to include the insert in an existing transaction.
+export async function writeAuditLog(
+  params: AuditLogParams,
+  tx?: Prisma.TransactionClient
+): Promise<void> {
+  const client = tx ?? prisma;
+  const record = await client.auditLog.create({
     data: {
       actorId: params.actorId,
       action: params.action,
@@ -24,4 +28,15 @@ export async function writeAuditLog(params: AuditLogParams): Promise<void> {
       ipAddress: params.ipAddress,
     },
   });
+
+  logger.info(
+    {
+      logId: record.logId,
+      action: params.action,
+      actorId: params.actorId,
+      entityType: params.entityType,
+      entityId: params.entityId,
+    },
+    params.action
+  );
 }

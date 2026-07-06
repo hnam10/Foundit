@@ -117,7 +117,8 @@ src/
 |   ├── emailVerification.ts    # Token generation and expiry helpers
 │   └── username.ts             # Unique username generator
 ├── jobs/
-│   └── cleanupUnverifiedUsers.ts  # Daily cron job to delete unverified accounts
+│   ├── cleanupUnverifiedUsers.ts  # Daily cron job to delete unverified accounts
+│   └── expireRetainedItems.ts     # Daily cron: stored → expired when retention ends
 ├── routes/
 │   ├── health.ts               # GET /api/health
 │   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
@@ -187,7 +188,7 @@ Global API rules:
 | POST   | `/api/claims`                                     | student                | Done   | Submit a lost item claim                                 |
 | GET    | `/api/claims`                                     | student/security/admin | Done   | List claims; student sees own, security/admin can filter |
 | GET    | `/api/claims/:claimId`                            | student/security/admin | Done   | Get claim detail with ownership/authorization checks     |
-| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done   | Transition claim status using existing DB enum           |
+| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done   | Approve/reject and transition claim status               |
 | DELETE | `/api/claims/:claimId`                            | student                | Done   | Cancel/delete own cancellable claim with audit logging   |
 | PATCH  | `/api/claims/:claimId`                            | security/admin         | Done   | Link a stored item to the claim (`itemId` only)          |
 | GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Retrieve match suggestions for a claim                   |
@@ -195,6 +196,8 @@ Global API rules:
 | PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Done   | Confirm or dismiss a match suggestion                    |
 
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
+
+Claim approval requires a linked stored item and updates that item to `claimed` in the same transaction as the claim status update. Rejection requires `rejectionReason`, leaves the linked item status unchanged, and returns the updated claim detail response with the current nested item status.
 
 ### Report Links & Found Item Reports
 
@@ -254,6 +257,16 @@ Report link tokens stay in the URL to match the current database model, but must
 **`GET /api/items/:itemId` response:** list fields plus `descriptionPublic`, `descriptionInternal`, `color`, `brand`, `locationFound`, `foundItemReportId`, `createdAt`, `updatedAt`, `images[]`, `registeredBy`, and `claims[]` (summary with `claimId`, `status`, `studentName`).
 
 Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed`; `DELETE /api/items/:itemId` is reserved for admin correction of erroneous records.
+
+**`PATCH /api/items/:itemId/status` request:**
+
+```json
+{ "status": "expired", "note": "Retention period ended" }
+```
+
+Allowed targets: `expired`, `disposed`. Transitions: `stored → expired|disposed`, `expired → disposed`. Blocked when item is `claimed` or `disposed`. Returns updated item detail; rejects active linked claims in the same transaction.
+
+A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Security should use `disposed` to record physical disposal after expiry.
 
 ### Notifications
 

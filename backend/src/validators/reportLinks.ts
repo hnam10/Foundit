@@ -45,7 +45,8 @@ export const reportImageSchema = z.object({
 });
 
 export const submitFoundItemReportSchema = z.object({
-  itemDescription: z.string().min(1).max(1000).trim(),
+  title: z.string().min(1).max(100).trim(),
+  description: z.string().min(1).max(1000).trim(),
   category: categorySchema,
   locationFound: locationSchema,
   dateFound: z.iso

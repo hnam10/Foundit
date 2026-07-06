@@ -98,7 +98,8 @@ export async function updateSecurityItem(
 
 export interface CreateSecurityItemInput {
   campusId: string;
-  itemDescription: string;
+  title: string;
+  description: string;
   category: string;
   locationFound: string;
   dateFound: string;
@@ -113,6 +114,23 @@ export async function createSecurityItem(
   input: CreateSecurityItemInput
 ): Promise<SecurityItemDetail> {
   return apiFetch<SecurityItemDetail>('/api/items', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export interface WalkInReleaseInput {
+  studentFullName: string;
+  idVerified: string;
+  contactNumber?: string | null;
+  verificationNote?: string | null;
+}
+
+export async function walkInReleaseItem(
+  itemId: string,
+  input: WalkInReleaseInput
+): Promise<SecurityItemDetail> {
+  return apiFetch<SecurityItemDetail>(`/api/items/${itemId}/walk-in-release`, {
     method: 'POST',
     body: JSON.stringify(input),
   });

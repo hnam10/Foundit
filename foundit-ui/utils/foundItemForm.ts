@@ -1,3 +1,4 @@
+export const TITLE_MAX = 100;
 export const DESCRIPTION_MAX = 1000;
 
 export function requiredMsg(label: string): string {
@@ -8,13 +9,6 @@ export function todayISO(): string {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
-
-export function buildItemDescription(
-  itemName: string,
-  description: string
-): string {
-  return [itemName.trim(), description.trim()].filter(Boolean).join('\n\n');
 }
 
 export interface FoundItemFieldValues {
@@ -37,15 +31,11 @@ export function validateFoundItemFields(
   options: FoundItemValidationOptions = {}
 ): Record<string, string> {
   const next: Record<string, string> = {};
-  const itemDescription = buildItemDescription(
-    values.itemName,
-    values.description
-  );
 
   if (!values.itemName.trim()) {
     next.itemName = requiredMsg('Item Name');
-  } else if (values.itemName.trim().length > 100) {
-    next.itemName = 'Item Name must be 100 characters or fewer';
+  } else if (values.itemName.trim().length > TITLE_MAX) {
+    next.itemName = `Item Name must be ${TITLE_MAX} characters or fewer`;
   }
 
   if (!values.category.trim()) {
@@ -74,8 +64,8 @@ export function validateFoundItemFields(
 
   if (!values.description.trim()) {
     next.description = requiredMsg('Description');
-  } else if (itemDescription.length > DESCRIPTION_MAX) {
-    next.description = `Item Name and Description together must be ${DESCRIPTION_MAX} characters or fewer`;
+  } else if (values.description.trim().length > DESCRIPTION_MAX) {
+    next.description = `Description must be ${DESCRIPTION_MAX} characters or fewer`;
   }
 
   return next;
