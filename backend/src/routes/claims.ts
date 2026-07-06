@@ -16,6 +16,7 @@ import {
   claimAndMatchParamsSchema,
   claimParamsSchema,
   createClaimSchema,
+  type CreateClaimInput,
   linkClaimItemSchema,
   listClaimsQuerySchema,
   reviewMatchSuggestionSchema,
@@ -529,6 +530,19 @@ function scoreCandidateItem(
  *                 format: date
  *               locationLost:
  *                 type: string
+ *               images:
+ *                 type: array
+ *                 maxItems: 3
+ *                 items:
+ *                   type: object
+ *                   required: [imageUrl, fileType, fileSizeKb]
+ *                   properties:
+ *                     imageUrl:
+ *                       type: string
+ *                     fileType:
+ *                       type: string
+ *                     fileSizeKb:
+ *                       type: integer
  *     responses:
  *       '201':
  *         description: Claim created
@@ -559,22 +573,34 @@ router.post(
         return;
       }
 
-      const payload = req.body as {
-        category: string;
-        description: string;
-        dateLost?: Date;
-        locationLost?: string;
-      };
-      const claim = await prisma.claim.create({
-        data: {
-          studentId: actor.userId,
-          campusId: actor.campusId,
-          category: payload.category,
-          description: payload.description,
-          dateLost: payload.dateLost,
-          locationLost: payload.locationLost,
-        },
-        select: claimDetailSelect,
+      const payload = req.body as CreateClaimInput;
+      const campusId = actor.campusId;
+      const claim = await prisma.$transaction(async (tx) => {
+        const created = await tx.claim.create({
+          data: {
+            studentId: actor.userId,
+            campusId,
+            category: payload.category,
+            description: payload.description,
+            dateLost: payload.dateLost,
+            locationLost: payload.locationLost,
+          },
+          select: claimDetailSelect,
+        });
+
+        if (payload.images.length > 0) {
+          await tx.itemImage.createMany({
+            data: payload.images.map((image) => ({
+              claimId: created.claimId,
+              imageUrl: image.imageUrl,
+              uploadedBy: actor.userId,
+              fileType: image.fileType,
+              fileSizeKb: image.fileSizeKb,
+            })),
+          });
+        }
+
+        return created;
       });
 
       await writeAuditLog({

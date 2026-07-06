@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ApiError, apiFetch } from '@/lib/api/client';
 import { CLAIM_SUBMITTED_PATH } from '@/utils/routes';
 import { debugError, debugLog, debugWarn } from '@/utils/debug';
+import handleImageUpload from '@/utils/handleImageUpload';
+import { getAccessToken } from '@/utils/auth';
 
 // Backend caps (createClaimSchema): category ≤ 50, description ≤ 2000.
 const DESCRIPTION_MAX = 2000;
@@ -42,10 +44,8 @@ export function useClaimItemForm() {
   const [notificationPreference, setNotificationPreference] =
     useState<NotificationPreference>('email');
   const [additionalInformation, setAdditionalInformation] = useState('');
-  // Fed by the image gallery as raw Files (upload happens at submit time in
-  // the report-found flow). Intentionally NOT uploaded or sent here —
-  // POST /api/claims has no image field yet. Mirror useReportFoundItemForm's
-  // handleImageUpload loop once the backend accepts claim images.
+  // Fed by the image gallery as raw Files; uploaded to R2 at submit time
+  // (same handleImageUpload/presigned-url flow as useReportFoundItemForm).
   const [imageFiles, setImageFiles] = useState<File[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -121,24 +121,43 @@ export function useClaimItemForm() {
     debugLog('claim-form', 'submitting claim', {
       category,
       descriptionLength: description.trim().length,
+      imageFileCount: imageFiles.length,
       droppedStubFields: {
         itemNameLength: itemName.trim().length,
         notificationPreference,
         additionalInformationLength: additionalInformation.trim().length,
-        imageFileCount: imageFiles.length,
       },
     });
 
     setIsSubmitting(true);
     try {
+      const uploadedImages: {
+        imageUrl: string;
+        fileType: string;
+        fileSizeKb: number;
+      }[] = [];
+
+      const accessToken = getAccessToken();
+      if (accessToken) {
+        for (const file of imageFiles) {
+          const result = await handleImageUpload(file, accessToken);
+          uploadedImages.push({
+            imageUrl: result.imageUrl,
+            fileType: result.fileType,
+            fileSizeKb: result.fileSizeKb,
+          });
+        }
+      }
+
       const claim = await apiFetch<{ claimId?: string }>('/api/claims', {
         method: 'POST',
         body: JSON.stringify({
           category: category.trim(),
           description: description.trim(),
-          // NOTE: itemName, notificationPreference, additionalInformation
-          // and imageFiles are intentionally omitted — they are stub fields
-          // with no backend column (see state declarations).
+          images: uploadedImages,
+          // NOTE: itemName, notificationPreference and additionalInformation
+          // are intentionally omitted — they are stub fields with no backend
+          // column (see state declarations).
         }),
       });
 
@@ -152,10 +171,12 @@ export function useClaimItemForm() {
         debugWarn('claim-form', `claim rejected by backend (${err.status})`);
         setSubmitError(messageForStatus(err.status));
       } else {
-        // status 0: config/network failure — apiFetch's message says which.
+        // status 0 (config/network failure): apiFetch's message says which.
+        // A plain Error here means handleImageUpload threw during the
+        // presign/PUT-to-R2 step — fall back to the generic copy.
         debugError('claim-form', 'claim submit threw', err);
         setSubmitError(
-          err instanceof ApiError ? err.message : messageForStatus(401)
+          err instanceof ApiError ? err.message : messageForStatus(0)
         );
       }
       setIsSubmitting(false);

@@ -1,7 +1,7 @@
 # Report Found Item — Flow & Status
 
 > Status doc for the **Report Found Item** feature. Reflects the implementation as
-> of 2026-06-15. Safe to commit/share (unlike the local-only `plan.md` /
+> of 2026-07-06. Safe to commit/share (unlike the local-only `plan.md` /
 > `implementation.md`).
 
 ## 1. What it is
@@ -36,8 +36,9 @@ Route: `app/report-found/[token]/page.tsx` → URL `/report-found/<token>`.
         │
         ▼  Submit
         │     POST /api/report-links/:token/submit          (Bearer + student role, 10/15min)
-        │     body { itemDescription, category, locationFound, dateFound }
-        │     → 201: creates FoundItemReport (finderId = caller), consumes the link
+        │     body { title, description, category, locationFound, dateFound, images[] }
+        │     → 201: creates FoundItemReport + Item (finderId = caller), links any
+        │       uploaded images to the Item via ItemImage, consumes the link
         │     → 4xx mapped to a friendly message (see status map)
         └─ on success → router.push(ROLE_HOME.student)  (/student/dashboard)
 ```
@@ -69,7 +70,7 @@ Backend rules enforced on submit:
 
 | File                                                                                        | Used for                                                             |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `components/uploadImage.tsx` (`ImageUploadGallery`)                                         | Image upload UI (uploads to R2 on select).                           |
+| `components/ImageUploadGallery.tsx`                                                         | Image upload UI (uploads to R2 on select).                           |
 | `hooks/useImageUploadGallery.ts`, `utils/handleImageUpload.ts`, `utils/imageCompression.ts` | Upload pipeline (presign → PUT) + compression.                       |
 | `utils/auth.ts`                                                                             | `getAccessToken` (Bearer), `getLoggedInUser` (identity + role gate). |
 | `hooks/useLoggedInDisplayName.ts`                                                           | Display name for Navbar + Finder/Registrant rows.                    |
@@ -88,22 +89,23 @@ Backend rules enforced on submit:
 
 ## 4. Field mapping (form → backend)
 
-`submitFoundItemReportSchema` accepts exactly: `itemDescription` (≤1000),
-`category` (≤50), `locationFound` (≤100), `dateFound` (YYYY-MM-DD, not future).
+`submitFoundItemReportSchema` accepts: `title` (≤100), `description` (≤1000),
+`category` (≤50), `locationFound` (≤100), `dateFound` (YYYY-MM-DD, not future),
+`images[]` (≤10, each `{ imageUrl, fileType, fileSizeKb }`).
 `timeFound` / `additionalNotes` are valid optional columns but **not exposed**
 (the design omits them).
 
-| Form field                      | Required | Sent as                   | Notes                                                                                                                                |
-| ------------------------------- | -------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Item Name                       | ✅       | part of `itemDescription` | No DB column → folded into the description's first line (no data lost).                                                              |
-| Category                        | ✅       | `category`                | Free-text column; dropdown is a product choice (`constants/categories.ts`).                                                          |
-| Date                            | ✅       | `dateFound`               | Native date input, `max=today`, not-future validated.                                                                                |
-| Contact Information             | ✅       | — (**STUB**, not sent)    | No report column (only `User.phone`, a profile field).                                                                               |
-| Location                        | ✅       | `locationFound`           |                                                                                                                                      |
-| Campus                          | ✅       | — (**STUB**, not sent)    | `campusId` exists on `report_link`/`user`/`item` and is **derived + validated from the link** server-side; the picker is decorative. |
-| Image                           | optional | — (not linked)            | Uploads to R2 but the submit schema has no image field → orphaned.                                                                   |
-| Description                     | ✅       | `itemDescription`         | Combined `Item Name + Description` validated against the 1000 cap.                                                                   |
-| Finder / Registrant (read-only) | —        | —                         | Both fall back to the logged-in user; the link carries no separate identity.                                                         |
+| Form field                      | Required | Sent as                | Notes                                                                                                                                |
+| ------------------------------- | -------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Item Name                       | ✅       | `title`                | Route folds `title` + `description` into the report/item's internal description column server-side.                                  |
+| Category                        | ✅       | `category`             | Free-text column; dropdown is a product choice (`constants/categories.ts`).                                                          |
+| Date                            | ✅       | `dateFound`            | Native date input, `max=today`, not-future validated.                                                                                |
+| Contact Information             | ✅       | — (**STUB**, not sent) | No report column (only `User.phone`, a profile field).                                                                               |
+| Location                        | ✅       | `locationFound`        |                                                                                                                                      |
+| Campus                          | ✅       | — (**STUB**, not sent) | `campusId` exists on `report_link`/`user`/`item` and is **derived + validated from the link** server-side; the picker is decorative. |
+| Image                           | optional | `images[]`             | Uploaded to R2 on select; submitted keys are linked to the created `Item` via `ItemImage` in the same transaction.                   |
+| Description                     | ✅       | `description`          |                                                                                                                                      |
+| Finder / Registrant (read-only) | —        | —                      | Both fall back to the logged-in user; the link carries no separate identity.                                                         |
 
 ## 5. Current status
 
@@ -123,7 +125,7 @@ Backend rules enforced on submit:
 
 ## 6. Known gaps / risks
 
-1. **Images never linked to the report** — submit schema has no image field, so uploaded R2 objects are orphaned. Needs backend to accept image refs (+ create `ItemImage`).
+1. ~~**Images never linked to the report**~~ — **Done**. Submit schema accepts `images[]`; the route creates `ItemImage` rows (`itemId`) in the same transaction as the report/item.
 2. **No R2 cleanup** + the gallery's remove doesn't delete from R2 → orphans accumulate.
 3. **Immediate upload is fragile** — access token lives **15 min** with no refresh; uploads 401 if the user lingers.
 4. **R2 bucket has no CORS policy** for `http://localhost:3000` → browser PUT is blocked locally until a CORS policy is added.
@@ -173,6 +175,6 @@ report link token `dev-sample-token-abc123` (Newnham, 7-day expiry).
 
 ## 8. Future work
 
-- Backend: accept image refs on submit; consider a contact column or drop the field; `GET /api/report-links` list for security.
-- Frontend: when backend supports it, wire `imageRefs` into the submit body (one line in the hook); resolve campus name on report form; align stubs to reality (Campus read-only, drop Contact/Registrant).
+- Backend: consider a contact column or drop the field; `GET /api/report-links` list for security; R2 lifecycle rule/cleanup for removed or orphaned images.
+- Frontend: resolve campus name on report form; align stubs to reality (Campus read-only, drop Contact/Registrant).
 - Infra: R2 CORS policy for dev origins; R2 lifecycle rule to reap orphaned `reports/` objects.
