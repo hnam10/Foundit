@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="Seneca FoundIt">
+  <defs>
+    <linearGradient id="foundit-bg" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C53030"/>
+      <stop offset="1" stop-color="#E53E3E"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="32" height="32" rx="8" fill="url(#foundit-bg)"/>
+
+  <!-- Lens -->
+  <circle cx="13.25" cy="13.25" r="5.75" stroke="#FFFFFF" stroke-width="2.6" fill="none"/>
+
+  <!-- Found item inside the lens -->
+  <circle cx="13.25" cy="13.25" r="2.1" fill="#FFFFFF"/>
+
+  <!-- Handle -->
+  <path
+    d="M17.4 17.4L22.8 22.8"
+    stroke="#FFFFFF"
+    stroke-width="2.8"
+    stroke-linecap="round"
+  />
+</svg>
