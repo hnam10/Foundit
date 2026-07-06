@@ -1009,7 +1009,7 @@ router.patch(
       }
 
       const updated = await prisma.$transaction(async (tx) => {
-        if (status === ClaimStatus.picked_up && claim.itemId) {
+        if (status === ClaimStatus.approved && claim.itemId) {
           const item = await tx.item.findUnique({
             where: { itemId: claim.itemId },
             select: { itemId: true, status: true },
@@ -1049,9 +1049,25 @@ router.patch(
           select: claimDetailSelect,
         });
 
-        await tx.notification.create({
+        const notification = await tx.notification.create({
           data: createClaimStatusNotificationInput(nextClaim, status),
         });
+
+        await writeAuditLog(
+          {
+            actorId: actor.userId,
+            action: 'claim_notification_sent',
+            entityType: 'notification',
+            entityId: notification.notificationId,
+            details: {
+              claimId: nextClaim.claimId,
+              recipientId: nextClaim.studentId,
+              claimStatus: status,
+            },
+            ipAddress: req.ip,
+          },
+          tx
+        );
 
         return nextClaim;
       });
@@ -1074,7 +1090,7 @@ router.patch(
       if (err instanceof Error && err.name === 'LINKED_ITEM_NOT_STORED') {
         res.status(409).json({
           code: 'LINKED_ITEM_NOT_STORED',
-          message: 'The linked item must still be stored before pickup.',
+          message: 'The linked item must still be stored before approval.',
         });
         return;
       }

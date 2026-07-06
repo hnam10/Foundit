@@ -7,7 +7,7 @@ import { CAMPUSES } from '@/constants/campuses';
 import handleImageUpload from '@/utils/handleImageUpload';
 import { todayISO, validateFoundItemFields } from '@/utils/foundItemForm';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+import { API_BASE } from '@/lib/api/client';
 
 const DEFAULT_CAMPUS = CAMPUSES[0].name;
 

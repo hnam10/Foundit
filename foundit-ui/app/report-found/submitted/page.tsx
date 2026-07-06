@@ -56,11 +56,11 @@ export default function ReportSubmitted() {
               </Heading>
 
               <Stack gap={1} align="center" px={10}>
-                <Text color="#666666">
+                <Text color="fg.muted">
                   Your found item report has been submitted.
                 </Text>
 
-                <Text color="#666666">
+                <Text color="fg.muted">
                   Thank you for taking the time to help return lost items to
                   their owners.
                 </Text>

@@ -53,7 +53,7 @@ export default function NotificationCard({
             as="a"
             fontSize="sm"
             fontWeight="semibold"
-            color="#1a1a1a"
+            color="fg"
             textDecoration="underline"
           >
             {title}

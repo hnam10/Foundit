@@ -1,6 +1,4 @@
-import { authFetch, parseApiError } from '@/lib/api/client';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+import { apiFetch } from '@/lib/api/client';
 
 export interface CreateReportLinkResponse {
   linkId: string;
@@ -25,15 +23,8 @@ export async function createReportLink(
     body.expiresInMinutes = params.expiresInMinutes;
   }
 
-  const res = await authFetch(`${API_BASE}/api/report-links`, {
+  return apiFetch<CreateReportLinkResponse>('/api/report-links', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-
-  if (!res.ok) {
-    throw new Error(await parseApiError(res));
-  }
-
-  return res.json() as Promise<CreateReportLinkResponse>;
 }

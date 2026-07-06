@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
+import { logger } from '../lib/logger';
 
 interface AuditLogParams {
   actorId?: string;
@@ -17,7 +18,7 @@ export async function writeAuditLog(
   tx?: Prisma.TransactionClient
 ): Promise<void> {
   const client = tx ?? prisma;
-  await client.auditLog.create({
+  const record = await client.auditLog.create({
     data: {
       actorId: params.actorId,
       action: params.action,
@@ -27,4 +28,15 @@ export async function writeAuditLog(
       ipAddress: params.ipAddress,
     },
   });
+
+  logger.info(
+    {
+      logId: record.logId,
+      action: params.action,
+      actorId: params.actorId,
+      entityType: params.entityType,
+      entityId: params.entityId,
+    },
+    params.action
+  );
 }

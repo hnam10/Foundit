@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_BASE } from '@/lib/api/client';
 import {
   validateRequired,
   validatePassword,
@@ -9,12 +10,9 @@ import {
   validateEmail,
 } from '@/utils/validation';
 
-type Role = 'student' | 'security';
-
 export function useSignUpForm() {
   const router = useRouter();
 
-  const [role, setRole] = useState<Role>('student');
   const [email, setEmail] = useState('');
 
   const [firstName, setFirstName] = useState('');
@@ -59,21 +57,18 @@ export function useSignUpForm() {
     }
     setIsSubmitting(true);
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            firstName,
-            lastName,
-          }),
-        }
-      );
+      const response = await fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          firstName,
+          lastName,
+        }),
+      });
 
       const result = await response.json();
 
