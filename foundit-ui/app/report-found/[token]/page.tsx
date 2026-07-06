@@ -410,11 +410,11 @@ function ReportForm({
           required
           options={CAMPUSES.map((c) => c.name)}
           placeholder="Select a campus"
-          value={form.campus}
-          error={form.errors.campus}
+          value={form.campusId}
+          error={form.errors.campusId}
           onChange={(e) => {
-            form.setCampus(e.target.value);
-            form.clearError('campus');
+            form.setCampusId(e.target.value);
+            form.clearError('campusId');
           }}
         />
 
