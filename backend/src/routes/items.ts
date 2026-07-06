@@ -796,7 +796,7 @@ router.patch(
         res.status(409).json({
           code: 'ITEM_HAS_APPROVED_CLAIM',
           message:
-            'This item has an approved claim awaiting pickup and cannot be expired or disposed.',
+            'This item has an approved claim and cannot be expired or disposed.',
         });
         return;
       }
