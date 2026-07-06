@@ -2,6 +2,8 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, apiFetch } from '@/lib/api/client';
 import { useClaimItemForm } from '@/hooks/useClaimItemForm';
+import { getAccessToken } from '@/utils/auth';
+import handleImageUpload from '@/utils/handleImageUpload';
 
 const pushMock = vi.fn();
 const backMock = vi.fn();
@@ -15,7 +17,16 @@ vi.mock('@/lib/api/client', async (importOriginal) => {
   return { ...actual, apiFetch: vi.fn() };
 });
 
+vi.mock('@/utils/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/auth')>();
+  return { ...actual, getAccessToken: vi.fn() };
+});
+
+vi.mock('@/utils/handleImageUpload', () => ({ default: vi.fn() }));
+
 const apiFetchMock = vi.mocked(apiFetch);
+const getAccessTokenMock = vi.mocked(getAccessToken);
+const handleImageUploadMock = vi.mocked(handleImageUpload);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -77,11 +88,69 @@ describe('useClaimItemForm', () => {
       body: JSON.stringify({
         category: 'Electronics',
         description: 'Black backpack',
+        images: [],
       }),
     });
     expect(pushMock).toHaveBeenCalledWith('/student/claim-item/submitted');
     // Stays true through the route transition to block duplicate submits.
     expect(result.current.isSubmitting).toBe(true);
+  });
+
+  it('uploads staged images to R2 and includes them in the claim payload', async () => {
+    getAccessTokenMock.mockReturnValue('token-123');
+    handleImageUploadMock.mockResolvedValueOnce({
+      imageUrl: 'reports/abc.jpg',
+      fileType: 'jpg',
+      fileSizeKb: 120,
+    });
+    apiFetchMock.mockResolvedValueOnce({ claimId: 'claim-1' });
+    const { result } = renderHook(() => useClaimItemForm());
+    const file = new File(['x'], 'proof.jpg', { type: 'image/jpeg' });
+
+    act(() => {
+      result.current.setCategory('Electronics');
+      result.current.setItemName('MacBook Pro');
+      result.current.setDescription('Black backpack');
+      result.current.setImageFiles([file]);
+    });
+    await act(() => result.current.handleSubmit());
+
+    expect(handleImageUploadMock).toHaveBeenCalledWith(file, 'token-123');
+    expect(apiFetchMock).toHaveBeenCalledWith('/api/claims', {
+      method: 'POST',
+      body: JSON.stringify({
+        category: 'Electronics',
+        description: 'Black backpack',
+        images: [
+          { imageUrl: 'reports/abc.jpg', fileType: 'jpg', fileSizeKb: 120 },
+        ],
+      }),
+    });
+  });
+
+  it('skips uploading when there is no access token', async () => {
+    getAccessTokenMock.mockReturnValue(null);
+    apiFetchMock.mockResolvedValueOnce({ claimId: 'claim-1' });
+    const { result } = renderHook(() => useClaimItemForm());
+    const file = new File(['x'], 'proof.jpg', { type: 'image/jpeg' });
+
+    act(() => {
+      result.current.setCategory('Electronics');
+      result.current.setItemName('MacBook Pro');
+      result.current.setDescription('Black backpack');
+      result.current.setImageFiles([file]);
+    });
+    await act(() => result.current.handleSubmit());
+
+    expect(handleImageUploadMock).not.toHaveBeenCalled();
+    expect(apiFetchMock).toHaveBeenCalledWith('/api/claims', {
+      method: 'POST',
+      body: JSON.stringify({
+        category: 'Electronics',
+        description: 'Black backpack',
+        images: [],
+      }),
+    });
   });
 
   it('maps backend statuses to user-facing copy', async () => {
