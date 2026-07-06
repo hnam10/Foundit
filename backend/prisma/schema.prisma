@@ -125,9 +125,38 @@ model User {
   notifications        Notification[]
   auditLogs            AuditLog[]
   refreshTokenLogs     RefreshTokenLog[]
+  photoUploadSessions  PhotoUploadSession[] @relation("PhotoSessionCreatedBy")
 
   @@index([campusId])
   @@map("user")
+}
+
+model PhotoUploadSession {
+  sessionId String   @id @default(uuid()) @db.Uuid @map("session_id")
+  token     String   @unique @db.VarChar(255)
+  createdBy String   @db.Uuid @map("created_by")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  creator User               @relation("PhotoSessionCreatedBy", fields: [createdBy], references: [userId])
+  images  PhotoSessionImage[]
+
+  @@index([createdBy])
+  @@map("photo_upload_session")
+}
+
+model PhotoSessionImage {
+  imageId    String   @id @default(uuid()) @db.Uuid @map("image_id")
+  sessionId  String   @db.Uuid @map("session_id")
+  imageUrl   String   @db.VarChar(500) @map("image_url")
+  fileType   String   @db.VarChar(10) @map("file_type")
+  fileSizeKb Int      @map("file_size_kb")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  session PhotoUploadSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("photo_session_image")
 }
 
 model ReportLink {

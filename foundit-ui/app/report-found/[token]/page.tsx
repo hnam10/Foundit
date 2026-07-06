@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
   Button,
@@ -17,7 +17,7 @@ import Footer from '@/components/Footer';
 import FormTextInput from '@/components/FormTextInput';
 import SelectInput from '@/components/SelectInput';
 import TextAreaInput from '@/components/TextAreaInput';
-import ImageUploadGallery from '@/components/uploadImage';
+import ImageUploadGallery from '@/components/ImageUploadGallery';
 import { LuCircleAlert } from 'react-icons/lu';
 import { CATEGORIES } from '@/constants/categories';
 import { CAMPUSES } from '@/constants/campuses';
@@ -25,14 +25,14 @@ import { useReportFoundItemForm } from '@/hooks/useReportFoundItemForm';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
 import { getAccessToken, getLoggedInUser } from '@/utils/auth';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+import { API_BASE } from '@/lib/api/client';
 
 // ─── NOTES FOR THE TEAM ──────────────────────────────────────────────────────
 // Wired to existing teammate utils:
 //   • utils/auth.ts        → getAccessToken (upload + submit Bearer),
 //                            getLoggedInUser (identity rows + student gate)
 //   • constants/campuses.ts→ CAMPUSES (Campus stub options)
-//   • components/uploadImage.tsx (ImageUploadGallery) + its hook/util chain
+//   • components/ImageUploadGallery.tsx (ImageUploadGallery) + its hook/util chain
 //
 // Still stubbed / needs backend work (kept UI-only for now):
 //   1. Contact Information + Campus — rendered for design parity but NOT sent.
@@ -41,15 +41,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 //      • Campus: campusId exists on report_link/user/item (not on the report).
 //        The submit route already DERIVES + validates it from the link, so this
 //        picker is display-only. See the hook's STUB FIELDS note.
-//   2. Finder / Registrant rows — both fall back to the logged-in user. The link
-//      carries no finder identity, and the backend records the submitter as the
-//      finder. Decide the real source (e.g. link should carry the finder name).
+//   2. Finder / Registrant rows — Finder is the logged-in student; Registrant is
+//      the security staff who generated the report link (from validate API).
 //   3. Campus name can't be resolved from validate().campusId — that's a UUID,
 //      but constants/campuses.ts uses slug ids. Needs a campuses lookup endpoint
 //      to display the link's actual campus.
-//   4. Images are uploaded to R2 on select but never linked to the report (the
-//      submit schema has no image field) → orphaned objects. Also needs an R2
-//      CORS policy for http://localhost:3000 before uploads work locally.
+//   4. Images are uploaded to R2 on submit and linked to the created item.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ValidateReason = 'available' | 'not_found' | 'used' | 'expired';
@@ -60,6 +57,10 @@ interface ValidateResult {
   campusId: string | null;
   expiresAt?: string;
   usedAt?: string;
+  registrant?: {
+    firstName: string;
+    lastName: string;
+  } | null;
 }
 
 type LinkState =
@@ -69,9 +70,27 @@ type LinkState =
 
 export default function ReportFoundItemPage() {
   const params = useParams<{ token: string }>();
+  const router = useRouter();
   const token = params?.token ?? '';
   const displayName = useLoggedInDisplayName('');
   const [linkState, setLinkState] = useState<LinkState>({ status: 'loading' });
+  const accessToken = getAccessToken();
+
+  useEffect(() => {
+    if (
+      linkState.status !== 'ready' ||
+      linkState.result.reason !== 'available'
+    ) {
+      return;
+    }
+    if (getAccessToken()) {
+      return;
+    }
+
+    router.replace(
+      `/login?redirect=${encodeURIComponent(`/report-found/${token}`)}`
+    );
+  }, [linkState, token, router]);
 
   useEffect(() => {
     let active = true;
@@ -124,9 +143,18 @@ export default function ReportFoundItemPage() {
         )}
 
       {linkState.status === 'ready' &&
-        linkState.result.reason === 'available' && (
-          <ReportForm token={token} displayName={displayName} />
-        )}
+        linkState.result.reason === 'available' &&
+        (accessToken ? (
+          <ReportForm
+            token={token}
+            finderName={displayName}
+            registrantName={formatPersonName(linkState.result.registrant)}
+          />
+        ) : (
+          <Flex align="center" justify="center" py={20} w="full">
+            <Spinner size="lg" color="blue.500" />
+          </Flex>
+        ))}
     </PageShell>
   );
 }
@@ -213,7 +241,7 @@ function ReadonlyRow({ label, value }: { label: string; value: string }) {
         flexShrink={0}
         fontSize="1rem"
         fontWeight="semibold"
-        color="#1a1a1a"
+        color="fg"
       >
         {label}
       </Text>
@@ -239,19 +267,28 @@ function MessageCard({ title, body }: { title: string; body: string }) {
       <Heading size="md" color="gray.900">
         {title}
       </Heading>
-      <Text fontSize="sm" color="#666666">
+      <Text fontSize="sm" color="fg.muted">
         {body}
       </Text>
     </Stack>
   );
 }
 
+function formatPersonName(
+  person?: { firstName: string; lastName: string } | null
+): string {
+  if (!person) return '';
+  return `${person.firstName} ${person.lastName}`.trim();
+}
+
 function ReportForm({
   token,
-  displayName,
+  finderName,
+  registrantName,
 }: {
   token: string;
-  displayName: string;
+  finderName: string;
+  registrantName: string;
 }) {
   const form = useReportFoundItemForm(token);
   // Teammate auth utils (utils/auth.ts): token drives upload/submit; the user
@@ -274,27 +311,19 @@ function ReportForm({
         <Heading size="lg" color="gray.900">
           Report Found Item
         </Heading>
-        <Text fontSize="sm" color="#666666" mt={1}>
+        <Text fontSize="sm" color="fg.muted" mt={1}>
           Please provide as much detail as possible to help with identification.
         </Text>
       </Box>
 
       {/*
-        Read-only identity rows from the design. Registrant is the logged-in
-        student. Finder has no data source yet — the report link only carries a
-        campus, and the backend records the submitter as the finder — so it
-        falls back to the logged-in user. Wire to real link data once available.
+        Read-only identity rows from the design. Finder is the logged-in student;
+        registrant is the security staff who generated the report link.
       */}
       <Stack gap={2}>
-        <ReadonlyRow label="Finder" value={displayName || '—'} />
-        <ReadonlyRow label="Registrant" value={displayName || '—'} />
+        <ReadonlyRow label="Finder" value={finderName || '—'} />
+        <ReadonlyRow label="Registrant" value={registrantName || '—'} />
       </Stack>
-
-      {!accessToken && (
-        <Text fontSize="sm" color="red.600">
-          You must be logged in as a student to submit this report.
-        </Text>
-      )}
 
       {accessToken && !isStudent && (
         <Text fontSize="sm" color="red.600">
@@ -392,7 +421,7 @@ function ReportForm({
         {/* Image + Description span full width with the label above (design). */}
         {accessToken && (
           <Box>
-            <Text mb={2} fontSize="1rem" fontWeight="semibold" color="#1a1a1a">
+            <Text mb={2} fontSize="1rem" fontWeight="semibold" color="fg">
               Image
             </Text>
             <ImageUploadGallery
@@ -429,7 +458,7 @@ function ReportForm({
       <HStack justify="center" gap={4} pt={2}>
         <Button
           variant="outline"
-          borderColor="#D9D9D9"
+          borderColor="border.input"
           w="140px"
           onClick={form.handleCancel}
           disabled={form.isSubmitting}
@@ -439,6 +468,7 @@ function ReportForm({
         <Button
           colorPalette="blue"
           w="140px"
+          disabled={form.isSubmitting}
           loading={form.isSubmitting}
           loadingText="Submitting..."
           onClick={form.handleSubmit}

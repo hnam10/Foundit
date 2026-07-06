@@ -117,7 +117,8 @@ src/
 |   ├── emailVerification.ts    # Token generation and expiry helpers
 │   └── username.ts             # Unique username generator
 ├── jobs/
-│   └── cleanupUnverifiedUsers.ts  # Daily cron job to delete unverified accounts
+│   ├── cleanupUnverifiedUsers.ts  # Daily cron job to delete unverified accounts
+│   └── expireRetainedItems.ts     # Daily cron: stored → expired when retention ends
 ├── routes/
 │   ├── health.ts               # GET /api/health
 │   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
@@ -153,7 +154,7 @@ Global API rules:
 | ------ | ------------------------ | ---- | ------ | ----------------------------------------------------------- |
 | POST   | `/api/auth/register`     | —    | Done   | Self-register a student or security account                 |
 | POST   | `/api/auth/login`        | —    | Done   | Verify email + password, return JWT access & refresh tokens |
-| POST   | `/api/auth/refresh`      | —    | Stub   | Exchange refresh token for a new access token               |
+| POST   | `/api/auth/refresh`      | —    | Done   | Exchange refresh token for a new access token               |
 | POST   | `/api/auth/logout`       | —    | Stub   | Revoke refresh token                                        |
 | GET    | `/api/auth/verify-email` | —    | Done   | Verify email address via token link                         |
 
@@ -187,7 +188,7 @@ Global API rules:
 | POST   | `/api/claims`                                     | student                | Done   | Submit a lost item claim                                 |
 | GET    | `/api/claims`                                     | student/security/admin | Done   | List claims; student sees own, security/admin can filter |
 | GET    | `/api/claims/:claimId`                            | student/security/admin | Done   | Get claim detail with ownership/authorization checks     |
-| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done   | Transition claim status using existing DB enum           |
+| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done   | Approve/reject and transition claim status               |
 | DELETE | `/api/claims/:claimId`                            | student                | Done   | Cancel/delete own cancellable claim with audit logging   |
 | PATCH  | `/api/claims/:claimId`                            | security/admin         | Done   | Link a stored item to the claim (`itemId` only)          |
 | GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Retrieve match suggestions for a claim                   |
@@ -196,11 +197,13 @@ Global API rules:
 
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
 
+Claim approval requires a linked stored item and updates that item to `claimed` in the same transaction as the claim status update. Rejection requires `rejectionReason`, leaves the linked item status unchanged, and returns the updated claim detail response with the current nested item status.
+
 ### Report Links & Found Item Reports
 
 | Method | Path                                       | Auth           | Status  | Description                                                         |
 | ------ | ------------------------------------------ | -------------- | ------- | ------------------------------------------------------------------- |
-| POST   | `/api/report-links`                        | security/admin | Planned | Generate a one-time QR report link token                            |
+| POST   | `/api/report-links`                        | security/admin | Done    | Generate a one-time QR report link token                            |
 | GET    | `/api/report-links`                        | security/admin | Planned | List report links generated for relevant campus scope               |
 | GET    | `/api/report-links/:token/validate`        | —              | Done    | Validate a token and return availability status                     |
 | POST   | `/api/report-links/:token/submit`          | student        | Done    | Submit a found item report and atomically consume token             |
@@ -210,21 +213,60 @@ Claim cancellation uses `DELETE /api/claims/:claimId` because the original datab
 
 Report link tokens stay in the URL to match the current database model, but must be treated as one-time secrets: high entropy, rate-limited validation/submission, `Cache-Control: no-store`, redacted logs, and atomic consume on submit.
 
+### Campuses
+
+| Method | Path            | Auth | Status | Description               |
+| ------ | --------------- | ---- | ------ | ------------------------- |
+| GET    | `/api/campuses` | —    | Done   | List campuses for filters |
+
 ### Items
 
 | Method | Path                        | Auth           | Status  | Description                                              |
 | ------ | --------------------------- | -------------- | ------- | -------------------------------------------------------- |
 | GET    | `/api/public/items`         | —              | Done    | Browse public-safe stored items with optional filters    |
 | GET    | `/api/items/category-stats` | —              | Done    | Public item counts per category                          |
+| GET    | `/api/items`                | security/admin | Done    | List items with filters and cursor pagination            |
+| GET    | `/api/items/:itemId`        | security/admin | Done    | Get item detail (internal fields, images, linked claims) |
 | POST   | `/api/items/batch`          | security/admin | Planned | Batch status update for items                            |
 | POST   | `/api/items`                | security/admin | Planned | Register a found item into inventory                     |
-| GET    | `/api/items`                | security/admin | Planned | List items with filters                                  |
-| GET    | `/api/items/:itemId`        | security/admin | Planned | Get item detail                                          |
 | PATCH  | `/api/items/:itemId`        | security/admin | Planned | Update item fields; does not modify status               |
 | DELETE | `/api/items/:itemId`        | admin          | Planned | Permanently delete only erroneous records with audit log |
 | PATCH  | `/api/items/:itemId/status` | security/admin | Planned | Transition item lifecycle status                         |
 
+**`GET /api/items` response:**
+
+```json
+{
+  "data": [
+    {
+      "itemId": "uuid",
+      "campusId": "uuid",
+      "campusName": "Newnham",
+      "category": "Electronics",
+      "title": "Phone",
+      "dateFound": "2026-01-20T00:00:00.000Z",
+      "status": "stored",
+      "retentionExpiryDate": "2026-02-19T00:00:00.000Z",
+      "imageUrl": "https://..."
+    }
+  ],
+  "nextCursor": "uuid-or-null"
+}
+```
+
+**`GET /api/items/:itemId` response:** list fields plus `descriptionPublic`, `descriptionInternal`, `color`, `brand`, `locationFound`, `foundItemReportId`, `createdAt`, `updatedAt`, `images[]`, `registeredBy`, and `claims[]` (summary with `claimId`, `status`, `studentName`).
+
 Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed`; `DELETE /api/items/:itemId` is reserved for admin correction of erroneous records.
+
+**`PATCH /api/items/:itemId/status` request:**
+
+```json
+{ "status": "expired", "note": "Retention period ended" }
+```
+
+Allowed targets: `expired`, `disposed`. Transitions: `stored → expired|disposed`, `expired → disposed`. Blocked when item is `claimed` or `disposed`. Returns updated item detail; rejects active linked claims in the same transaction.
+
+A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Security should use `disposed` to record physical disposal after expiry.
 
 ### Notifications
 

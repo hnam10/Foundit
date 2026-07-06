@@ -1,65 +1,139 @@
 'use client';
 
-import { Box, Flex, Image, Stack, Text } from '@chakra-ui/react';
-import type { StoredItem } from '@/constants/mockStoredItems';
-import { ItemStatusProgress } from './ItemStatusProgress';
+import { Badge, Box, Flex, HStack, Image, Stack, Text } from '@chakra-ui/react';
+import { IoCalendarOutline, IoImageOutline } from 'react-icons/io5';
+import type { ItemStatus, SecurityItemListItem } from '@/types/items';
+import { ITEM_STATUS_LABELS } from '@/types/items';
+import { ItemStatusBadge } from './ItemStatusProgress';
 
 interface StoredItemCardProps {
-  item: StoredItem;
+  item: SecurityItemListItem;
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString('en-CA');
+}
+
+function shortItemId(itemId: string): string {
+  return itemId.slice(0, 8).toUpperCase();
+}
+
+function getRetentionLabel(
+  expiryDate: string | null,
+  status: ItemStatus
+): { label: string; color: string } | null {
+  if (!expiryDate) return null;
+  if (status === 'claimed' || status === 'disposed') return null;
+
+  const days = Math.ceil(
+    (new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (days < 0) {
+    return { label: 'Retention expired', color: 'gray.500' };
+  }
+  if (days <= 7) {
+    return {
+      label: `Retention: ${days} day${days === 1 ? '' : 's'}`,
+      color: 'orange.600',
+    };
+  }
+  return { label: `Retention: ${days} days`, color: 'gray.600' };
 }
 
 export function StoredItemCard({ item }: StoredItemCardProps) {
+  const retention = getRetentionLabel(item.retentionExpiryDate, item.status);
+
   return (
     <Flex
       bg="white"
       borderWidth="1px"
       borderColor="gray.200"
-      borderRadius="md"
+      borderRadius="lg"
       p={4}
       gap={4}
       align="stretch"
       role="article"
-      aria-label={`${item.category} ${item.name}, item ${item.id}`}
+      aria-label={`${item.title}, ${item.category}, found ${formatDate(item.dateFound)}, ${ITEM_STATUS_LABELS[item.status]}${retention ? `, ${retention.label}` : ''}`}
     >
       <Box
         flexShrink={0}
-        w="72px"
-        h="72px"
-        borderRadius="md"
+        w="96px"
+        h="96px"
+        borderRadius="lg"
         overflow="hidden"
-        bg="gray.200"
+        bg="white"
+        borderWidth="1px"
+        borderColor="gray.200"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
       >
         {item.imageUrl ? (
           <Image
             src={item.imageUrl}
-            alt={`${item.name}`}
+            alt={item.title}
             w="full"
             h="full"
             objectFit="cover"
           />
-        ) : null}
+        ) : (
+          <Box color="gray.400" aria-hidden>
+            <IoImageOutline size={32} />
+          </Box>
+        )}
       </Box>
 
-      <Flex flex={1} direction="column" minW={0}>
+      <Stack flex={1} minW={0} gap={2} justify="space-between">
         <Flex justify="space-between" align="flex-start" gap={4}>
-          <Stack gap={0.5} minW={0}>
-            <Text fontWeight="bold" fontSize="sm" color="gray.900">
-              {item.category} | {item.name}
+          <Stack gap={1} minW={0}>
+            <Text
+              fontWeight="bold"
+              fontSize="md"
+              color="gray.900"
+              lineClamp={2}
+            >
+              {item.title}
             </Text>
-            <Text fontSize="sm" color="gray.500">
-              {item.campusName}
-            </Text>
-            <Text fontSize="sm" color="gray.500">
-              Item ID {item.id}
-            </Text>
+            <HStack gap={2} flexWrap="wrap">
+              <Badge
+                colorPalette="gray"
+                variant="subtle"
+                fontSize="xs"
+                px={2}
+                py={0.5}
+                borderRadius="full"
+              >
+                {item.category}
+              </Badge>
+              <Text fontSize="xs" color="gray.500">
+                {item.campusName}
+              </Text>
+            </HStack>
           </Stack>
-          <Text fontSize="sm" color="gray.600" flexShrink={0}>
-            {item.date}
-          </Text>
+          <ItemStatusBadge status={item.status} />
         </Flex>
 
-        <ItemStatusProgress status={item.status} />
-      </Flex>
+        <Flex justify="space-between" align="center" gap={3} flexWrap="wrap">
+          <HStack gap={2} fontSize="xs" color="gray.500" flexWrap="wrap">
+            <Text fontFamily="mono">ID {shortItemId(item.itemId)}</Text>
+            <Text color="gray.300" aria-hidden>
+              ·
+            </Text>
+            <HStack gap={1}>
+              <Box aria-hidden flexShrink={0}>
+                <IoCalendarOutline size={13} />
+              </Box>
+              <Text>Found {formatDate(item.dateFound)}</Text>
+            </HStack>
+          </HStack>
+          {retention && (
+            <Text fontSize="xs" fontWeight="medium" color={retention.color}>
+              {retention.label}
+            </Text>
+          )}
+        </Flex>
+      </Stack>
     </Flex>
   );
 }

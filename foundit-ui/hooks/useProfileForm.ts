@@ -2,19 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { getLoggedInUser, getAccessToken } from '@/utils/auth';
-import { MOCK_STUDENT_USER, formatDisplayName } from '@/constants/mockSession';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+import { API_BASE } from '@/lib/api/client';
 
 // TODO: Remove PLACEHOLDER once GET /api/users/me is implemented.
 // Prefill sources per field once the endpoint is live:
 //   fullName, email            → localStorage key 'user' (stored at login, read via getLoggedInUser())
 //   phoneNumber                → GET /api/users/me  → response.phone
 //   emailNotificationOptIn     → GET /api/users/me  → response.emailNotificationOptIn
+// Empty strings (not fake sample data) so a real user never sees a wrong
+// name/phone while the endpoint is missing.
 const PLACEHOLDER = {
-  fullName: formatDisplayName(MOCK_STUDENT_USER),
-  email: 'alice@myseneca.ca',
-  phoneNumber: '4161234567',
+  fullName: '',
+  email: '',
+  phoneNumber: '',
   emailNotificationOptIn: true,
 };
 

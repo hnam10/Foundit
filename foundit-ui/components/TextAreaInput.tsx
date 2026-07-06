@@ -3,6 +3,12 @@
 import React from 'react';
 import { Box, Field, HStack, Textarea } from '@chakra-ui/react';
 import FieldError from './FieldError';
+import {
+  fieldControlStyles,
+  fieldHelperStyles,
+  fieldLabelStyles,
+  inlineFieldLabelStyles,
+} from './ui/field-styles';
 
 export interface TextAreaInputProps extends Omit<
   React.TextareaHTMLAttributes<HTMLTextAreaElement>,
@@ -32,36 +38,18 @@ export default function TextAreaInput({
 
   const control = (
     <Textarea
+      {...fieldControlStyles}
       minH="120px"
       px={4}
       py={3}
       w="full"
-      fontSize="1rem"
-      fontWeight="normal"
-      color="#1a1a1a"
-      bg="white"
-      borderWidth="1px"
-      borderRadius="md"
-      borderColor="#D9D9D9"
-      _invalid={{ borderColor: '#cd0000' }}
-      _focusVisible={{
-        outline: 'none',
-        boxShadow: '0 0 0 2px #009adb',
-        borderColor: 'inherit',
-      }}
       onBlur={onBlur}
       {...rest}
     />
   );
 
   const hintEl = hint ? (
-    <Field.HelperText
-      fontSize="0.875rem"
-      lineHeight="1.6"
-      color="#666666"
-      mt={0}
-      mb={1}
-    >
+    <Field.HelperText {...fieldHelperStyles} mt={0} mb={1}>
       {hint}
     </Field.HelperText>
   ) : null;
@@ -71,15 +59,9 @@ export default function TextAreaInput({
   if (stacked) {
     return (
       <Field.Root id={id} required={required} invalid={isInvalid} mb={0}>
-        <Field.Label
-          mb={1}
-          fontSize="1rem"
-          fontWeight="semibold"
-          lineHeight="1.6"
-          color="#1a1a1a"
-        >
+        <Field.Label {...fieldLabelStyles} mb={1}>
           {label}
-          <Field.RequiredIndicator color="#1a1a1a" />
+          <Field.RequiredIndicator color="fg" />
         </Field.Label>
         {hintEl}
         {control}
@@ -91,19 +73,9 @@ export default function TextAreaInput({
   return (
     <Field.Root id={id} required={required} invalid={isInvalid} mb={0}>
       <HStack align="flex-start" gap={4} w="full">
-        <Field.Label
-          w="180px"
-          flexShrink={0}
-          mt={2.5}
-          mb={0}
-          fontSize="1rem"
-          fontWeight="semibold"
-          lineHeight="1.6"
-          color="#1a1a1a"
-          whiteSpace="nowrap"
-        >
+        <Field.Label {...inlineFieldLabelStyles}>
           {label}
-          <Field.RequiredIndicator color="#1a1a1a" />
+          <Field.RequiredIndicator color="fg" />
         </Field.Label>
 
         <Box flex={1}>

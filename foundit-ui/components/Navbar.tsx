@@ -6,7 +6,7 @@
  * Variants:
  *   'guest'    — not logged in; no username, shows Login button.
  *   'student'  — authenticated student; shows Home, Found Items, My Claims + user dropdown.
- *   'security' — authenticated security staff; shows Home, Items, Claims, QR/Link + user dropdown.
+ *   'security' — authenticated security staff; shows Home, Items, Claims + user dropdown.
  *
  * Data shape:
  *   The parent calls GET /api/users/me (returns NavUser), then passes
@@ -52,6 +52,7 @@ import NextLink from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { signOut } from '@/utils/auth';
+import type { UserRole } from '@/utils/routes';
 
 /**
  * Partial view of the user object returned by GET /api/users/me.
@@ -61,7 +62,7 @@ import { signOut } from '@/utils/auth';
 export interface NavUser {
   firstName: string;
   lastName: string;
-  role: 'student' | 'security' | 'admin';
+  role: UserRole;
 }
 
 export type NavbarVariant = 'guest' | 'student' | 'security';
@@ -165,7 +166,6 @@ const navLinksByVariant: Record<
     { label: 'Home', href: '/security/dashboard' },
     { label: 'Items', href: '/security/items' },
     { label: 'Claims', href: '/security/claims' },
-    { label: 'QR / Link', href: '/security/qr' },
   ],
 };
 

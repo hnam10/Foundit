@@ -1,16 +1,15 @@
+import { API_BASE } from '@/lib/api/client';
 import { compressImage } from './imageCompression';
 import type { PresignedUrlResponse } from '../types/uploads';
 
 async function handleImageUpload(file: File, accessToken: string) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-
   // Compress the image before uploading (target: 5MB, max 1600px)
   const compressedFile = await compressImage(file);
 
   // Request a presigned URL from the backend to upload directly to R2/S3
 
   const presignedUrlResponse = await fetch(
-    `${API_URL}/api/uploads/presigned-url`,
+    `${API_BASE}/api/uploads/presigned-url`,
     {
       method: 'POST',
       headers: {

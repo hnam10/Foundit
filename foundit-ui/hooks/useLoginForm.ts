@@ -2,20 +2,36 @@
 
 import { useState } from 'react';
 import { validateEmail } from '@/utils/validation';
-import { getRoleHome, setSessionRole, type UserRole } from '@/utils/auth';
+import { apiFetch } from '@/lib/api/client';
+import {
+  getRoleHome,
+  sanitizeRedirect,
+  setSessionRole,
+  setTokens,
+  type LoggedInUser,
+} from '@/utils/auth';
 
-export function useLoginForm() {
+interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: LoggedInUser;
+}
+
+export function useLoginForm(redirectTo?: string | null) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleEmailBlur() {
     setEmailError(validateEmail(email));
   }
 
   async function handleLogin() {
+    if (isSubmitting) return;
+
     const emailValidation = validateEmail(email);
     const passwordValidation = !password ? 'Please enter your password.' : '';
 
@@ -34,32 +50,28 @@ export function useLoginForm() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      const response = await fetch(`${apiUrl}/api/auth/login`, {
+      const result = await apiFetch<LoginResponse>('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        auth: false,
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        setPasswordError(result.message || 'Login failed.');
-        return;
-      }
-
-      localStorage.setItem('accessToken', result.accessToken);
+      setTokens(result.accessToken, result.refreshToken);
       localStorage.setItem('user', JSON.stringify(result.user));
 
-      const role = result.user.role as UserRole;
+      const role = result.user.role;
       setSessionRole(role);
 
+      const destination = sanitizeRedirect(redirectTo) ?? getRoleHome(role);
+
       // Full navigation so middleware sees the role cookie on the first request.
-      window.location.href = getRoleHome(role);
+      window.location.href = destination;
     } catch {
       setPasswordError('Unable to connect to server.');
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -72,5 +84,6 @@ export function useLoginForm() {
     passwordError,
     handleEmailBlur,
     handleLogin,
+    isSubmitting,
   };
 }

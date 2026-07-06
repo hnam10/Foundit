@@ -5,7 +5,11 @@ import { useRouter } from 'next/navigation';
 import { Box, Spinner } from '@chakra-ui/react';
 import { getRoleHome, getSessionRole } from '@/utils/auth';
 
-/** Post-login entry: sends users to their role-specific dashboard. */
+/**
+ * Post-login entry: sends users to their role-specific dashboard.
+ * middleware.ts normally performs this redirect before the page renders;
+ * this client-side fallback only runs if the middleware matcher misses.
+ */
 export default function DashboardRedirectPage() {
   const router = useRouter();
 

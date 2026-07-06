@@ -1,4 +1,4 @@
-import { ROLE_HOME, type UserRole } from './routes';
+import { parseRole, ROLE_HOME, type UserRole } from './routes';
 
 export type { UserRole };
 export { ROLE_HOME };
@@ -42,16 +42,22 @@ export function getSessionRole(): UserRole | null {
     return null;
   }
 
-  const value = match.split('=')[1] as UserRole;
-  if (value === 'student' || value === 'security' || value === 'admin') {
-    return value;
-  }
-
-  return null;
+  return parseRole(match.split('=')[1]);
 }
 
 export function getRoleHome(role: UserRole): string {
   return ROLE_HOME[role];
+}
+
+/** Allow only same-origin relative paths for post-login redirects. */
+export function sanitizeRedirect(
+  path: string | null | undefined
+): string | null {
+  if (!path) return null;
+  if (!path.startsWith('/') || path.startsWith('//') || path.includes(':')) {
+    return null;
+  }
+  return path;
 }
 
 export interface LoggedInUser {
@@ -83,6 +89,16 @@ export function getLoggedInUser(): LoggedInUser | null {
 export function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('accessToken');
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('refreshToken');
+}
+
+export function setTokens(accessToken: string, refreshToken: string) {
+  localStorage.setItem('accessToken', accessToken);
+  localStorage.setItem('refreshToken', refreshToken);
 }
 
 export function getLoggedInDisplayName(): string | null {
