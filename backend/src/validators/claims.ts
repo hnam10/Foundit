@@ -3,10 +3,10 @@ import { z } from 'zod';
 
 const claimStatusValues = [
   ClaimStatus.submitted,
-  ClaimStatus.under_review,
   ClaimStatus.approved,
   ClaimStatus.rejected,
   ClaimStatus.picked_up,
+  ClaimStatus.under_review,
 ] as const;
 
 const matchReviewStatusValues = [
