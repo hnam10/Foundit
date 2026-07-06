@@ -771,8 +771,6 @@ router.patch(
               in: [
                 ClaimStatus.submitted,
                 ClaimStatus.under_review,
-                ClaimStatus.match_found,
-                ClaimStatus.match_confirmed,
                 ClaimStatus.approved,
               ],
             },

@@ -365,9 +365,6 @@ const cancellableClaimStatuses = new Set<ClaimStatus>([ClaimStatus.submitted]);
 const validStatusTransitions: Record<ClaimStatus, ClaimStatus[]> = {
   [ClaimStatus.submitted]: [ClaimStatus.rejected],
   [ClaimStatus.under_review]: [ClaimStatus.approved, ClaimStatus.rejected],
-  // Legacy rows — kept so existing data can still transition.
-  [ClaimStatus.match_found]: [ClaimStatus.rejected],
-  [ClaimStatus.match_confirmed]: [ClaimStatus.approved, ClaimStatus.rejected],
   [ClaimStatus.approved]: [ClaimStatus.picked_up, ClaimStatus.rejected],
   [ClaimStatus.rejected]: [],
   [ClaimStatus.picked_up]: [],
