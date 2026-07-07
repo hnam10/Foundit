@@ -101,9 +101,7 @@ export function ClaimDetailModal({
               <Text mt={4} fontWeight="bold">
                 Student ID
               </Text>
-              <Text color="gray.500">
-                {claim.student.studentNumber ?? '-'}
-              </Text>
+              <Text color="gray.500">{claim.student.studentNumber ?? '-'}</Text>
 
               <Text mt={4} fontWeight="bold">
                 Email Address
@@ -198,8 +196,8 @@ export function ClaimDetailModal({
               Cancel this claim?
             </Text>
             <Text color="gray.600" fontSize="sm">
-              This cannot be undone. You will need to submit a new claim if
-              you change your mind.
+              This cannot be undone. You will need to submit a new claim if you
+              change your mind.
             </Text>
 
             {cancelError && (

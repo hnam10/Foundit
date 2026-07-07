@@ -41,9 +41,7 @@ export const createClaimSchema = z.object({
   itemName: z.string().max(100).trim().optional(),
   description: z.string().min(1).max(2000).trim(),
   additionalInfo: z.string().max(2000).trim().optional(),
-  notificationPreference: z
-    .enum(claimNotificationPreferenceValues)
-    .optional(),
+  notificationPreference: z.enum(claimNotificationPreferenceValues).optional(),
   dateLost: optionalDateSchema,
   locationLost: z.string().min(1).max(255).trim().optional(),
   // Proof-of-ownership photos, uploaded to R2 client-side beforehand (same

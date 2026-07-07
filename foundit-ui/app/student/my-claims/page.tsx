@@ -91,14 +91,14 @@ export default function StudentMyClaimsPage() {
                 <Box
                   key={claim.claimId}
                   cursor="pointer"
-                    onClick={() => {
-                      setSelectedClaim(null);
+                  onClick={() => {
+                    setSelectedClaim(null);
 
-                      setTimeout(() => {
-                        setSelectedClaim(claim);
-                      }, 0);
-                    }}
-                  >
+                    setTimeout(() => {
+                      setSelectedClaim(claim);
+                    }, 0);
+                  }}
+                >
                   <ClaimCard claim={claim} />
                 </Box>
               ))}
