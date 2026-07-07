@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Box, HStack, Spinner, Stack, Text } from '@chakra-ui/react';
 import FormTextInput from '@/components/FormTextInput';
 import FoundItemFormShell from '@/components/FoundItemFormShell';
@@ -26,12 +27,27 @@ export default function SecurityFoundItemReportForm({
   campusesLoading = false,
 }: SecurityFoundItemReportFormProps) {
   const form = useSecurityFoundItemForm(defaultCampusId);
+  const { campusId, setCampusId } = form;
   const accessToken = useAccessToken();
 
   const campusOptions = campuses.map((campus) => ({
     value: campus.campusId,
     label: campus.campusName,
   }));
+
+  useEffect(() => {
+    if (campusesLoading || campuses.length === 0) return;
+
+    const hasValidSelection = campuses.some(
+      (campus) => campus.campusId === campusId
+    );
+    if (!hasValidSelection) {
+      const fallback =
+        campuses.find((campus) => campus.campusId === defaultCampusId)
+          ?.campusId ?? campuses[0].campusId;
+      setCampusId(fallback);
+    }
+  }, [campuses, campusesLoading, defaultCampusId, campusId, setCampusId]);
 
   return (
     <FoundItemFormShell>
@@ -112,10 +128,10 @@ export default function SecurityFoundItemReportForm({
             hint="Which campus lost & found office will store this item."
             optionItems={campusOptions}
             placeholder="Select a campus"
-            value={form.campusId}
+            value={campusId}
             error={form.errors.campus}
             onChange={(e) => {
-              form.setCampusId(e.target.value);
+              setCampusId(e.target.value);
               form.clearError('campus');
             }}
           />

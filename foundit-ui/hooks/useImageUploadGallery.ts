@@ -37,31 +37,25 @@ export function useImageUploadGallery({
     const remainingSlots = MAX_IMAGES - images.length;
     const filesToProcess = files.slice(0, remainingSlots);
 
+    let next = images;
     for (const file of filesToProcess) {
       const previewUrl = URL.createObjectURL(file);
-
-      setImages((prev) => {
-        const next = [
-          ...prev,
-          { previewUrl, file, status: 'pending' as const },
-        ];
-
-        notifyChange(next);
-        return next;
-      });
+      next = [...next, { previewUrl, file, status: 'pending' as const }];
     }
+
+    setImages(next);
+    notifyChange(next);
 
     if (inputRef.current) inputRef.current.value = '';
   };
 
   const handleRemove = (previewUrl: string) => {
-    setImages((prev) => {
-      const removed = prev.find((img) => img.previewUrl === previewUrl);
-      if (removed) URL.revokeObjectURL(removed.previewUrl);
-      const next = prev.filter((img) => img.previewUrl !== previewUrl);
-      notifyChange(next);
-      return next;
-    });
+    const removed = images.find((img) => img.previewUrl === previewUrl);
+    if (removed) URL.revokeObjectURL(removed.previewUrl);
+    const next = images.filter((img) => img.previewUrl !== previewUrl);
+
+    setImages(next);
+    notifyChange(next);
   };
 
   return {

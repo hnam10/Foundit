@@ -13,6 +13,9 @@ const CLAIM_STEPS: ApiClaimStatus[] = [
 const CLAIM_STATUS_LABELS: Record<ApiClaimStatus, string> = {
   submitted: 'Submitted',
   under_review: 'Under Review',
+  // Legacy rows only — current code writes `under_review` instead.
+  match_found: 'Under Review',
+  match_confirmed: 'Under Review',
   approved: 'Approved',
   rejected: 'Rejected',
   picked_up: 'Picked Up',

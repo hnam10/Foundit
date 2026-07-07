@@ -1,6 +1,5 @@
 import { Router, Response } from 'express';
 import {
-  ClaimNotificationPreference,
   ClaimStatus,
   ItemStatus,
   MatchStatus,
@@ -17,6 +16,7 @@ import {
   claimAndMatchParamsSchema,
   claimParamsSchema,
   createClaimSchema,
+  type CreateClaimInput,
   linkClaimItemSchema,
   listClaimsQuerySchema,
   reviewMatchSuggestionSchema,
@@ -331,6 +331,34 @@ function canAccessClaim(user: RequestUser, claim: { studentId: string }) {
   return user.role === 'security' || user.role === 'admin';
 }
 
+const claimListOrderBy: Prisma.ClaimOrderByWithRelationInput[] = [
+  { createdAt: 'desc' },
+  { claimId: 'desc' },
+];
+
+async function getClaimListCursorWhere(
+  cursorClaimId: string
+): Promise<Prisma.ClaimWhereInput> {
+  const cursorClaim = await prisma.claim.findUnique({
+    where: { claimId: cursorClaimId },
+    select: { createdAt: true, claimId: true },
+  });
+
+  if (!cursorClaim) {
+    return {};
+  }
+
+  return {
+    OR: [
+      { createdAt: { lt: cursorClaim.createdAt } },
+      {
+        createdAt: cursorClaim.createdAt,
+        claimId: { lt: cursorClaim.claimId },
+      },
+    ],
+  };
+}
+
 function getClaimListWhere(
   user: RequestUser,
   query: {
@@ -358,12 +386,52 @@ function getClaimListWhere(
 const cancellableClaimStatuses = new Set<ClaimStatus>([ClaimStatus.submitted]);
 
 const validStatusTransitions: Record<ClaimStatus, ClaimStatus[]> = {
-  [ClaimStatus.submitted]: [ClaimStatus.under_review, ClaimStatus.rejected],
+  [ClaimStatus.submitted]: [ClaimStatus.rejected],
   [ClaimStatus.under_review]: [ClaimStatus.approved, ClaimStatus.rejected],
-  [ClaimStatus.approved]: [ClaimStatus.picked_up],
+  [ClaimStatus.approved]: [ClaimStatus.picked_up, ClaimStatus.rejected],
   [ClaimStatus.rejected]: [],
   [ClaimStatus.picked_up]: [],
 };
+
+function createMatchFoundNotificationInput(claim: {
+  claimId: string;
+  studentId: string;
+}) {
+  return {
+    recipientId: claim.studentId,
+    type: NotificationType.match_found,
+    title: 'A match was found for your claim',
+    message:
+      'Security matched a found item to your lost item claim. Please schedule a pickup appointment.',
+    referenceType: 'claim',
+    referenceId: claim.claimId,
+  } as const;
+}
+
+async function applyMatchConfirmation(
+  tx: Prisma.TransactionClient,
+  claim: { claimId: string; studentId: string },
+  itemId: string,
+  actorId: string
+) {
+  const now = new Date();
+  const updatedClaim = await tx.claim.update({
+    where: { claimId: claim.claimId },
+    data: {
+      itemId,
+      status: ClaimStatus.under_review,
+      reviewedBy: actorId,
+      reviewedAt: now,
+    },
+    select: claimDetailSelect,
+  });
+
+  await tx.notification.create({
+    data: createMatchFoundNotificationInput(updatedClaim),
+  });
+
+  return updatedClaim;
+}
 
 function createClaimStatusNotificationInput(
   claim: ClaimDetailRow,
@@ -493,8 +561,10 @@ function scoreCandidateItem(
  *                 type: string
  *               images:
  *                 type: array
+ *                 maxItems: 3
  *                 items:
  *                   type: object
+ *                   required: [imageUrl, fileType, fileSizeKb]
  *                   properties:
  *                     imageUrl:
  *                       type: string
@@ -533,16 +603,7 @@ router.post(
       }
       const campusId = actor.campusId;
 
-      const payload = req.body as {
-        category: string;
-        itemName?: string;
-        description: string;
-        additionalInfo?: string;
-        notificationPreference?: ClaimNotificationPreference;
-        dateLost?: Date;
-        locationLost?: string;
-        images: { imageUrl: string; fileType: string; fileSizeKb: number }[];
-      };
+      const payload = req.body as CreateClaimInput;
 
       const claim = await prisma.$transaction(async (tx) => {
         const created = await tx.claim.create({
@@ -669,16 +730,17 @@ router.get(
         limit: number;
       };
 
+      const baseWhere = getClaimListWhere(actor, query);
+      const cursorWhere = query.cursor
+        ? await getClaimListCursorWhere(query.cursor)
+        : {};
+
       const claims = await prisma.claim.findMany({
-        where: getClaimListWhere(actor, query),
-        orderBy: { claimId: 'desc' },
+        where: {
+          AND: [baseWhere, cursorWhere],
+        },
+        orderBy: claimListOrderBy,
         take: query.limit + 1,
-        ...(query.cursor
-          ? {
-              cursor: { claimId: query.cursor },
-              skip: 1,
-            }
-          : {}),
         select: claimListSelect,
       });
 
@@ -972,10 +1034,13 @@ router.patch(
         return;
       }
 
-      const updated = await prisma.claim.update({
-        where: { claimId: claim.claimId },
-        data: { itemId: item.itemId },
-        select: claimDetailSelect,
+      const updated = await prisma.$transaction(async (tx) => {
+        await applyMatchConfirmation(tx, claim, item.itemId, actor.userId);
+
+        return tx.claim.findUniqueOrThrow({
+          where: { claimId: claim.claimId },
+          select: claimDetailSelect,
+        });
       });
 
       await writeAuditLog({
@@ -1340,35 +1405,45 @@ router.post(
         },
       });
 
-      const upserts = candidates
+      const scoredCandidates = candidates
         .map((item) => {
           const { score, criteria } = scoreCandidateItem(claim, item);
           return { item, score, criteria };
         })
-        .filter((candidate) => candidate.score >= 60)
-        .map((candidate) =>
-          prisma.matchSuggestion.upsert({
-            where: {
-              claimId_itemId: {
-                claimId: claim.claimId,
-                itemId: candidate.item.itemId,
-              },
-            },
-            update: {
-              matchScore: candidate.score,
-              matchCriteria: candidate.criteria || null,
-            },
-            create: {
-              claimId: claim.claimId,
-              itemId: candidate.item.itemId,
-              matchScore: candidate.score,
-              matchCriteria: candidate.criteria || null,
-            },
-          })
-        );
+        .filter((candidate) => candidate.score >= 60);
 
-      if (upserts.length > 0) {
-        await prisma.$transaction(upserts);
+      if (scoredCandidates.length > 0) {
+        await prisma.$transaction(async (tx) => {
+          await Promise.all(
+            scoredCandidates.map((candidate) =>
+              tx.matchSuggestion.upsert({
+                where: {
+                  claimId_itemId: {
+                    claimId: claim.claimId,
+                    itemId: candidate.item.itemId,
+                  },
+                },
+                update: {
+                  matchScore: candidate.score,
+                  matchCriteria: candidate.criteria || null,
+                },
+                create: {
+                  claimId: claim.claimId,
+                  itemId: candidate.item.itemId,
+                  matchScore: candidate.score,
+                  matchCriteria: candidate.criteria || null,
+                },
+              })
+            )
+          );
+
+          if (claim.status === ClaimStatus.submitted) {
+            await tx.claim.update({
+              where: { claimId: claim.claimId },
+              data: { status: ClaimStatus.under_review },
+            });
+          }
+        });
       }
 
       await writeAuditLog({
@@ -1378,7 +1453,7 @@ router.post(
         entityId: claim.claimId,
         details: {
           candidateCount: candidates.length,
-          suggestionCount: upserts.length,
+          suggestionCount: scoredCandidates.length,
         },
         ipAddress: req.ip,
       });
@@ -1476,6 +1551,19 @@ router.patch(
         return;
       }
 
+      const claim = await prisma.claim.findUnique({
+        where: { claimId: match.claimId },
+        select: { claimId: true, studentId: true },
+      });
+
+      if (!claim) {
+        res.status(404).json({
+          code: 'CLAIM_NOT_FOUND',
+          message: 'Claim not found.',
+        });
+        return;
+      }
+
       const { status } = req.body as { status: MatchStatus };
 
       const updated = await prisma.$transaction(async (tx) => {
@@ -1495,10 +1583,12 @@ router.patch(
             throw conflictError;
           }
 
-          await tx.claim.update({
-            where: { claimId: match.claimId },
-            data: { itemId: match.itemId },
-          });
+          await applyMatchConfirmation(
+            tx,
+            { claimId: match.claimId, studentId: claim.studentId },
+            match.itemId,
+            actor.userId
+          );
         }
 
         await tx.matchSuggestion.updateMany({

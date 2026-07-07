@@ -11,8 +11,13 @@ import {
   HStack,
   Link,
   Text,
+  Checkbox,
 } from '@chakra-ui/react';
 import { useSignUpForm } from '../../hooks/useSignupForm';
+import { useState } from 'react';
+import LegalModal from '../../components/legal/LegalModal';
+import LegalAgreement from '../../components/legal/LegalAgreement';
+import { ST } from 'next/dist/shared/lib/utils';
 
 export default function SignUpPage() {
   const {
@@ -40,7 +45,13 @@ export default function SignUpPage() {
 
     handleSignUp,
     isSubmitting,
+
+    agreedToLegal,
+    legalAgreementError,
+    handleLegalAgreementChange,
   } = useSignUpForm();
+
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
 
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
@@ -83,7 +94,6 @@ export default function SignUpPage() {
             <Heading fontSize="40px" textAlign="center" color="#0F172A">
               Sign Up
             </Heading>
-
             <Stack gap="20px">
               <HStack gap="24px" align="flex-start">
                 <TextInput
@@ -146,6 +156,30 @@ export default function SignUpPage() {
                 width="full"
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 error={confirmPasswordError}
+              />
+            </Stack>
+            <Stack gap="1px">
+              {legalAgreementError && (
+                <Text color="#CD0000" fontSize="sm" mt={1}>
+                  {legalAgreementError}
+                </Text>
+              )}
+              <Checkbox.Root
+                checked={agreedToLegal}
+                onCheckedChange={(e) => {
+                  handleLegalAgreementChange(!!e.checked);
+                }}
+              >
+                <Checkbox.HiddenInput />
+                <Checkbox.Control />
+                <Checkbox.Label>
+                  <LegalAgreement onOpen={() => setIsLegalModalOpen(true)} />
+                </Checkbox.Label>
+              </Checkbox.Root>
+
+              <LegalModal
+                open={isLegalModalOpen}
+                onClose={() => setIsLegalModalOpen(false)}
               />
             </Stack>
 

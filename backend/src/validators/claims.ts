@@ -1,12 +1,13 @@
 import { ClaimStatus, MatchStatus } from '@prisma/client';
 import { z } from 'zod';
+import { reportImageSchema } from './reportLinks';
 
 const claimStatusValues = [
   ClaimStatus.submitted,
-  ClaimStatus.under_review,
   ClaimStatus.approved,
   ClaimStatus.rejected,
   ClaimStatus.picked_up,
+  ClaimStatus.under_review,
 ] as const;
 
 const matchReviewStatusValues = [
@@ -25,31 +26,6 @@ const claimNotificationPreferenceValues = [
   'phone',
   'email_and_phone',
 ] as const;
-
-// Same upload key shape as reportImageSchema — both flow through
-// POST /api/uploads/presigned-url, which always writes to the `reports/` prefix.
-export const claimImageSchema = z.object({
-  imageUrl: z
-    .string()
-    .min(1)
-    .max(500)
-    .trim()
-    .regex(
-      /^reports\/[0-9a-f-]+\.(jpe?g|png|webp)$/i,
-      'imageUrl must be a valid upload key'
-    ),
-  fileType: z
-    .string()
-    .min(1)
-    .max(10)
-    .trim()
-    .regex(/^(jpe?g|png|webp)$/i),
-  fileSizeKb: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(5 * 1024),
-});
 
 export const claimParamsSchema = z.object({
   claimId: z.uuid(),
@@ -70,8 +46,12 @@ export const createClaimSchema = z.object({
     .optional(),
   dateLost: optionalDateSchema,
   locationLost: z.string().min(1).max(255).trim().optional(),
-  images: z.array(claimImageSchema).max(5).optional().default([]),
+  // Proof-of-ownership photos, uploaded to R2 client-side beforehand (same
+  // presigned-url flow as found-item reports); max 3 matches the gallery cap.
+  images: z.array(reportImageSchema).max(3).optional().default([]),
 });
+
+export type CreateClaimInput = z.infer<typeof createClaimSchema>;
 
 export const listClaimsQuerySchema = z.object({
   status: z.enum(claimStatusValues).optional(),

@@ -3,13 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAccessToken } from '@/utils/auth';
-import { CAMPUSES } from '@/constants/campuses';
 import handleImageUpload from '@/utils/handleImageUpload';
 import { todayISO, validateFoundItemFields } from '@/utils/foundItemForm';
 
 import { API_BASE } from '@/lib/api/client';
-
-const DEFAULT_CAMPUS = CAMPUSES[0].name;
 
 export function useReportFoundItemForm(token: string) {
   const router = useRouter();
@@ -20,7 +17,7 @@ export function useReportFoundItemForm(token: string) {
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [contactInformation, setContactInformation] = useState('');
-  const [campus, setCampus] = useState(DEFAULT_CAMPUS);
+  const [campusId, setCampusId] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -41,9 +38,8 @@ export function useReportFoundItemForm(token: string) {
       { itemName, category, date, location, description },
       {
         requireContact: true,
-        requireCampus: true,
+        requireCampus: false,
         contactInformation,
-        campus,
       }
     );
 
@@ -160,8 +156,8 @@ export function useReportFoundItemForm(token: string) {
     setDescription,
     contactInformation,
     setContactInformation,
-    campus,
-    setCampus,
+    campusId,
+    setCampusId,
     imageFiles,
     setImageFiles,
     errors,

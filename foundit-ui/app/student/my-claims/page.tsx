@@ -2,25 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { Box, Heading, Spinner, Stack, Text } from '@chakra-ui/react';
-import { ClaimCard, type ClaimStatus } from '@/components/ClaimCard';
+import { ClaimCard } from '@/components/ClaimCard';
 import { fetchAllClaims } from '@/lib/api/claims';
 import { ClaimDetailModal } from '@/components/StudentClaimDetailModal';
 import type { SecurityClaimListItem } from '@/types/claims';
 import { getAccessToken } from '@/utils/auth';
-
-function mapStatus(status: SecurityClaimListItem['status']): ClaimStatus {
-  if (status === 'approved' || status === 'picked_up') return 'approved';
-  if (status === 'rejected') return 'rejected';
-  return 'pending';
-}
-
-function formatDate(date: string) {
-  return new Date(date).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
 
 export default function StudentMyClaimsPage() {
   const isLoggedIn = !!getAccessToken();
@@ -113,15 +99,7 @@ export default function StudentMyClaimsPage() {
                       }, 0);
                     }}
                   >
-                  <ClaimCard
-                    id={claim.claimId.slice(0, 8)}
-                    categoryName={claim.item?.category ?? claim.category}
-                    itemName={
-                      claim.item?.title ?? claim.itemName ?? claim.description
-                    }
-                    status={mapStatus(claim.status)}
-                    date={formatDate(claim.createdAt)}
-                  />
+                  <ClaimCard claim={claim} />
                 </Box>
               ))}
             </Stack>

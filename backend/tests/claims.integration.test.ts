@@ -101,7 +101,7 @@ const claimRow = {
   },
   description: 'Lost my iPhone',
   additionalInfo: null,
-  notificationPreference: 'email',
+  notificationPreference: 'email' as const,
   dateLost: new Date('2026-07-01'),
   locationLost: 'Library',
   status: ClaimStatus.submitted,
@@ -158,7 +158,7 @@ describe('claims routes', () => {
     expect(prisma.claim.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          studentId: 'student-1',
+          AND: [{ studentId: 'student-1' }, {}],
         },
       })
     );
@@ -180,7 +180,7 @@ describe('claims routes', () => {
     expect(prisma.claim.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          status: ClaimStatus.submitted,
+          AND: [{ status: ClaimStatus.submitted }, {}],
         },
       })
     );

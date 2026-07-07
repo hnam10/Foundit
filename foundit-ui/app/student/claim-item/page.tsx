@@ -18,7 +18,9 @@ import { LuCircleAlert } from 'react-icons/lu';
 import { CATEGORIES } from '@/constants/categories';
 import { useClaimItemForm } from '@/hooks/useClaimItemForm';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
-import { getAccessToken, getLoggedInUser } from '@/utils/auth';
+import { useAccessToken } from '@/hooks/useAccessToken';
+import { useLoggedInUser } from '@/hooks/useLoggedInUser';
+import { getAccessToken } from '@/utils/auth';
 import { API_BASE, authFetch } from '@/lib/api/client';
 import { debugLog, debugWarn } from '@/utils/debug';
 
@@ -48,7 +50,7 @@ import { debugLog, debugWarn } from '@/utils/debug';
 //      additionalInfo).
 //   3. Proof-of-ownership images are uploaded to R2 at submit time (mirrors
 //      report-found's handleImageUpload loop) and sent as `images` on the
-//      claim payload.
+//      claim payload, linked to the claim via ItemImage.claimId.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ClaimItemPage() {
@@ -115,8 +117,8 @@ function ClaimForm({ displayName }: { displayName: string }) {
   const form = useClaimItemForm();
   // Real session data (utils/auth.ts) — the identity rows and the student-only
   // gate the backend enforces. No mock data on this form.
-  const accessToken = getAccessToken();
-  const user = getLoggedInUser();
+  const accessToken = useAccessToken();
+  const user = useLoggedInUser();
   const isStudent = user?.role === 'student';
 
   // The login payload has no studentNumber or phone, so fetch both from the

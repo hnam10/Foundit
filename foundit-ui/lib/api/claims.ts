@@ -1,6 +1,7 @@
 import { authFetch, parseApiError } from '@/lib/api/client';
 import type {
   ApiClaimStatus,
+  MatchSuggestion,
   SecurityClaimDetail,
   SecurityClaimListResponse,
 } from '@/types/claims';
@@ -61,6 +62,20 @@ export async function fetchClaimById(
   }
 
   return res.json() as Promise<SecurityClaimDetail>;
+}
+
+export async function fetchMatchSuggestions(
+  claimId: string
+): Promise<MatchSuggestion[]> {
+  const res = await authFetch(
+    `${API_BASE}/api/claims/${claimId}/match-suggestions`
+  );
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<MatchSuggestion[]>;
 }
 
 export interface UpdateClaimStatusInput {
