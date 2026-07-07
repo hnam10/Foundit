@@ -25,6 +25,16 @@ export async function fetchCategoryStats(
   });
 }
 
+export async function fetchExpiredItemCount(
+  campusId?: string
+): Promise<number> {
+  const query = campusId ? `?campusId=${encodeURIComponent(campusId)}` : '';
+  const result = await apiFetch<{ count: number }>(
+    `/api/items/expired-count${query}`
+  );
+  return result.count;
+}
+
 export interface FetchPublicItemsParams {
   category?: string;
   campusId?: string;

@@ -20,7 +20,11 @@ import { DashboardMetricCard } from '@/components/dashboard/DashboardMetricCard'
 import { ItemsByCategoryCard } from '@/components/dashboard/ItemsByCategoryCard';
 import { RecentClaimsTable } from '@/components/dashboard/RecentClaimsTable';
 import { fetchAllClaims } from '@/lib/api/claims';
-import { fetchCampuses, fetchCategoryStats } from '@/lib/api/items';
+import {
+  fetchCampuses,
+  fetchCategoryStats,
+  fetchExpiredItemCount,
+} from '@/lib/api/items';
 import type { SecurityClaimListItem } from '@/types/claims';
 import type { Campus, CategoryStat } from '@/types/items';
 
@@ -51,6 +55,7 @@ export default function SecurityDashboardPage() {
   const [campusesLoaded, setCampusesLoaded] = useState(false);
   const [selectedCampusId, setSelectedCampusId] = useState('');
   const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
+  const [expiredItemCount, setExpiredItemCount] = useState(0);
   const [claims, setClaims] = useState<SecurityClaimListItem[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [claimsLoading, setClaimsLoading] = useState(true);
@@ -88,15 +93,20 @@ export default function SecurityDashboardPage() {
       setStatsError('');
 
       try {
-        const data = await fetchCategoryStats(selectedCampusId || undefined);
+        const [categoryData, expiredCount] = await Promise.all([
+          fetchCategoryStats(selectedCampusId || undefined),
+          fetchExpiredItemCount(selectedCampusId || undefined),
+        ]);
         if (!active) return;
-        setCategoryStats(data);
+        setCategoryStats(categoryData);
+        setExpiredItemCount(expiredCount);
       } catch (err) {
         if (!active) return;
         setStatsError(
           err instanceof Error ? err.message : 'Failed to load storage items.'
         );
         setCategoryStats([]);
+        setExpiredItemCount(0);
       } finally {
         if (active) setStatsLoading(false);
       }
@@ -149,8 +159,14 @@ export default function SecurityDashboardPage() {
       0
     );
 
-    return { awaitingMatch, readyToApprove, pendingPickup, itemsInStorage };
-  }, [claims, categoryStats]);
+    return {
+      awaitingMatch,
+      readyToApprove,
+      pendingPickup,
+      itemsInStorage,
+      expiredItemCount,
+    };
+  }, [claims, categoryStats, expiredItemCount]);
 
   return (
     <Stack gap={8}>
@@ -250,7 +266,7 @@ export default function SecurityDashboardPage() {
         />
         <DashboardMetricCard
           title="Retention Expired"
-          value={statsLoading ? '—' : '-'}
+          value={statsLoading ? '—' : metrics.expiredItemCount}
           subtitle="Items"
           accentColor="green.600"
           iconBg="green.50"

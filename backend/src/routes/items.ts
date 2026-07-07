@@ -10,6 +10,7 @@ import {
   itemParamsSchema,
   listSecurityItemsQuerySchema,
   publicItemsQuerySchema,
+  expiredItemCountQuerySchema,
   updateSecurityItemSchema,
   createSecurityItemSchema,
   walkInReleaseSchema,
@@ -590,6 +591,53 @@ router.post(
       });
 
       res.status(201).json(await toSecurityItemDetailDto(detail));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/items/expired-count:
+ *   get:
+ *     summary: Count items with expired retention status
+ *     tags: [Items]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: campusId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       '200':
+ *         description: Expired item count
+ *       '400':
+ *         description: Invalid query parameters
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ */
+router.get(
+  '/items/expired-count',
+  authenticate,
+  requireRole('security', 'admin'),
+  validateQuery(expiredItemCountQuerySchema),
+  async (req, res, next) => {
+    try {
+      const { campusId } = req.query as { campusId?: string };
+
+      const count = await prisma.item.count({
+        where: {
+          status: ItemStatus.expired,
+          ...(campusId ? { campusId } : {}),
+        },
+      });
+
+      res.status(200).json({ count });
     } catch (err) {
       next(err);
     }
