@@ -160,7 +160,7 @@ const navLinksByVariant: Record<
   student: [
     { label: 'Home', href: '/student/dashboard' },
     { label: 'Found Items', href: '/found-items' },
-    { label: 'My Claims', href: '/my-claims' },
+    { label: 'My Claims', href: '/student/my-claims' },
   ],
   security: [
     { label: 'Home', href: '/security/dashboard' },

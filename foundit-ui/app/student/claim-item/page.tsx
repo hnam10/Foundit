@@ -38,19 +38,19 @@ import { debugLog, debugWarn } from '@/utils/debug';
 //   • hooks/useClaimItemForm  → state, validation mirroring createClaimSchema,
 //                             POST /api/claims
 //
-// Still stubbed / needs backend work (kept UI-only for now):
+// Notes on a few fields:
 //   1. Student ID — the login payload (LoggedInUser in localStorage) carries
 //      only the userId UUID, so the real studentNumber is fetched from
 //      GET /api/users/me on mount (same pattern as useProfileForm). The UUID
 //      is never shown; the row reads "—" until the fetch resolves or when the
 //      account has no student number. The same response supplies `phone`,
 //      which decides whether the phone notification options are selectable.
-//   2. Item Name, Notification preferences + Additional Information — rendered
-//      for design parity but NOT sent; createClaimSchema has no matching
-//      columns. See the hook's STUB FIELDS note.
-//   3. Proof-of-ownership images are uploaded to R2 at submit time (same
-//      handleImageUpload/presigned-url flow as report-found) and linked to
-//      the claim via ItemImage.claimId.
+//   2. Item Name, Notification preferences and Additional Information are
+//      sent on submit (createClaimSchema: itemName, notificationPreference,
+//      additionalInfo).
+//   3. Proof-of-ownership images are uploaded to R2 at submit time (mirrors
+//      report-found's handleImageUpload loop) and sent as `images` on the
+//      claim payload, linked to the claim via ItemImage.claimId.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ClaimItemPage() {

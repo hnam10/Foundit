@@ -103,6 +103,7 @@ describe('auth extra routes', () => {
       password: 'Password123',
       firstName: 'Casey',
       lastName: 'Hsu',
+      agreedToLegal: true,
     });
 
     expect(res.status).toBe(409);
@@ -128,6 +129,7 @@ describe('auth extra routes', () => {
       password: 'Password123',
       firstName: 'Casey',
       lastName: 'Hsu',
+      agreedToLegal: true,
     });
 
     expect(res.status).toBe(201);

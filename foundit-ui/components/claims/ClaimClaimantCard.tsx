@@ -25,7 +25,11 @@ export function ClaimClaimantCard({
         <ClaimDetailField label="Name" value={studentName} />
         <ClaimDetailField
           label="Student ID"
-          value={claim.student.studentNumber ?? '—'}
+          value={
+            claim.student.studentNumber != null
+              ? String(claim.student.studentNumber)
+              : '—'
+          }
         />
         <ClaimDetailField label="Email" value={claim.student.email} />
         <ClaimDetailField label="Campus" value={campusName} />

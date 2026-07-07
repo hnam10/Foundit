@@ -31,8 +31,17 @@ const claimListSelect = {
   studentId: true,
   itemId: true,
   category: true,
+  itemName: true,
   campusId: true,
+  campus: {
+    select: {
+      campusId: true,
+      campusName: true,
+    },
+  },
   description: true,
+  additionalInfo: true,
+  notificationPreference: true,
   dateLost: true,
   locationLost: true,
   status: true,
@@ -63,6 +72,17 @@ const claimListSelect = {
       dateFound: true,
     },
   },
+  images: {
+    select: {
+      imageId: true,
+      imageUrl: true,
+      fileType: true,
+      fileSizeKb: true,
+    },
+    orderBy: {
+      createdAt: 'asc' as const,
+    },
+  },
 } as const;
 
 const claimDetailSelect = {
@@ -83,15 +103,6 @@ const claimDetailSelect = {
       firstName: true,
       lastName: true,
       email: true,
-    },
-  },
-  images: {
-    select: {
-      imageId: true,
-      imageUrl: true,
-    },
-    orderBy: {
-      createdAt: 'asc' as const,
     },
   },
 } as const;
@@ -156,14 +167,30 @@ function sendValidationError(res: Response, details: unknown) {
   });
 }
 
-function toClaimListItemDto(claim: ClaimListRow) {
+async function toClaimListItemDto(claim: ClaimListRow) {
+  const images = await Promise.all(
+    claim.images.map(async (image) => ({
+      imageId: image.imageId,
+      imageUrl: await resolveImageUrl(image.imageUrl),
+      fileType: image.fileType,
+      fileSizeKb: image.fileSizeKb,
+    }))
+  );
+
   return {
     claimId: claim.claimId,
     studentId: claim.studentId,
     itemId: claim.itemId,
     category: claim.category,
+    itemName: claim.itemName,
     campusId: claim.campusId,
+    campus: {
+      campusId: claim.campus.campusId,
+      campusName: claim.campus.campusName,
+    },
     description: claim.description,
+    additionalInfo: claim.additionalInfo,
+    notificationPreference: claim.notificationPreference,
     dateLost: claim.dateLost,
     locationLost: claim.locationLost,
     status: claim.status,
@@ -177,9 +204,10 @@ function toClaimListItemDto(claim: ClaimListRow) {
       firstName: claim.student.firstName,
       lastName: claim.student.lastName,
       email: claim.student.email,
-      studentNumber: claim.student.studentNumber
-        ? claim.student.studentNumber.toString()
-        : null,
+      studentNumber:
+        claim.student.studentNumber !== null
+          ? Number(claim.student.studentNumber)
+          : null,
     },
     item: claim.item
       ? {
@@ -194,20 +222,14 @@ function toClaimListItemDto(claim: ClaimListRow) {
           dateFound: claim.item.dateFound,
         }
       : null,
+    images,
   };
 }
 
 async function toClaimDetailDto(claim: ClaimDetailRow) {
-  const resolvedImages = await Promise.all(
-    claim.images.map(async (image) => ({
-      imageId: image.imageId,
-      imageUrl: await resolveImageUrl(image.imageUrl),
-    }))
-  );
-
+  const base = await toClaimListItemDto(claim);
   return {
-    ...toClaimListItemDto(claim),
-    images: resolvedImages,
+    ...base,
     reviewedBy: claim.reviewedBy,
     verifiedBy: claim.verifiedBy,
     reviewer: claim.reviewer
@@ -523,8 +545,15 @@ function scoreCandidateItem(
  *             properties:
  *               category:
  *                 type: string
+ *               itemName:
+ *                 type: string
  *               description:
  *                 type: string
+ *               additionalInfo:
+ *                 type: string
+ *               notificationPreference:
+ *                 type: string
+ *                 enum: [email, phone, email_and_phone]
  *               dateLost:
  *                 type: string
  *                 format: date
@@ -572,20 +601,26 @@ router.post(
         });
         return;
       }
+      const campusId = actor.campusId;
 
       const payload = req.body as CreateClaimInput;
-      const campusId = actor.campusId;
+
       const claim = await prisma.$transaction(async (tx) => {
         const created = await tx.claim.create({
           data: {
             studentId: actor.userId,
             campusId,
             category: payload.category,
+            itemName: payload.itemName,
             description: payload.description,
+            additionalInfo: payload.additionalInfo,
+            ...(payload.notificationPreference
+              ? { notificationPreference: payload.notificationPreference }
+              : {}),
             dateLost: payload.dateLost,
             locationLost: payload.locationLost,
           },
-          select: claimDetailSelect,
+          select: { claimId: true },
         });
 
         if (payload.images.length > 0) {
@@ -600,7 +635,10 @@ router.post(
           });
         }
 
-        return created;
+        return tx.claim.findUniqueOrThrow({
+          where: { claimId: created.claimId },
+          select: claimDetailSelect,
+        });
       });
 
       await writeAuditLog({
@@ -708,9 +746,9 @@ router.get(
 
       const nextCursor =
         claims.length > query.limit ? claims[query.limit].claimId : null;
-      const data = claims
-        .slice(0, query.limit)
-        .map((claim) => toClaimListItemDto(claim));
+      const data = await Promise.all(
+        claims.slice(0, query.limit).map((claim) => toClaimListItemDto(claim))
+      );
 
       res.status(200).json({ data, nextCursor });
     } catch (err) {

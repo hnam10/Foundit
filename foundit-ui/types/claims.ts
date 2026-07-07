@@ -1,5 +1,3 @@
-import type { SecurityItemImage } from '@/types/items';
-
 export type ApiClaimStatus =
   | 'submitted'
   | 'match_found'
@@ -9,13 +7,32 @@ export type ApiClaimStatus =
   | 'picked_up'
   | 'under_review';
 
+export type ApiClaimNotificationPreference =
+  | 'email'
+  | 'phone'
+  | 'email_and_phone';
+
+export interface ClaimImage {
+  imageId: string;
+  imageUrl: string;
+  fileType: string;
+  fileSizeKb: number;
+}
+
 export interface SecurityClaimListItem {
   claimId: string;
   studentId: string;
   itemId: string | null;
   category: string;
+  itemName: string | null;
   campusId: string;
+  campus: {
+    campusId: string;
+    campusName: string;
+  };
   description: string;
+  additionalInfo: string | null;
+  notificationPreference: ApiClaimNotificationPreference;
   dateLost: string | null;
   locationLost: string | null;
   status: ApiClaimStatus;
@@ -29,7 +46,7 @@ export interface SecurityClaimListItem {
     firstName: string;
     lastName: string;
     email: string;
-    studentNumber: string | null;
+    studentNumber: number | null;
   };
   item: {
     itemId: string;
@@ -41,11 +58,12 @@ export interface SecurityClaimListItem {
     color: string | null;
     locationFound: string | null;
     dateFound: string;
+    imageUrl: string | null;
   } | null;
+  images: ClaimImage[];
 }
 
 export interface SecurityClaimDetail extends SecurityClaimListItem {
-  images: SecurityItemImage[];
   reviewedBy: string | null;
   verifiedBy: string | null;
   reviewer: {

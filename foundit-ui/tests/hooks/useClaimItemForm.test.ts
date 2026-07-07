@@ -30,6 +30,7 @@ const handleImageUploadMock = vi.mocked(handleImageUpload);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getAccessTokenMock.mockReturnValue('test-access-token');
 });
 
 describe('useClaimItemForm', () => {
@@ -81,13 +82,13 @@ describe('useClaimItemForm', () => {
     });
     await act(() => result.current.handleSubmit());
 
-    // itemName/notificationPreference are stub fields — createClaimSchema has
-    // no columns for them yet, so the payload must not include them.
     expect(apiFetchMock).toHaveBeenCalledWith('/api/claims', {
       method: 'POST',
       body: JSON.stringify({
         category: 'Electronics',
+        itemName: 'MacBook Pro',
         description: 'Black backpack',
+        notificationPreference: 'email',
         images: [],
       }),
     });
@@ -97,7 +98,6 @@ describe('useClaimItemForm', () => {
   });
 
   it('uploads staged images to R2 and includes them in the claim payload', async () => {
-    getAccessTokenMock.mockReturnValue('token-123');
     handleImageUploadMock.mockResolvedValueOnce({
       imageUrl: 'reports/abc.jpg',
       fileType: 'jpg',
@@ -115,12 +115,17 @@ describe('useClaimItemForm', () => {
     });
     await act(() => result.current.handleSubmit());
 
-    expect(handleImageUploadMock).toHaveBeenCalledWith(file, 'token-123');
+    expect(handleImageUploadMock).toHaveBeenCalledWith(
+      file,
+      'test-access-token'
+    );
     expect(apiFetchMock).toHaveBeenCalledWith('/api/claims', {
       method: 'POST',
       body: JSON.stringify({
         category: 'Electronics',
+        itemName: 'MacBook Pro',
         description: 'Black backpack',
+        notificationPreference: 'email',
         images: [
           { imageUrl: 'reports/abc.jpg', fileType: 'jpg', fileSizeKb: 120 },
         ],
@@ -128,9 +133,8 @@ describe('useClaimItemForm', () => {
     });
   });
 
-  it('skips uploading when there is no access token', async () => {
+  it('blocks submission and shows the login message when there is no access token', async () => {
     getAccessTokenMock.mockReturnValue(null);
-    apiFetchMock.mockResolvedValueOnce({ claimId: 'claim-1' });
     const { result } = renderHook(() => useClaimItemForm());
     const file = new File(['x'], 'proof.jpg', { type: 'image/jpeg' });
 
@@ -143,14 +147,10 @@ describe('useClaimItemForm', () => {
     await act(() => result.current.handleSubmit());
 
     expect(handleImageUploadMock).not.toHaveBeenCalled();
-    expect(apiFetchMock).toHaveBeenCalledWith('/api/claims', {
-      method: 'POST',
-      body: JSON.stringify({
-        category: 'Electronics',
-        description: 'Black backpack',
-        images: [],
-      }),
-    });
+    expect(apiFetchMock).not.toHaveBeenCalled();
+    expect(result.current.submitError).toBe(
+      'Please log in as a student to submit a claim.'
+    );
   });
 
   it('maps backend statuses to user-facing copy', async () => {
@@ -185,6 +185,29 @@ describe('useClaimItemForm', () => {
     await act(() => result.current.handleSubmit());
 
     expect(result.current.submitError).toBe('Unable to connect to server.');
+    expect(result.current.isSubmitting).toBe(false);
+  });
+
+  it('shows the generic message (not the login copy) when an image upload fails', async () => {
+    handleImageUploadMock.mockRejectedValueOnce(
+      new Error('Failed to upload image: 403 Forbidden')
+    );
+    const { result } = renderHook(() => useClaimItemForm());
+
+    act(() => {
+      result.current.setCategory('Electronics');
+      result.current.setItemName('MacBook Pro');
+      result.current.setDescription('Black backpack');
+      result.current.setImageFiles([
+        new File(['x'], 'proof.png', { type: 'image/png' }),
+      ]);
+    });
+    await act(() => result.current.handleSubmit());
+
+    expect(result.current.submitError).toBe(
+      'Something went wrong submitting your claim. Please try again.'
+    );
+    expect(apiFetchMock).not.toHaveBeenCalled();
     expect(result.current.isSubmitting).toBe(false);
   });
 });
