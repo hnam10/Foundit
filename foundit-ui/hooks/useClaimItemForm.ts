@@ -4,12 +4,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ApiError, apiFetch } from '@/lib/api/client';
 import { CLAIM_SUBMITTED_PATH } from '@/utils/routes';
+import { getAccessToken } from '@/utils/auth';
+import handleImageUpload from '@/utils/handleImageUpload';
 import { debugError, debugLog, debugWarn } from '@/utils/debug';
 
 // Backend caps (createClaimSchema): category ≤ 50, description ≤ 2000.
 const DESCRIPTION_MAX = 2000;
-// createClaimSchema has no itemName yet; capped to match Item.title
-// (VarChar(100)) so the values line up once the backend adds the column.
+// Matches Item.title (VarChar(100)) — createClaimSchema.itemName shares the cap.
 const ITEM_NAME_MAX = 100;
 
 // What the student wants to be notified through when their claim advances.
@@ -27,25 +28,14 @@ export function useClaimItemForm() {
   const [category, setCategory] = useState('');
   const [itemName, setItemName] = useState('');
   const [description, setDescription] = useState('');
-  // ── STUB FIELDS ──────────────────────────────────────────────────────────
-  // Item Name, Notification preferences and Additional Information are shown
-  // for design parity but are NOT persisted: createClaimSchema only accepts
-  // category, description, dateLost and locationLost. Item Name is validated
-  // (required, ≤ ITEM_NAME_MAX) so it is ready to join the payload the moment
-  // the backend grows the column; the other two are optional in the design,
-  // so they are not validated either.
   // Defaults to 'email' — students are opted in to email notifications unless
-  // they pick otherwise. The backend today only has the boolean
-  // user.emailNotificationOptIn (and PATCH /api/users/me/notifications is
-  // still 501), so nothing is persisted yet; phone options additionally need
-  // a phone-opt-in column.
+  // they pick otherwise.
   const [notificationPreference, setNotificationPreference] =
     useState<NotificationPreference>('email');
   const [additionalInformation, setAdditionalInformation] = useState('');
-  // Fed by the image gallery as raw Files (upload happens at submit time in
-  // the report-found flow). Intentionally NOT uploaded or sent here —
-  // POST /api/claims has no image field yet. Mirror useReportFoundItemForm's
-  // handleImageUpload loop once the backend accepts claim images.
+  // Fed by the image gallery as raw Files; uploaded to R2 at submit time
+  // (mirrors useReportFoundItemForm's handleImageUpload loop) and attached
+  // to the claim via the `images` field on POST /api/claims.
   const [imageFiles, setImageFiles] = useState<File[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -114,31 +104,48 @@ export function useClaimItemForm() {
     setSubmitError(null);
     if (!validate()) return;
 
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+      setSubmitError(messageForStatus(401));
+      return;
+    }
+
     // Log shapes, not content — description/additionalInformation are
-    // user-typed (see utils/debug.ts conventions). The stub-field values are
-    // logged so "why didn't this reach the backend?" is answerable from the
-    // console: they are dropped by design (no backend column yet).
+    // user-typed (see utils/debug.ts conventions).
     debugLog('claim-form', 'submitting claim', {
       category,
+      itemNameLength: itemName.trim().length,
       descriptionLength: description.trim().length,
-      droppedStubFields: {
-        itemNameLength: itemName.trim().length,
-        notificationPreference,
-        additionalInformationLength: additionalInformation.trim().length,
-        imageFileCount: imageFiles.length,
-      },
+      notificationPreference,
+      additionalInformationLength: additionalInformation.trim().length,
+      imageFileCount: imageFiles.length,
     });
 
     setIsSubmitting(true);
     try {
+      const uploadedImages: {
+        imageUrl: string;
+        fileType: string;
+        fileSizeKb: number;
+      }[] = [];
+      for (const file of imageFiles) {
+        const result = await handleImageUpload(file, accessToken);
+        uploadedImages.push({
+          imageUrl: result.imageUrl,
+          fileType: result.fileType,
+          fileSizeKb: result.fileSizeKb,
+        });
+      }
+
       const claim = await apiFetch<{ claimId?: string }>('/api/claims', {
         method: 'POST',
         body: JSON.stringify({
           category: category.trim(),
+          itemName: itemName.trim(),
           description: description.trim(),
-          // NOTE: itemName, notificationPreference, additionalInformation
-          // and imageFiles are intentionally omitted — they are stub fields
-          // with no backend column (see state declarations).
+          additionalInfo: additionalInformation.trim() || undefined,
+          notificationPreference,
+          images: uploadedImages,
         }),
       });
 
@@ -151,12 +158,16 @@ export function useClaimItemForm() {
       if (err instanceof ApiError && err.status > 0) {
         debugWarn('claim-form', `claim rejected by backend (${err.status})`);
         setSubmitError(messageForStatus(err.status));
-      } else {
+      } else if (err instanceof ApiError) {
         // status 0: config/network failure — apiFetch's message says which.
         debugError('claim-form', 'claim submit threw', err);
-        setSubmitError(
-          err instanceof ApiError ? err.message : messageForStatus(401)
-        );
+        setSubmitError(err.message);
+      } else {
+        // Not an ApiError — e.g. handleImageUpload (the R2 presigned-URL
+        // upload) threw a plain Error before the request ever reached
+        // POST /api/claims. Use the generic fallback, not the 401 copy.
+        debugError('claim-form', 'claim submit threw', err);
+        setSubmitError(messageForStatus(0));
       }
       setIsSubmitting(false);
     }

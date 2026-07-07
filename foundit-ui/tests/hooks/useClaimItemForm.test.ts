@@ -15,7 +15,19 @@ vi.mock('@/lib/api/client', async (importOriginal) => {
   return { ...actual, apiFetch: vi.fn() };
 });
 
+vi.mock('@/utils/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/auth')>();
+  return { ...actual, getAccessToken: () => 'test-access-token' };
+});
+
+vi.mock('@/utils/handleImageUpload', () => ({
+  default: vi.fn(),
+}));
+
 const apiFetchMock = vi.mocked(apiFetch);
+const handleImageUploadMock = vi.mocked(
+  (await import('@/utils/handleImageUpload')).default
+);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -70,13 +82,14 @@ describe('useClaimItemForm', () => {
     });
     await act(() => result.current.handleSubmit());
 
-    // itemName/notificationPreference are stub fields — createClaimSchema has
-    // no columns for them yet, so the payload must not include them.
     expect(apiFetchMock).toHaveBeenCalledWith('/api/claims', {
       method: 'POST',
       body: JSON.stringify({
         category: 'Electronics',
+        itemName: 'MacBook Pro',
         description: 'Black backpack',
+        notificationPreference: 'email',
+        images: [],
       }),
     });
     expect(pushMock).toHaveBeenCalledWith('/student/claim-item/submitted');
@@ -116,6 +129,29 @@ describe('useClaimItemForm', () => {
     await act(() => result.current.handleSubmit());
 
     expect(result.current.submitError).toBe('Unable to connect to server.');
+    expect(result.current.isSubmitting).toBe(false);
+  });
+
+  it('shows the generic message (not the login copy) when an image upload fails', async () => {
+    handleImageUploadMock.mockRejectedValueOnce(
+      new Error('Failed to upload image: 403 Forbidden')
+    );
+    const { result } = renderHook(() => useClaimItemForm());
+
+    act(() => {
+      result.current.setCategory('Electronics');
+      result.current.setItemName('MacBook Pro');
+      result.current.setDescription('Black backpack');
+      result.current.setImageFiles([
+        new File(['x'], 'proof.png', { type: 'image/png' }),
+      ]);
+    });
+    await act(() => result.current.handleSubmit());
+
+    expect(result.current.submitError).toBe(
+      'Something went wrong submitting your claim. Please try again.'
+    );
+    expect(apiFetchMock).not.toHaveBeenCalled();
     expect(result.current.isSubmitting).toBe(false);
   });
 });
