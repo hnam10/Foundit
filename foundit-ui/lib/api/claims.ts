@@ -84,3 +84,20 @@ export async function updateClaimStatus(
 
   return res.json() as Promise<SecurityClaimDetail>;
 }
+
+/** Cancels a submitted claim. Only the owning student can cancel, and only
+ * while the claim is still `submitted` — the backend rejects (409) once a
+ * claim has moved to under_review or beyond. */
+export async function deleteClaim(
+  claimId: string
+): Promise<{ deleted: boolean; claimId: string }> {
+  const res = await authFetch(`${API_BASE}/api/claims/${claimId}`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<{ deleted: boolean; claimId: string }>;
+}
