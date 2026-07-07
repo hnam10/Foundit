@@ -216,6 +216,7 @@ export default function ProfileSettingsPage() {
                           label="Phone Number"
                           type="tel"
                           autoComplete="tel"
+                          hint="10 digits (e.g. 4161234567). Dashes and spaces are OK."
                           value={phoneNumber}
                           width="full"
                           onChange={(e) => setPhoneNumber(e.target.value)}
