@@ -79,7 +79,10 @@ export async function generateMatchCandidates(claimId: string): Promise<{
   const items = await prisma.item.findMany({
     where: {
       status: ItemStatus.stored,
-      OR: [{ retentionExpiryDate: null }, { retentionExpiryDate: { gt: today } }],
+      OR: [
+        { retentionExpiryDate: null },
+        { retentionExpiryDate: { gt: today } },
+      ],
       claims: {
         none: { status: ClaimStatus.approved },
       },

@@ -4,7 +4,11 @@ function cleanPart(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function append(parts: string[], label: string, value: string | null | undefined) {
+function append(
+  parts: string[],
+  label: string,
+  value: string | null | undefined
+) {
   const cleaned = cleanPart(value);
   if (cleaned) {
     parts.push(`${label}:${cleaned}`);

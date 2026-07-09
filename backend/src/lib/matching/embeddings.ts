@@ -13,7 +13,9 @@ function tokenize(text: string): string[] {
 }
 
 function normalizeVector(vector: number[]): number[] {
-  const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+  const magnitude = Math.sqrt(
+    vector.reduce((sum, value) => sum + value * value, 0)
+  );
   if (magnitude === 0) {
     return vector;
   }
@@ -46,7 +48,8 @@ async function embedWithOpenRouter(
     'Content-Type': 'application/json',
   };
 
-  const referer = process.env.APP_URL?.trim() || process.env.FRONTEND_URL?.trim();
+  const referer =
+    process.env.APP_URL?.trim() || process.env.FRONTEND_URL?.trim();
   if (referer) {
     headers['HTTP-Referer'] = referer;
     headers['X-Title'] = 'Foundit';

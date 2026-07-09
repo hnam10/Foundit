@@ -46,9 +46,7 @@ export function cosineSimilarity(left: number[], right: number[]): number {
 
 export function daysBetween(left: Date, right: Date): number {
   const msPerDay = 1000 * 60 * 60 * 24;
-  return Math.abs(
-    Math.round((left.getTime() - right.getTime()) / msPerDay)
-  );
+  return Math.abs(Math.round((left.getTime() - right.getTime()) / msPerDay));
 }
 
 export function dateProximityScore(

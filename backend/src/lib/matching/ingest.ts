@@ -87,7 +87,11 @@ export async function ingestItemSearchIndex(
   await saveSearchIndex('item', itemId, searchText, embedding);
 }
 
-function logIngestFailure(entity: 'claim' | 'item', id: string, error: unknown) {
+function logIngestFailure(
+  entity: 'claim' | 'item',
+  id: string,
+  error: unknown
+) {
   console.error(`Failed to ingest ${entity} search index`, { id, error });
 }
 

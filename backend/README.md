@@ -93,10 +93,10 @@ JWT_REFRESH_SECRET=another-different-random-string
 
 ### Semantic matching
 
-| Variable                    | Description                                                                 |
-| --------------------------- | --------------------------------------------------------------------------- |
-| `OPENROUTER_API_KEY`        | OpenRouter API key for embedding-based match search                         |
-| `OPENROUTER_EMBEDDING_MODEL`| Embedding model (default: `openai/text-embedding-3-small`)                  |
+| Variable                     | Description                                                |
+| ---------------------------- | ---------------------------------------------------------- |
+| `OPENROUTER_API_KEY`         | OpenRouter API key for embedding-based match search        |
+| `OPENROUTER_EMBEDDING_MODEL` | Embedding model (default: `openai/text-embedding-3-small`) |
 
 If unset, a local hash fallback is used (dev only). After deploy, backfill existing rows:
 
