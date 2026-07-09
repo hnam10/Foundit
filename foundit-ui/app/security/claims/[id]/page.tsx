@@ -2,9 +2,11 @@
 
 import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Grid, Spinner, Stack, Text } from '@chakra-ui/react';
+import { Box, Flex, Grid, Spinner, Stack, Text } from '@chakra-ui/react';
 import { notFound } from 'next/navigation';
 import { ClaimPickupNoticeCard } from '@/components/claims/ClaimPickupNoticeCard';
+import { CloseClaimDialog } from '@/components/claims/CloseClaimDialog';
+import { CloseClaimButton } from '@/components/claims/CloseClaimButton';
 import { ClaimDetailsCard } from '@/components/claims/ClaimDetailsCard';
 import { ClaimDetailHeader } from '@/components/claims/ClaimDetailHeader';
 import { ClaimMatchPanel } from '@/components/claims/ClaimMatchPanel';
@@ -28,6 +30,7 @@ import { fetchCampuses } from '@/lib/api/items';
 import type { MatchSuggestion, SecurityClaimDetail } from '@/types/claims';
 import type { Campus } from '@/types/items';
 import {
+  claimCanBeClosedBySecurity,
   claimHasLinkedItem,
   formatClaimDateTime,
   getClaimDetailMode,
@@ -75,9 +78,31 @@ export default function ClaimDetailPage({
     useState<VerificationState>(initialVerification);
   const [releasing, setReleasing] = useState(false);
   const [releaseError, setReleaseError] = useState('');
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
+
+    async function loadMatches(
+      claimData: SecurityClaimDetail
+    ): Promise<MatchSuggestion[]> {
+      if (!claimNeedsAutoMatch(claimData)) {
+        return fetchMatchSuggestions(claimId).catch(
+          () => [] as MatchSuggestion[]
+        );
+      }
+
+      setGeneratingMatches(true);
+      try {
+        return await generateMatchSuggestions(claimId);
+      } catch {
+        return fetchMatchSuggestions(claimId).catch(
+          () => [] as MatchSuggestion[]
+        );
+      } finally {
+        if (active) setGeneratingMatches(false);
+      }
+    }
 
     async function load() {
       setLoading(true);
@@ -91,20 +116,7 @@ export default function ClaimDetailPage({
 
         if (!active) return;
 
-        let matchData = await fetchMatchSuggestions(claimId).catch(
-          () => [] as MatchSuggestion[]
-        );
-
-        if (matchData.length === 0 && claimNeedsAutoMatch(claimData)) {
-          setGeneratingMatches(true);
-          try {
-            matchData = await generateMatchSuggestions(claimId);
-          } catch {
-            matchData = [];
-          } finally {
-            if (active) setGeneratingMatches(false);
-          }
-        }
+        const matchData = await loadMatches(claimData);
 
         let resolvedClaim = claimData;
         if (matchData.length > 0 && claimNeedsAutoMatch(claimData)) {
@@ -137,6 +149,47 @@ export default function ClaimDetailPage({
       active = false;
     };
   }, [claimId]);
+
+  useEffect(() => {
+    if (!claim || !claimNeedsAutoMatch(claim)) return;
+
+    let active = true;
+
+    async function refreshMatchesOnFocus() {
+      if (document.visibilityState !== 'visible' || !active) return;
+
+      try {
+        const matchData = await fetchMatchSuggestions(claimId);
+        if (!active) return;
+        setSuggestions(matchData);
+        if (matchData.length > 0) {
+          setSelectedItemId((current) => current ?? matchData[0].itemId);
+        }
+      } catch {
+        // Keep existing suggestions when refresh fails.
+      }
+    }
+
+    function handleVisibilityChange() {
+      void refreshMatchesOnFocus();
+    }
+
+    function handlePageShow(event: PageTransitionEvent) {
+      if (event.persisted) {
+        void refreshMatchesOnFocus();
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('popstate', handleVisibilityChange);
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('popstate', handleVisibilityChange);
+    };
+  }, [claim, claimId]);
 
   const mode = useMemo(
     () => (claim ? getClaimDetailMode(claim, suggestions.length) : 'awaiting'),
@@ -203,6 +256,7 @@ export default function ClaimDetailPage({
       : !verificationComplete
         ? 'Complete all verification checklist items first'
         : undefined;
+  const canCloseClaim = claimCanBeClosedBySecurity(claim);
 
   async function handleConfirmMatch() {
     if (!claim || !selectedItemId) return;
@@ -252,6 +306,13 @@ export default function ClaimDetailPage({
         onBack={() => router.push('/security/claims')}
       />
 
+      <CloseClaimDialog
+        claim={claim}
+        open={closeDialogOpen}
+        onOpenChange={setCloseDialogOpen}
+        onClosed={setClaim}
+      />
+
       {claim.rejectionReason ? (
         <Box
           bg="red.50"
@@ -289,6 +350,9 @@ export default function ClaimDetailPage({
               selectedItemId={selectedItemId}
               onSelectItem={setSelectedItemId}
               onConfirmMatch={handleConfirmMatch}
+              onCloseClaim={
+                canCloseClaim ? () => setCloseDialogOpen(true) : undefined
+              }
               generating={generatingMatches}
               confirming={confirmingMatch}
             />
@@ -324,6 +388,13 @@ export default function ClaimDetailPage({
                   releasing={releasing}
                   releaseError={releaseError}
                 />
+                {canCloseClaim ? (
+                  <Flex justify="flex-start">
+                    <CloseClaimButton
+                      onClick={() => setCloseDialogOpen(true)}
+                    />
+                  </Flex>
+                ) : null}
               </>
             ) : (
               <>

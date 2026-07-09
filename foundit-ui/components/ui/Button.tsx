@@ -6,7 +6,12 @@ import {
   type ButtonProps as ChakraButtonProps,
 } from '@chakra-ui/react';
 
-export type ButtonVariant = 'primary' | 'outline' | 'muted' | 'danger';
+export type ButtonVariant =
+  | 'primary'
+  | 'outline'
+  | 'muted'
+  | 'danger'
+  | 'dangerOutline';
 
 const chakraVariantMap: Record<
   ButtonVariant,
@@ -26,6 +31,12 @@ const chakraVariantMap: Record<
     color: 'gray.700',
   },
   danger: { variant: 'solid', colorPalette: 'red' },
+  dangerOutline: {
+    variant: 'outline',
+    colorPalette: 'red',
+    borderWidth: 1.5,
+    color: 'red.600',
+  },
 };
 
 export type ButtonProps = Omit<

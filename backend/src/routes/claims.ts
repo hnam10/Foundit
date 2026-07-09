@@ -12,7 +12,7 @@ import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { writeAuditLog } from '../utils/auditLog';
 import { scheduleClaimSearchIndexIngest } from '../lib/matching/ingest';
-import { generateMatchCandidates } from '../lib/matching/matching';
+import { refreshClaimMatchSuggestions } from '../lib/matching/suggestions';
 import { resolveImageUrl } from '../utils/imageUrl';
 import {
   claimAndMatchParamsSchema,
@@ -1352,42 +1352,8 @@ router.post(
         return;
       }
 
-      const { candidates: scoredCandidates, candidateCount } =
-        await generateMatchCandidates(claim.claimId);
-
-      if (scoredCandidates.length > 0) {
-        await prisma.$transaction(async (tx) => {
-          await Promise.all(
-            scoredCandidates.map((candidate) =>
-              tx.matchSuggestion.upsert({
-                where: {
-                  claimId_itemId: {
-                    claimId: claim.claimId,
-                    itemId: candidate.itemId,
-                  },
-                },
-                update: {
-                  matchScore: candidate.score,
-                  matchCriteria: candidate.criteria || null,
-                },
-                create: {
-                  claimId: claim.claimId,
-                  itemId: candidate.itemId,
-                  matchScore: candidate.score,
-                  matchCriteria: candidate.criteria || null,
-                },
-              })
-            )
-          );
-
-          if (claim.status === ClaimStatus.submitted) {
-            await tx.claim.update({
-              where: { claimId: claim.claimId },
-              data: { status: ClaimStatus.under_review },
-            });
-          }
-        });
-      }
+      const { candidateCount, suggestionCount } =
+        await refreshClaimMatchSuggestions(claim.claimId);
 
       await writeAuditLog({
         actorId: actor.userId,
@@ -1396,7 +1362,7 @@ router.post(
         entityId: claim.claimId,
         details: {
           candidateCount,
-          suggestionCount: scoredCandidates.length,
+          suggestionCount,
         },
         ipAddress: req.ip,
       });

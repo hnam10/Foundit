@@ -69,9 +69,9 @@ export function ClaimMatchCard({
           ) : null}
         </Flex>
         <Flex align="center" gap={2}>
-          <Badge colorPalette="green" variant="subtle" fontSize="xs">
+          <Text fontSize="xs" fontWeight="semibold" color="blue.600">
             {scoreLabel}
-          </Badge>
+          </Text>
           <RadioInput
             type="radio"
             name="claim-match"

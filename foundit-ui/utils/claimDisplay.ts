@@ -40,6 +40,18 @@ export function claimAwaitingMatchConfirmation(
   return claim.status === 'under_review' && !claim.itemId;
 }
 
+/** Security can reject (close) claims that have not been picked up yet. */
+
+export function claimCanBeClosedBySecurity(
+  claim: Pick<SecurityClaimListItem, 'status'>
+): boolean {
+  return (
+    claim.status === 'submitted' ||
+    claim.status === 'under_review' ||
+    claim.status === 'approved'
+  );
+}
+
 export function getClaimItemName(claim: SecurityClaimListItem): string {
   if (claim.item?.title) return claim.item.title;
 

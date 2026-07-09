@@ -7,6 +7,7 @@ import { validateQuery, validate } from '../validators/shared';
 import { resolveImageUrl } from '../utils/imageUrl';
 import { writeAuditLog } from '../utils/auditLog';
 import { scheduleItemSearchIndexIngest } from '../lib/matching/ingest';
+import { scheduleMatchRefreshForCampus } from '../lib/matching/suggestions';
 import {
   itemParamsSchema,
   listSecurityItemsQuerySchema,
@@ -600,6 +601,7 @@ router.post(
         color: detail.color,
         locationFound: detail.locationFound,
       });
+      scheduleMatchRefreshForCampus(campusId);
 
       res.status(201).json(await toSecurityItemDetailDto(detail));
     } catch (err) {
