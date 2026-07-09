@@ -5,11 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Badge,
   Box,
+  Dialog,
   Flex,
   Grid,
   Heading,
   Input,
   NativeSelect,
+  Portal,
   Spinner,
   Stack,
   Text,
@@ -19,9 +21,19 @@ import { ItemDetailRow } from '@/components/items/ItemDetailField';
 import { DetailImageGallery } from '@/components/DetailImageGallery';
 import { ItemStatusBadge } from '@/components/items/ItemStatusProgress';
 import { Button } from '@/components/ui/Button';
-import { fetchSecurityItem, updateSecurityItem } from '@/lib/api/items';
+import {
+  fetchSecurityItem,
+  updateSecurityItem,
+  updateSecurityItemStatus,
+} from '@/lib/api/items';
 import { CATEGORIES } from '@/constants/categories';
-import type { SecurityItemDetail } from '@/types/items';
+import type { ItemStatus, SecurityItemDetail } from '@/types/items';
+
+const DISPOSABLE_STATUSES = new Set<ItemStatus>([
+  'pending_report',
+  'stored',
+  'expired',
+]);
 
 const PLACEHOLDER = '—';
 
@@ -80,6 +92,9 @@ export default function SecurityItemDetailPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [navigatingToRelease, setNavigatingToRelease] = useState(false);
+  const [disposeDialogOpen, setDisposeDialogOpen] = useState(false);
+  const [disposing, setDisposing] = useState(false);
+  const [disposeError, setDisposeError] = useState('');
 
   useEffect(() => {
     if (!itemId) return;
@@ -166,6 +181,27 @@ export default function SecurityItemDetailPage() {
     }
   }
 
+  async function handleDispose() {
+    if (!itemId || disposing) return;
+
+    setDisposing(true);
+    setDisposeError('');
+
+    try {
+      const updated = await updateSecurityItemStatus(itemId, {
+        status: 'disposed',
+      });
+      setItem(updated);
+      setDisposeDialogOpen(false);
+    } catch (err) {
+      setDisposeError(
+        err instanceof Error ? err.message : 'Failed to mark item as disposed.'
+      );
+    } finally {
+      setDisposing(false);
+    }
+  }
+
   if (loading) {
     return (
       <Flex justify="center" py={16}>
@@ -199,6 +235,8 @@ export default function SecurityItemDetailPage() {
   const finderContact =
     item.finder?.phone?.trim() || item.finder?.email?.trim() || PLACEHOLDER;
 
+  const canDispose = DISPOSABLE_STATUSES.has(item.status);
+
   return (
     <Stack gap={6}>
       <Flex
@@ -220,19 +258,37 @@ export default function SecurityItemDetailPage() {
             Review and update found item information.
           </Text>
         </Stack>
-        <Button
-          variant="outline"
-          disabled={editing || item.status !== 'stored' || navigatingToRelease}
-          loading={navigatingToRelease}
-          minW="155px"
-          fontWeight="semibold"
-          onClick={() => {
-            setNavigatingToRelease(true);
-            router.push(`/security/items/${itemId}/walk-in-release`);
-          }}
-        >
-          Walk-in Release
-        </Button>
+        <Flex gap={3} wrap="wrap">
+          {canDispose ? (
+            <Button
+              variant="danger"
+              disabled={editing || disposing}
+              minW="155px"
+              fontWeight="semibold"
+              onClick={() => {
+                setDisposeError('');
+                setDisposeDialogOpen(true);
+              }}
+            >
+              Mark as Disposed
+            </Button>
+          ) : null}
+          <Button
+            variant="outline"
+            disabled={
+              editing || item.status !== 'stored' || navigatingToRelease
+            }
+            loading={navigatingToRelease}
+            minW="155px"
+            fontWeight="semibold"
+            onClick={() => {
+              setNavigatingToRelease(true);
+              router.push(`/security/items/${itemId}/walk-in-release`);
+            }}
+          >
+            Walk-in Release
+          </Button>
+        </Flex>
       </Flex>
 
       <Box
@@ -405,6 +461,59 @@ export default function SecurityItemDetailPage() {
           {saveError}
         </Text>
       ) : null}
+
+      <Dialog.Root
+        open={disposeDialogOpen}
+        onOpenChange={(e) => {
+          if (!e.open && !disposing) {
+            setDisposeDialogOpen(false);
+            setDisposeError('');
+          }
+        }}
+      >
+        <Portal>
+          <Dialog.Backdrop />
+          <Dialog.Positioner>
+            <Dialog.Content maxW="md">
+              <Dialog.Header>
+                <Dialog.Title>Mark item as disposed?</Dialog.Title>
+              </Dialog.Header>
+              <Dialog.Body>
+                <Stack gap={3}>
+                  <Text fontSize="sm" color="gray.700">
+                    Confirm that <strong>{item.title}</strong> has been disposed
+                    of in person. This updates the item status and cannot be
+                    undone.
+                  </Text>
+                  {disposeError ? (
+                    <Text fontSize="sm" color="red.500">
+                      {disposeError}
+                    </Text>
+                  ) : null}
+                </Stack>
+              </Dialog.Body>
+              <Dialog.Footer>
+                <Button
+                  variant="muted"
+                  onClick={() => setDisposeDialogOpen(false)}
+                  disabled={disposing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  loading={disposing}
+                  loadingText="Disposing..."
+                  onClick={handleDispose}
+                  disabled={disposing}
+                >
+                  Confirm Disposal
+                </Button>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
 
       <Flex justify="flex-end" gap={3} wrap="wrap">
         {editing ? (

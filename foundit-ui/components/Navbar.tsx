@@ -171,7 +171,7 @@ const navLinksByVariant: Record<
 /** Dropdown items shown under the user menu (student and security variants). */
 const userMenuItems: DropdownItem[] = [
   { label: 'Profile', href: '/profile' },
-  { label: 'Notifications', href: '/student/notifications' },
+  { label: 'Notifications', href: '/notifications' },
   { label: 'Sign Out', onClick: signOut, danger: true },
 ];
 

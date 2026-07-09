@@ -11,6 +11,8 @@ import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { writeAuditLog } from '../utils/auditLog';
+import { scheduleClaimSearchIndexIngest } from '../lib/matching/ingest';
+import { generateMatchCandidates } from '../lib/matching/matching';
 import { resolveImageUrl } from '../utils/imageUrl';
 import {
   claimAndMatchParamsSchema,
@@ -448,85 +450,6 @@ function createClaimStatusNotificationInput(
   } as const;
 }
 
-function tokenize(text: string | null | undefined) {
-  if (!text) {
-    return new Set<string>();
-  }
-
-  return new Set(
-    text
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .map((token) => token.trim())
-      .filter((token) => token.length >= 3)
-  );
-}
-
-function intersectionSize(left: Set<string>, right: Set<string>) {
-  let count = 0;
-  for (const token of left) {
-    if (right.has(token)) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
-function scoreCandidateItem(
-  claim: Pick<ClaimDetailRow, 'category' | 'description' | 'locationLost'>,
-  item: {
-    category: string;
-    locationFound: string | null;
-    title: string;
-    descriptionPublic: string | null;
-    brand: string | null;
-    color: string | null;
-  }
-) {
-  let score = 0;
-  const criteria: string[] = [];
-
-  if (claim.category.toLowerCase() === item.category.toLowerCase()) {
-    score += 60;
-    criteria.push('category');
-  }
-
-  const claimLocationTokens = tokenize(claim.locationLost);
-  const itemLocationTokens = tokenize(item.locationFound);
-  if (
-    claimLocationTokens.size > 0 &&
-    intersectionSize(claimLocationTokens, itemLocationTokens) > 0
-  ) {
-    score += 20;
-    criteria.push('location');
-  }
-
-  const claimDescriptionTokens = tokenize(claim.description);
-  const itemDescriptionTokens = new Set<string>([
-    ...tokenize(item.title),
-    ...tokenize(item.descriptionPublic),
-    ...tokenize(item.brand),
-    ...tokenize(item.color),
-  ]);
-  const descriptionMatches = intersectionSize(
-    claimDescriptionTokens,
-    itemDescriptionTokens
-  );
-
-  if (descriptionMatches >= 2) {
-    score += 20;
-    criteria.push('description');
-  } else if (descriptionMatches === 1) {
-    score += 10;
-    criteria.push('description');
-  }
-
-  return {
-    score,
-    criteria: criteria.join(','),
-  };
-}
-
 /**
  * @openapi
  * /api/claims:
@@ -652,6 +575,14 @@ router.post(
           status: claim.status,
         },
         ipAddress: req.ip,
+      });
+
+      scheduleClaimSearchIndexIngest(claim.claimId, {
+        category: claim.category,
+        itemName: claim.itemName,
+        description: claim.description,
+        additionalInfo: claim.additionalInfo,
+        locationLost: claim.locationLost,
       });
 
       res.status(201).json(await toClaimDetailDto(claim));
@@ -1387,30 +1318,8 @@ router.post(
         return;
       }
 
-      const candidates = await prisma.item.findMany({
-        where: {
-          campusId: claim.campusId,
-          status: ItemStatus.stored,
-        },
-        select: {
-          itemId: true,
-          category: true,
-          locationFound: true,
-          title: true,
-          descriptionPublic: true,
-          brand: true,
-          color: true,
-          status: true,
-          campusId: true,
-        },
-      });
-
-      const scoredCandidates = candidates
-        .map((item) => {
-          const { score, criteria } = scoreCandidateItem(claim, item);
-          return { item, score, criteria };
-        })
-        .filter((candidate) => candidate.score >= 60);
+      const { candidates: scoredCandidates, candidateCount } =
+        await generateMatchCandidates(claim.claimId);
 
       if (scoredCandidates.length > 0) {
         await prisma.$transaction(async (tx) => {
@@ -1420,7 +1329,7 @@ router.post(
                 where: {
                   claimId_itemId: {
                     claimId: claim.claimId,
-                    itemId: candidate.item.itemId,
+                    itemId: candidate.itemId,
                   },
                 },
                 update: {
@@ -1429,7 +1338,7 @@ router.post(
                 },
                 create: {
                   claimId: claim.claimId,
-                  itemId: candidate.item.itemId,
+                  itemId: candidate.itemId,
                   matchScore: candidate.score,
                   matchCriteria: candidate.criteria || null,
                 },
@@ -1452,7 +1361,7 @@ router.post(
         entityType: 'claim',
         entityId: claim.claimId,
         details: {
-          candidateCount: candidates.length,
+          candidateCount,
           suggestionCount: scoredCandidates.length,
         },
         ipAddress: req.ip,

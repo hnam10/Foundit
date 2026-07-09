@@ -106,6 +106,21 @@ export async function updateSecurityItem(
   });
 }
 
+export interface UpdateSecurityItemStatusInput {
+  status: 'expired' | 'disposed';
+  note?: string | null;
+}
+
+export async function updateSecurityItemStatus(
+  itemId: string,
+  input: UpdateSecurityItemStatusInput
+): Promise<SecurityItemDetail> {
+  return apiFetch<SecurityItemDetail>(`/api/items/${itemId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
 export interface CreateSecurityItemInput {
   campusId: string;
   title: string;

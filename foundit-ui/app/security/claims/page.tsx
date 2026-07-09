@@ -35,7 +35,7 @@ import {
 
 const Select = chakra('select');
 const SortButton = chakra('button');
-const CLAIMS_PER_PAGE = 7;
+const CLAIMS_PER_PAGE = 10;
 
 type SortField =
   | 'claimId'
