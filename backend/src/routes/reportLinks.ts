@@ -10,6 +10,7 @@ import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { prisma } from '../db';
 import { writeAuditLog } from '../utils/auditLog';
+import { scheduleItemSearchIndexIngest } from '../lib/matching/ingest';
 import { generateReportLinkToken } from '../utils/reportLinkToken';
 import { validate } from '../validators/shared';
 import {
@@ -676,6 +677,16 @@ router.post(
         }
 
         return { report: linkedReport, itemId: item.itemId };
+      });
+
+      scheduleItemSearchIndexIngest(result.itemId, {
+        category,
+        title,
+        descriptionInternal: buildDescriptionInternal(
+          description,
+          additionalNotes
+        ),
+        locationFound,
       });
 
       res.status(201).json({
