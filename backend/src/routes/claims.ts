@@ -460,7 +460,10 @@ async function applyMatchConfirmation(
   });
 
   await tx.notification.create({
-    data: createClaimStatusNotificationInput(updatedClaim, ClaimStatus.approved),
+    data: createClaimStatusNotificationInput(
+      updatedClaim,
+      ClaimStatus.approved
+    ),
   });
 
   return updatedClaim;
