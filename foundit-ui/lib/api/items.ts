@@ -25,6 +25,16 @@ export async function fetchCategoryStats(
   });
 }
 
+export async function fetchExpiredItemCount(
+  campusId?: string
+): Promise<number> {
+  const query = campusId ? `?campusId=${encodeURIComponent(campusId)}` : '';
+  const result = await apiFetch<{ count: number }>(
+    `/api/items/expired-count${query}`
+  );
+  return result.count;
+}
+
 export interface FetchPublicItemsParams {
   category?: string;
   campusId?: string;
@@ -91,6 +101,21 @@ export async function updateSecurityItem(
   input: UpdateSecurityItemInput
 ): Promise<SecurityItemDetail> {
   return apiFetch<SecurityItemDetail>(`/api/items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export interface UpdateSecurityItemStatusInput {
+  status: 'expired' | 'disposed';
+  note?: string | null;
+}
+
+export async function updateSecurityItemStatus(
+  itemId: string,
+  input: UpdateSecurityItemStatusInput
+): Promise<SecurityItemDetail> {
+  return apiFetch<SecurityItemDetail>(`/api/items/${itemId}/status`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   });

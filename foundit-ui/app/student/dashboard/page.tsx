@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
   Button,
+  Flex,
   Heading,
   HStack,
   NativeSelect,
@@ -14,38 +15,62 @@ import {
   Text,
 } from '@chakra-ui/react';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
-import { fetchCategoryStats, type CategoryStat } from '@/lib/api/items';
+import { fetchCampuses, fetchCategoryStats } from '@/lib/api/items';
 import { ApiError } from '@/lib/api/client';
+import type { Campus, CategoryStat } from '@/types/items';
 import { debugError } from '@/utils/debug';
 
 export default function StudentDashboardPage() {
   const router = useRouter();
   const displayName = useLoggedInDisplayName();
-  // Keeps the Claim Items button in a spinner state while the route
-  // transition to /student/claim-item is in flight (cleared on unmount).
   const [isNavigatingToClaim, setIsNavigatingToClaim] = useState(false);
-  // Counts of claimable (stored) items per category, from the public
-  // GET /api/items/category-stats endpoint.
+  const [campuses, setCampuses] = useState<Campus[]>([]);
   const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
-  const [statsError, setStatsError] = useState<string | null>(null);
+  const [campusFilter, setCampusFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCampuses() {
+      try {
+        const data = await fetchCampuses();
+        if (active) setCampuses(data);
+      } catch {
+        // Campus filter is optional; stats can still load for all campuses.
+      }
+    }
+
+    loadCampuses();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
 
     async function loadCategoryStats() {
+      setLoading(true);
+      setError('');
+
       try {
-        const stats = await fetchCategoryStats();
-        if (active) setCategoryStats(stats);
+        const data = await fetchCategoryStats(campusFilter || undefined);
+        if (!active) return;
+
+        setCategoryStats(data);
       } catch (err) {
         debugError('student-dashboard', 'category stats fetch failed', err);
-        if (active) {
-          setStatsError(
-            err instanceof ApiError && err.status === 0
+        if (!active) return;
+        setError(
+          err instanceof ApiError && err.status === 0
+            ? err.message
+            : err instanceof Error
               ? err.message
               : 'Unable to load found items right now. Please try again later.'
-          );
-        }
+        );
+        setCategoryStats([]);
       } finally {
         if (active) setLoading(false);
       }
@@ -55,20 +80,12 @@ export default function StudentDashboardPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [campusFilter]);
 
-  if (loading) {
-    return (
-      <Box
-        minH="50vh"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-      >
-        <Spinner size="xl" color="blue.500" />
-      </Box>
-    );
-  }
+  const totalItems = useMemo(
+    () => categoryStats.reduce((sum, stat) => sum + stat.count, 0),
+    [categoryStats]
+  );
 
   return (
     <Box
@@ -86,7 +103,6 @@ export default function StudentDashboardPage() {
       py={10}
     >
       <Stack gap={6} maxW="1100px" mx="auto">
-        {/* Dashboard Header */}
         <Box textAlign="center" color="white">
           <Text fontSize="24px" fontWeight="700" lineHeight="36px" mb={2}>
             Found item dash board
@@ -96,72 +112,92 @@ export default function StudentDashboardPage() {
           </Heading>
         </Box>
 
-        {/* Main Dashboard Card */}
         <Box bg="white" borderRadius="lg" p={{ base: 5, md: 8 }}>
-          {/* Filter Section */}
-          <HStack justify="flex-end" gap={4} mb={4}>
-            <NativeSelect.Root w="170px">
-              <NativeSelect.Field>
-                <option>Period</option>
-                <option>Today</option>
-                <option>This Week</option>
-                <option>This Month</option>
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
+          <HStack
+            justify="space-between"
+            align="center"
+            mb={4}
+            flexWrap="wrap"
+            gap={4}
+          >
+            <Text fontSize="sm" color="gray.600">
+              {loading
+                ? 'Loading found items…'
+                : `${totalItems} item${totalItems === 1 ? '' : 's'} in storage`}
+            </Text>
+
             <NativeSelect.Root w="190px">
-              <NativeSelect.Field>
-                <option>Campus Option</option>
-                <option>Newnham</option>
-                <option>Seneca@York</option>
-                <option>King</option>
+              <NativeSelect.Field
+                aria-label="Filter by campus"
+                value={campusFilter}
+                onChange={(event) => setCampusFilter(event.target.value)}
+                fontSize="sm"
+              >
+                <option value="">All campuses</option>
+                {campuses.map((campus) => (
+                  <option key={campus.campusId} value={campus.campusId}>
+                    {campus.campusName}
+                  </option>
+                ))}
               </NativeSelect.Field>
               <NativeSelect.Indicator />
             </NativeSelect.Root>
           </HStack>
 
-          {/* Found Items Display Area — one card per category with the
-              number of stored (claimable) items in it. */}
           <Box
             bg="gray.100"
             borderRadius="md"
             p={{ base: 4, md: 8 }}
             minH="230px"
           >
-            {statsError ? (
-              <Text fontSize="sm" color="red.600">
-                {statsError}
+            {loading ? (
+              <Box
+                minH="180px"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+              >
+                <Spinner size="lg" color="blue.500" />
+              </Box>
+            ) : error ? (
+              <Text color="red.600" fontSize="sm" textAlign="center" py={8}>
+                {error}
               </Text>
             ) : categoryStats.length === 0 ? (
-              <Text fontSize="sm" color="fg.muted">
-                No found items are available to claim right now.
+              <Text color="gray.600" fontSize="sm" textAlign="center" py={8}>
+                No found items in storage.
               </Text>
             ) : (
               <SimpleGrid columns={{ base: 1, md: 3 }} gap={8}>
                 {categoryStats.map((stat) => (
-                  <HStack
+                  <Flex
                     key={stat.category}
                     bg="blue.50"
                     borderRadius="md"
                     px={4}
-                    py={2}
+                    py={3}
                     justify="space-between"
-                    fontSize="sm"
+                    align="center"
+                    gap={3}
                   >
-                    <Text as="span" color="blue.500" fontWeight="bold">
+                    <Text
+                      fontSize="sm"
+                      fontWeight="bold"
+                      color="blue.500"
+                      lineClamp={2}
+                    >
                       {stat.category}
                     </Text>
-                    <Text color="blue.500" fontWeight="bold">
+                    <Text fontSize="lg" fontWeight="bold" flexShrink={0}>
                       {stat.count}
                     </Text>
-                  </HStack>
+                  </Flex>
                 ))}
               </SimpleGrid>
             )}
           </Box>
         </Box>
 
-        {/* Claim Button */}
         <Button
           bg="blue.500"
           color="white"

@@ -105,7 +105,7 @@ const statusDisplay: Partial<
   Record<ApiClaimStatus, Omit<ClaimDisplayStatus, 'label'> & { label: string }>
 > = {
   submitted: {
-    label: 'Searching',
+    label: 'Unmatched',
 
     colorPalette: 'gray',
 
@@ -115,7 +115,7 @@ const statusDisplay: Partial<
   },
 
   approved: {
-    label: 'Release at Pickup',
+    label: 'Pickup Pending',
 
     colorPalette: 'orange',
 
@@ -154,6 +154,10 @@ export function getClaimSecurityQueue(
     return 'action';
   }
 
+  if (status === 'submitted') {
+    return 'action';
+  }
+
   if (claimWaitingOnStudent(claim)) {
     return 'waiting';
   }
@@ -174,7 +178,7 @@ export function getClaimSecurityActionHint(claim: ClaimPhaseInput): string {
 
   switch (status) {
     case 'submitted':
-      return 'AI is searching stored items. No security action needed yet.';
+      return 'No item linked yet. Review matches or search stored items.';
 
     case 'approved':
       return 'At pickup: verify student ID, confirm ownership, and release the item.';
@@ -201,7 +205,7 @@ export function getClaimDisplayStatus(
 ): ClaimDisplayStatus {
   if (claimAwaitingMatchConfirmation(claim)) {
     return {
-      label: 'Confirm Match',
+      label: 'Match Pending',
 
       colorPalette: 'yellow',
 
@@ -213,7 +217,7 @@ export function getClaimDisplayStatus(
 
   if (claimWaitingOnStudent(claim)) {
     return {
-      label: 'Waiting on Student',
+      label: 'Appointment Pending',
 
       colorPalette: 'teal',
 
@@ -343,10 +347,10 @@ export function getClaimWorkflowSteps(
 
       description:
         isMatchConfirmed || isApproved || isPickedUp
-          ? 'A stored item has been linked to this claim.'
+          ? 'Stored item linked.'
           : hasSuggestions
             ? 'Review suggested matches below.'
-            : 'No matching stored items identified yet.',
+            : 'No matches identified yet.',
 
       state: matchStepState,
 
@@ -359,12 +363,12 @@ export function getClaimWorkflowSteps(
       label: 'Appointment',
 
       description: isPickedUp
-        ? 'Student completed their pickup appointment.'
+        ? 'Pickup appointment completed.'
         : isApproved
-          ? 'Student scheduled a pickup appointment.'
+          ? 'Pickup appointment scheduled.'
           : isMatchConfirmed
-            ? 'Waiting for the student to schedule an appointment.'
-            : 'Student will be invited after a match is confirmed.',
+            ? 'Waiting for student to schedule.'
+            : 'Student notified after match is confirmed.',
 
       state: appointmentState,
     },
@@ -372,13 +376,13 @@ export function getClaimWorkflowSteps(
     {
       key: 'verify_release',
 
-      label: 'Verify & Release',
+      label: 'Pickup',
 
       description: isPickedUp
-        ? 'Item was verified and released to the student.'
+        ? 'Item released to student.'
         : isApproved
-          ? 'Verify student identity and release the item.'
-          : 'Pending appointment completion.',
+          ? 'Ready for student pickup.'
+          : 'Pending appointment.',
 
       state: verifyState,
 
@@ -388,13 +392,13 @@ export function getClaimWorkflowSteps(
     {
       key: 'claim_closed',
 
-      label: isRejected ? 'Claim Rejected' : 'Claim Closed',
+      label: isRejected ? 'Rejected' : 'Closed',
 
       description: isRejected
-        ? 'This claim has been closed without a release.'
+        ? 'Closed without release.'
         : isPickedUp
-          ? 'Item has been returned to the student.'
-          : 'Claim will close after pickup or rejection.',
+          ? 'Item returned to student.'
+          : 'Closes after pickup or rejection.',
 
       state: closedState,
 

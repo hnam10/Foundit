@@ -84,10 +84,16 @@ export function useProfileForm() {
     loadProfile();
   }, []);
 
-  // Called only when the user clicks Save. Sends PATCH requests to the backend.
+  // Called only when the user clicks Save. PUT replaces editable profile fields.
   const handleSave = async () => {
     const token = getAccessToken();
     if (!token) {
+      setSaveStatus('error');
+      return;
+    }
+
+    const normalizedPhone = phoneNumber.replace(/\D/g, '');
+    if (phoneNumber.trim() && normalizedPhone.length !== 10) {
       setSaveStatus('error');
       return;
     }
@@ -97,36 +103,22 @@ export function useProfileForm() {
 
     try {
       const [firstName = '', ...rest] = fullName.trim().split(/\s+/);
-      const lastName = rest.join(' ') || undefined;
+      const lastName = rest.join(' ');
 
-      const [profileRes, notifRes] = await Promise.all([
-        // PATCH /api/users/me — updates firstName, lastName, phone
-        fetch(`${API_BASE}/api/users/me`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            firstName,
-            lastName,
-            phone: phoneNumber || null,
-          }),
+      const profileRes = await fetch(`${API_BASE}/api/users/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          firstName,
+          lastName: lastName || firstName,
+          phone: normalizedPhone || null,
         }),
-        // PATCH /api/users/me/notifications — updates email notification opt-in
-        fetch(`${API_BASE}/api/users/me/notifications`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            emailNotificationOptIn: allowEmailNotifications,
-          }),
-        }),
-      ]);
+      });
 
-      setSaveStatus(profileRes.ok && notifRes.ok ? 'success' : 'error');
+      setSaveStatus(profileRes.ok ? 'success' : 'error');
     } catch {
       setSaveStatus('error');
     } finally {

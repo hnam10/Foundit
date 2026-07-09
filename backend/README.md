@@ -91,6 +91,19 @@ JWT_ACCESS_SECRET=some-long-random-string-here
 JWT_REFRESH_SECRET=another-different-random-string
 ```
 
+### Semantic matching
+
+| Variable                     | Description                                                |
+| ---------------------------- | ---------------------------------------------------------- |
+| `OPENROUTER_API_KEY`         | OpenRouter API key for embedding-based match search        |
+| `OPENROUTER_EMBEDDING_MODEL` | Embedding model (default: `openai/text-embedding-3-small`) |
+
+If unset, a local hash fallback is used (dev only). After deploy, backfill existing rows:
+
+```bash
+pnpm run backfill:embeddings
+```
+
 ---
 
 ## Project Structure
@@ -109,7 +122,8 @@ src/
 │   ├── claims.ts               # Zod schemas for claim routes
 │   └── users.ts                # Zod schemas: replaceProfileSchema, updateProfileSchema, createUserSchema, listUsersQuerySchema
 ├── lib/
-│   └── email.ts                # Nodemailer transporter and email sender
+│   ├── email.ts                # Nodemailer transporter and email sender
+│   └── matching/               # Semantic match ingest, embeddings, scoring
 ├── utils/
 │   ├── token.ts                # JWT signing, refresh token verification, SHA-256 hash helper
 │   ├── password.ts             # bcrypt hash and compare helpers
@@ -192,8 +206,10 @@ Global API rules:
 | DELETE | `/api/claims/:claimId`                            | student                | Done   | Cancel/delete own cancellable claim with audit logging   |
 | PATCH  | `/api/claims/:claimId`                            | security/admin         | Done   | Link a stored item to the claim (`itemId` only)          |
 | GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Retrieve match suggestions for a claim                   |
-| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Trigger match scoring and create suggestions             |
+| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Run semantic match scoring and upsert suggestions        |
 | PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Done   | Confirm or dismiss a match suggestion                    |
+
+Match suggestions use precomputed `searchText` / `embedding` on claims and stored items (built on create/update). `POST` compares embeddings with hybrid re-ranking (category, date, campus, location). Security still confirms matches manually.
 
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
 

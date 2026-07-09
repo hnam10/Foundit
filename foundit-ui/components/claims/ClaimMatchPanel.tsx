@@ -1,20 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Badge,
-  Box,
-  Button as ChakraButton,
-  Flex,
-  Heading,
-  Stack,
-  Text,
-} from '@chakra-ui/react';
-import NextLink from 'next/link';
+import { Button as ChakraButton, Flex, Stack } from '@chakra-ui/react';
 import type { MatchSuggestion, SecurityClaimListItem } from '@/types/claims';
-import { buildManualSearchHref } from '@/utils/claimDisplay';
 import { Button } from '@/components/ui/Button';
 import { ClaimCard } from './ClaimCard';
+import { ClaimManualSearchList } from './ClaimManualSearchList';
 import { ClaimMatchCard } from './ClaimMatchCard';
 import { ClaimMatchEmptyState } from './ClaimMatchEmptyState';
 
@@ -24,8 +15,11 @@ interface ClaimMatchPanelProps {
   claim: SecurityClaimListItem;
   variant: MatchPanelVariant;
   suggestions: MatchSuggestion[];
-  selectedMatchId: string | null;
-  onSelectMatch: (matchId: string) => void;
+  selectedItemId: string | null;
+  onSelectItem: (itemId: string) => void;
+  onConfirmMatch: () => void | Promise<void>;
+  generating?: boolean;
+  confirming?: boolean;
 }
 
 const tabStyles = {
@@ -41,36 +35,19 @@ export function ClaimMatchPanel({
   claim,
   variant,
   suggestions,
-  selectedMatchId,
-  onSelectMatch,
+  selectedItemId,
+  onSelectItem,
+  onConfirmMatch,
+  generating = false,
+  confirming = false,
 }: ClaimMatchPanelProps) {
-  const [activeTab, setActiveTab] = useState<'ai' | 'manual'>(
-    variant === 'awaiting' ? 'manual' : 'ai'
-  );
+  const [activeTab, setActiveTab] = useState<'ai' | 'manual'>('ai');
 
-  const manualHref = buildManualSearchHref(claim);
-  const showReviewActions = variant === 'review';
+  const canConfirm = Boolean(selectedItemId);
+  const showMatchActions = variant === 'review' || canConfirm;
 
   return (
     <ClaimCard>
-      <Flex
-        justify="space-between"
-        align="center"
-        mb={4}
-        flexWrap="wrap"
-        gap={2}
-      >
-        <Heading as="h2" fontSize="lg" fontWeight="bold" color="gray.900">
-          Matching
-        </Heading>
-        {variant === 'review' ? (
-          <Badge colorPalette="blue" variant="subtle">
-            {suggestions.length} Match{suggestions.length === 1 ? '' : 'es'}{' '}
-            Found
-          </Badge>
-        ) : null}
-      </Flex>
-
       <Flex
         gap={2}
         mb={4}
@@ -85,7 +62,7 @@ export function ClaimMatchPanel({
           color={activeTab === 'ai' ? 'gray.900' : 'gray.600'}
           onClick={() => setActiveTab('ai')}
         >
-          AI Matches ({suggestions.length})
+          AI Matches
         </ChakraButton>
         <ChakraButton
           {...tabStyles}
@@ -99,9 +76,7 @@ export function ClaimMatchPanel({
       </Flex>
 
       {activeTab === 'ai' ? (
-        variant === 'awaiting' || suggestions.length === 0 ? (
-          <ClaimMatchEmptyState />
-        ) : (
+        suggestions.length > 0 ? (
           <Stack gap={3}>
             {suggestions.map((match, index) => (
               <ClaimMatchCard
@@ -109,27 +84,23 @@ export function ClaimMatchPanel({
                 match={match}
                 rank={index + 1}
                 isBestMatch={index === 0}
-                selected={selectedMatchId === match.matchId}
-                onSelect={() => onSelectMatch(match.matchId)}
+                selected={selectedItemId === match.itemId}
+                onSelect={() => onSelectItem(match.itemId)}
               />
             ))}
           </Stack>
+        ) : (
+          <ClaimMatchEmptyState searching={generating} />
         )
       ) : (
-        <Box py={8} px={4} textAlign="center">
-          <Stack gap={4} align="center">
-            <Text fontSize="sm" color="gray.600" maxW="md">
-              Search stored items on campus to find a potential match manually.
-              Filters are pre-filled from this claim when possible.
-            </Text>
-            <Button asChild variant="primary">
-              <NextLink href={manualHref}>Browse stored items</NextLink>
-            </Button>
-          </Stack>
-        </Box>
+        <ClaimManualSearchList
+          claim={claim}
+          selectedItemId={selectedItemId}
+          onSelectItem={onSelectItem}
+        />
       )}
 
-      {showReviewActions ? (
+      {showMatchActions ? (
         <Flex
           mt={6}
           pt={4}
@@ -143,10 +114,17 @@ export function ClaimMatchPanel({
           <Button variant="outline" disabled title="Coming soon">
             Not a Match
           </Button>
-          <Button variant="muted" disabled title="Coming soon">
-            Request More Info
-          </Button>
-          <Button variant="primary" disabled title="Confirm match coming soon">
+          {variant === 'review' ? (
+            <Button variant="muted" disabled title="Coming soon">
+              Request More Info
+            </Button>
+          ) : null}
+          <Button
+            variant="primary"
+            disabled={!canConfirm || confirming}
+            loading={confirming}
+            onClick={() => void onConfirmMatch()}
+          >
             Confirm Match
           </Button>
         </Flex>

@@ -5,21 +5,24 @@ import { useRouter } from 'next/navigation';
 import { Box, Grid, Spinner, Stack, Text } from '@chakra-ui/react';
 import { notFound } from 'next/navigation';
 import { ClaimAppointmentCard } from '@/components/claims/ClaimAppointmentCard';
-import { ClaimClaimantCard } from '@/components/claims/ClaimClaimantCard';
+import { ClaimDetailsCard } from '@/components/claims/ClaimDetailsCard';
 import { ClaimDetailHeader } from '@/components/claims/ClaimDetailHeader';
 import { ClaimMatchPanel } from '@/components/claims/ClaimMatchPanel';
 import { ClaimMatchedItemCard } from '@/components/claims/ClaimMatchedItemCard';
 import { ClaimReleaseCard } from '@/components/claims/ClaimReleaseCard';
 import { ClaimStatusStepper } from '@/components/claims/ClaimStatusStepper';
-import { ClaimedItemCard } from '@/components/claims/ClaimedItemCard';
 import {
   ClaimVerificationChecklist,
   isVerificationComplete,
   type VerificationState,
 } from '@/components/claims/ClaimVerificationChecklist';
-import { StudentNotificationCard } from '@/components/claims/StudentNotificationCard';
 import { Button } from '@/components/ui/Button';
-import { fetchClaimById, fetchMatchSuggestions } from '@/lib/api/claims';
+import {
+  fetchClaimById,
+  fetchMatchSuggestions,
+  generateMatchSuggestions,
+  linkClaimItem,
+} from '@/lib/api/claims';
 import { fetchCampuses } from '@/lib/api/items';
 import type { MatchSuggestion, SecurityClaimDetail } from '@/types/claims';
 import type { Campus } from '@/types/items';
@@ -28,9 +31,17 @@ import {
   formatClaimDateTime,
   getClaimDetailMode,
   getClaimDisplayStatus,
-  getClaimStatusExplanation,
   getClaimWorkflowSteps,
 } from '@/utils/claimDisplay';
+
+function claimNeedsAutoMatch(claim: SecurityClaimDetail): boolean {
+  if (claim.itemId) return false;
+  return (
+    claim.status === 'submitted' ||
+    claim.status === 'under_review' ||
+    claim.status === 'match_found'
+  );
+}
 
 const initialVerification: VerificationState = {
   verifyStudentId: false,
@@ -59,7 +70,10 @@ export default function ClaimDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notFoundState, setNotFoundState] = useState(false);
-  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [generatingMatches, setGeneratingMatches] = useState(false);
+  const [confirmingMatch, setConfirmingMatch] = useState(false);
+  const [matchError, setMatchError] = useState('');
   const [verification, setVerification] =
     useState<VerificationState>(initialVerification);
 
@@ -71,18 +85,39 @@ export default function ClaimDetailPage({
       setError('');
 
       try {
-        const [claimData, campusData, matchData] = await Promise.all([
+        const [claimData, campusData] = await Promise.all([
           fetchClaimById(claimId),
           fetchCampuses().catch(() => [] as Campus[]),
-          fetchMatchSuggestions(claimId).catch(() => [] as MatchSuggestion[]),
         ]);
 
         if (!active) return;
-        setClaim(claimData);
+
+        let matchData = await fetchMatchSuggestions(claimId).catch(
+          () => [] as MatchSuggestion[]
+        );
+
+        if (matchData.length === 0 && claimNeedsAutoMatch(claimData)) {
+          setGeneratingMatches(true);
+          try {
+            matchData = await generateMatchSuggestions(claimId);
+          } catch {
+            matchData = [];
+          } finally {
+            if (active) setGeneratingMatches(false);
+          }
+        }
+
+        let resolvedClaim = claimData;
+        if (matchData.length > 0 && claimNeedsAutoMatch(claimData)) {
+          resolvedClaim = await fetchClaimById(claimId).catch(() => claimData);
+        }
+
+        if (!active) return;
+        setClaim(resolvedClaim);
         setCampuses(campusData);
         setSuggestions(matchData);
         if (matchData.length > 0) {
-          setSelectedMatchId(matchData[0].matchId);
+          setSelectedItemId(matchData[0].itemId);
         }
       } catch (err) {
         if (!active) return;
@@ -158,12 +193,28 @@ export default function ClaimDetailPage({
       : undefined
     : undefined;
 
-  const statusExplanation = getClaimStatusExplanation(claim);
-
   const matchPanelVariant = mode === 'review' ? 'review' : 'awaiting';
   const showMatchingLayout = mode === 'awaiting' || mode === 'review';
   const showWorkflowSidebar = mode === 'post_match' || mode === 'terminal';
   const canRelease = isVerificationComplete(verification);
+
+  async function handleConfirmMatch() {
+    if (!claim || !selectedItemId) return;
+
+    setConfirmingMatch(true);
+    setMatchError('');
+
+    try {
+      const updated = await linkClaimItem(claim.claimId, selectedItemId);
+      setClaim(updated);
+    } catch (err) {
+      setMatchError(
+        err instanceof Error ? err.message : 'Failed to confirm match.'
+      );
+    } finally {
+      setConfirmingMatch(false);
+    }
+  }
 
   return (
     <Stack gap={6}>
@@ -174,19 +225,6 @@ export default function ClaimDetailPage({
         subtitle={headerSubtitle}
         onBack={() => router.push('/security/claims')}
       />
-
-      <Box
-        bg="blue.50"
-        borderRadius="lg"
-        px={4}
-        py={3}
-        borderWidth="1px"
-        borderColor="blue.100"
-      >
-        <Text fontSize="sm" color="blue.900">
-          {statusExplanation}
-        </Text>
-      </Box>
 
       {claim.rejectionReason ? (
         <Box
@@ -215,18 +253,25 @@ export default function ClaimDetailPage({
           gap={6}
           alignItems="start"
         >
-          <Stack gap={6}>
-            <ClaimClaimantCard claim={claim} campusName={campusName} />
-            <ClaimedItemCard claim={claim} />
-          </Stack>
+          <ClaimDetailsCard claim={claim} campusName={campusName} />
 
-          <ClaimMatchPanel
-            claim={claim}
-            variant={matchPanelVariant}
-            suggestions={suggestions}
-            selectedMatchId={selectedMatchId}
-            onSelectMatch={setSelectedMatchId}
-          />
+          <Stack gap={2}>
+            <ClaimMatchPanel
+              claim={claim}
+              variant={matchPanelVariant}
+              suggestions={suggestions}
+              selectedItemId={selectedItemId}
+              onSelectItem={setSelectedItemId}
+              onConfirmMatch={handleConfirmMatch}
+              generating={generatingMatches}
+              confirming={confirmingMatch}
+            />
+            {matchError ? (
+              <Text fontSize="sm" color="red.500">
+                {matchError}
+              </Text>
+            ) : null}
+          </Stack>
         </Grid>
       ) : (
         <Grid
@@ -250,18 +295,14 @@ export default function ClaimDetailPage({
               </>
             ) : (
               <>
-                <ClaimClaimantCard claim={claim} campusName={campusName} />
-                <ClaimedItemCard claim={claim} />
+                <ClaimDetailsCard claim={claim} campusName={campusName} />
                 {claim.item ? <ClaimMatchedItemCard claim={claim} /> : null}
               </>
             )}
           </Stack>
 
           {showWorkflowSidebar ? (
-            <Stack gap={4}>
-              <ClaimStatusStepper steps={workflowSteps} />
-              <StudentNotificationCard mode={mode} />
-            </Stack>
+            <ClaimStatusStepper steps={workflowSteps} />
           ) : null}
         </Grid>
       )}

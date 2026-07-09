@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { ClaimStatus, ItemStatus } from '@prisma/client';
+import { ClaimStatus, ItemStatus, MatchStatus } from '@prisma/client';
 import { prisma } from '../db';
 import { writeAuditLog } from '../utils/auditLog';
 
@@ -81,6 +81,14 @@ export async function expireDueItems(): Promise<number> {
         },
       },
       data: { status: ItemStatus.expired },
+    });
+
+    await tx.matchSuggestion.updateMany({
+      where: {
+        itemId: { in: eligibleItemIds },
+        status: MatchStatus.suggested,
+      },
+      data: { status: MatchStatus.dismissed },
     });
 
     await Promise.all(

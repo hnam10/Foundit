@@ -2,8 +2,9 @@
 
 import { Badge, Box, Flex, HStack, Image, Stack, Text } from '@chakra-ui/react';
 import { IoCalendarOutline, IoImageOutline } from 'react-icons/io5';
-import type { ItemStatus, SecurityItemListItem } from '@/types/items';
+import type { SecurityItemListItem } from '@/types/items';
 import { ITEM_STATUS_LABELS } from '@/types/items';
+import { getRetentionLabel } from '@/utils/itemRetention';
 import { ItemStatusBadge } from './ItemStatusProgress';
 
 interface StoredItemCardProps {
@@ -16,29 +17,6 @@ function formatDate(value: string): string {
 
 function shortItemId(itemId: string): string {
   return itemId.slice(0, 8).toUpperCase();
-}
-
-function getRetentionLabel(
-  expiryDate: string | null,
-  status: ItemStatus
-): { label: string; color: string } | null {
-  if (!expiryDate) return null;
-  if (status === 'claimed' || status === 'disposed') return null;
-
-  const days = Math.ceil(
-    (new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  );
-
-  if (days < 0) {
-    return { label: 'Retention expired', color: 'gray.500' };
-  }
-  if (days <= 7) {
-    return {
-      label: `Retention: ${days} day${days === 1 ? '' : 's'}`,
-      color: 'orange.600',
-    };
-  }
-  return { label: `Retention: ${days} days`, color: 'gray.600' };
 }
 
 export function StoredItemCard({ item }: StoredItemCardProps) {
@@ -129,7 +107,7 @@ export function StoredItemCard({ item }: StoredItemCardProps) {
           </HStack>
           {retention && (
             <Text fontSize="xs" fontWeight="medium" color={retention.color}>
-              {retention.label}
+              Retention: {retention.label}
             </Text>
           )}
         </Flex>

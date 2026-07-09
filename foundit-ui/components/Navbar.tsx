@@ -5,7 +5,7 @@
  *
  * Variants:
  *   'guest'    — not logged in; no username, shows Login button.
- *   'student'  — authenticated student; shows Home, Found Items, My Claims + user dropdown.
+ *   'student'  — authenticated student; shows Home, My Claims + user dropdown.
  *   'security' — authenticated security staff; shows Home, Items, Claims + user dropdown.
  *
  * Data shape:
@@ -159,8 +159,7 @@ const navLinksByVariant: Record<
   guest: [{ label: 'Home', href: '/' }],
   student: [
     { label: 'Home', href: '/student/dashboard' },
-    { label: 'Found Items', href: '/found-items' },
-    { label: 'My Claims', href: '/student/my-claims' },
+    { label: 'My Claims', href: '/my-claims' },
   ],
   security: [
     { label: 'Home', href: '/security/dashboard' },

@@ -35,7 +35,7 @@ enum ClaimStatus {
   approved
   rejected
   picked_up
-
+  
   @@map("claim_status")
 }
 
@@ -218,6 +218,8 @@ model Item {
   foundItemReportId   String?    @map("found_item_report_id") @db.Uuid
   registeredBy        String     @map("registered_by") @db.Uuid
   retentionExpiryDate DateTime?  @map("retention_expiry_date") @db.Date
+  searchText          String?    @map("search_text") @db.Text
+  embedding           Json?      @map("embedding")
   createdAt           DateTime   @default(now()) @map("created_at")
   updatedAt           DateTime   @default(now()) @updatedAt @map("updated_at")
 
@@ -254,6 +256,8 @@ model Claim {
   rejectionReason        String?                     @map("rejection_reason")
   pickedUpAt             DateTime?                   @map("picked_up_at")
   verifiedBy             String?                     @map("verified_by") @db.Uuid
+  searchText             String?                     @map("search_text") @db.Text
+  embedding              Json?                       @map("embedding")
   createdAt              DateTime                    @default(now()) @map("created_at")
   updatedAt              DateTime                    @default(now()) @updatedAt @map("updated_at")
 

@@ -78,6 +78,23 @@ export async function fetchMatchSuggestions(
   return res.json() as Promise<MatchSuggestion[]>;
 }
 
+export async function generateMatchSuggestions(
+  claimId: string
+): Promise<MatchSuggestion[]> {
+  const res = await authFetch(
+    `${API_BASE}/api/claims/${claimId}/match-suggestions`,
+    {
+      method: 'POST',
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<MatchSuggestion[]>;
+}
+
 export interface UpdateClaimStatusInput {
   status: ApiClaimStatus;
   rejectionReason?: string;
@@ -115,4 +132,21 @@ export async function deleteClaim(
   }
 
   return res.json() as Promise<{ deleted: boolean; claimId: string }>;
+}
+
+export async function linkClaimItem(
+  claimId: string,
+  itemId: string
+): Promise<SecurityClaimDetail> {
+  const res = await authFetch(`${API_BASE}/api/claims/${claimId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemId }),
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<SecurityClaimDetail>;
 }

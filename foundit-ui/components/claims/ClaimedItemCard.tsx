@@ -13,18 +13,18 @@ interface ClaimedItemCardProps {
 
 export function ClaimedItemCard({ claim }: ClaimedItemCardProps) {
   const itemName = getClaimItemName(claim);
+  const hasImages = claim.images.length > 0;
 
   return (
     <ClaimCard>
       <Heading as="h2" fontSize="lg" fontWeight="bold" color="gray.900" mb={4}>
         Claimed Item
       </Heading>
-      <Grid
-        templateColumns={{ base: '1fr', sm: '1fr auto' }}
-        gap={6}
-        alignItems="start"
-      >
-        <Stack gap={4}>
+      <Stack gap={5}>
+        {hasImages ? (
+          <DetailImageGallery images={claim.images} alt={itemName} compact />
+        ) : null}
+        <Grid templateColumns={{ base: '1fr', sm: '1fr 1fr' }} gap={4}>
           <ClaimDetailField label="Category" value={claim.category} />
           <ClaimDetailField label="Item Name" value={itemName} />
           <ClaimDetailField
@@ -35,13 +35,13 @@ export function ClaimedItemCard({ claim }: ClaimedItemCardProps) {
             label="Location Lost"
             value={claim.locationLost ?? '—'}
           />
-          <ClaimDetailField
-            label="Claim Description"
-            value={claim.description}
-          />
-        </Stack>
-        <DetailImageGallery images={claim.images} alt={itemName} />
-      </Grid>
+        </Grid>
+        <ClaimDetailField
+          label="Claim Description"
+          value={claim.description}
+          wordBreak
+        />
+      </Stack>
     </ClaimCard>
   );
 }
