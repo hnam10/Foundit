@@ -27,6 +27,7 @@ import {
 } from '@/lib/api/items';
 import type { SecurityClaimListItem } from '@/types/claims';
 import type { Campus, CategoryStat } from '@/types/items';
+import { claimAwaitingMatchConfirmation } from '@/utils/claimDisplay';
 
 const Select = chakra('select');
 
@@ -34,16 +35,15 @@ const terminalClaimStatuses = new Set(['rejected', 'picked_up']);
 
 function countAwaitingMatch(claims: SecurityClaimListItem[]): number {
   return claims.filter(
-    (claim) => !claim.itemId && !terminalClaimStatuses.has(claim.status)
+    (claim) =>
+      claim.status === 'submitted' &&
+      !claim.itemId &&
+      !terminalClaimStatuses.has(claim.status)
   ).length;
 }
 
 function countReadyToApprove(claims: SecurityClaimListItem[]): number {
-  return claims.filter(
-    (claim) =>
-      Boolean(claim.itemId) &&
-      ['submitted', 'under_review'].includes(claim.status)
-  ).length;
+  return claims.filter((claim) => claimAwaitingMatchConfirmation(claim)).length;
 }
 
 function countPendingPickup(claims: SecurityClaimListItem[]): number {

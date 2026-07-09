@@ -402,12 +402,37 @@ function createMatchFoundNotificationInput(claim: {
   return {
     recipientId: claim.studentId,
     type: NotificationType.match_found,
-    title: 'A match was found for your claim',
+    title: 'Your matched item is ready for pickup',
     message:
-      'Security matched a found item to your lost item claim. Please schedule a pickup appointment.',
+      'A found item has been matched to your claim. Visit the campus security office with your student ID during office hours to collect it.',
     referenceType: 'claim',
     referenceId: claim.claimId,
   } as const;
+}
+
+async function reserveItemForClaim(
+  tx: Prisma.TransactionClient,
+  itemId: string
+) {
+  const item = await tx.item.findUnique({
+    where: { itemId },
+    select: { itemId: true, status: true },
+  });
+
+  if (!item) {
+    throw new Error('LINKED_ITEM_NOT_FOUND');
+  }
+
+  if (item.status !== ItemStatus.stored) {
+    const conflictError = new Error('LINKED_ITEM_NOT_STORED');
+    conflictError.name = 'LINKED_ITEM_NOT_STORED';
+    throw conflictError;
+  }
+
+  await tx.item.update({
+    where: { itemId: item.itemId },
+    data: { status: ItemStatus.claimed },
+  });
 }
 
 async function applyMatchConfirmation(
@@ -416,12 +441,14 @@ async function applyMatchConfirmation(
   itemId: string,
   actorId: string
 ) {
+  await reserveItemForClaim(tx, itemId);
+
   const now = new Date();
   const updatedClaim = await tx.claim.update({
     where: { claimId: claim.claimId },
     data: {
       itemId,
-      status: ClaimStatus.under_review,
+      status: ClaimStatus.approved,
       reviewedBy: actorId,
       reviewedAt: now,
     },
@@ -430,6 +457,10 @@ async function applyMatchConfirmation(
 
   await tx.notification.create({
     data: createMatchFoundNotificationInput(updatedClaim),
+  });
+
+  await tx.notification.create({
+    data: createClaimStatusNotificationInput(updatedClaim, ClaimStatus.approved),
   });
 
   return updatedClaim;
@@ -1099,6 +1130,10 @@ router.patch(
 
       const updated = await prisma.$transaction(async (tx) => {
         if (status === ClaimStatus.approved && claim.itemId) {
+          await reserveItemForClaim(tx, claim.itemId);
+        }
+
+        if (status === ClaimStatus.picked_up && claim.itemId) {
           const item = await tx.item.findUnique({
             where: { itemId: claim.itemId },
             select: { itemId: true, status: true },
@@ -1108,16 +1143,12 @@ router.patch(
             throw new Error('LINKED_ITEM_NOT_FOUND');
           }
 
-          if (item.status !== ItemStatus.stored) {
-            const conflictError = new Error('LINKED_ITEM_NOT_STORED');
-            conflictError.name = 'LINKED_ITEM_NOT_STORED';
-            throw conflictError;
+          if (item.status === ItemStatus.stored) {
+            await tx.item.update({
+              where: { itemId: item.itemId },
+              data: { status: ItemStatus.claimed },
+            });
           }
-
-          await tx.item.update({
-            where: { itemId: item.itemId },
-            data: { status: ItemStatus.claimed },
-          });
         }
 
         const nextClaim = await tx.claim.update({

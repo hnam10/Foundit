@@ -4,7 +4,7 @@ import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Grid, Spinner, Stack, Text } from '@chakra-ui/react';
 import { notFound } from 'next/navigation';
-import { ClaimAppointmentCard } from '@/components/claims/ClaimAppointmentCard';
+import { ClaimPickupNoticeCard } from '@/components/claims/ClaimPickupNoticeCard';
 import { ClaimDetailsCard } from '@/components/claims/ClaimDetailsCard';
 import { ClaimDetailHeader } from '@/components/claims/ClaimDetailHeader';
 import { ClaimMatchPanel } from '@/components/claims/ClaimMatchPanel';
@@ -22,6 +22,7 @@ import {
   fetchMatchSuggestions,
   generateMatchSuggestions,
   linkClaimItem,
+  updateClaimStatus,
 } from '@/lib/api/claims';
 import { fetchCampuses } from '@/lib/api/items';
 import type { MatchSuggestion, SecurityClaimDetail } from '@/types/claims';
@@ -36,11 +37,7 @@ import {
 
 function claimNeedsAutoMatch(claim: SecurityClaimDetail): boolean {
   if (claim.itemId) return false;
-  return (
-    claim.status === 'submitted' ||
-    claim.status === 'under_review' ||
-    claim.status === 'match_found'
-  );
+  return claim.status === 'submitted' || claim.status === 'under_review';
 }
 
 const initialVerification: VerificationState = {
@@ -76,6 +73,8 @@ export default function ClaimDetailPage({
   const [matchError, setMatchError] = useState('');
   const [verification, setVerification] =
     useState<VerificationState>(initialVerification);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -196,7 +195,14 @@ export default function ClaimDetailPage({
   const matchPanelVariant = mode === 'review' ? 'review' : 'awaiting';
   const showMatchingLayout = mode === 'awaiting' || mode === 'review';
   const showWorkflowSidebar = mode === 'post_match' || mode === 'terminal';
-  const canRelease = isVerificationComplete(verification);
+  const verificationComplete = isVerificationComplete(verification);
+  const canRelease = verificationComplete && claim.status === 'approved';
+  const releaseDisabledReason =
+    claim.status !== 'approved'
+      ? 'Claim must be approved before release'
+      : !verificationComplete
+        ? 'Complete all verification checklist items first'
+        : undefined;
 
   async function handleConfirmMatch() {
     if (!claim || !selectedItemId) return;
@@ -213,6 +219,26 @@ export default function ClaimDetailPage({
       );
     } finally {
       setConfirmingMatch(false);
+    }
+  }
+
+  async function handleRelease() {
+    if (!claim || !canRelease || releasing) return;
+
+    setReleasing(true);
+    setReleaseError('');
+
+    try {
+      const updated = await updateClaimStatus(claim.claimId, {
+        status: 'picked_up',
+      });
+      setClaim(updated);
+    } catch (err) {
+      setReleaseError(
+        err instanceof Error ? err.message : 'Failed to release item.'
+      );
+    } finally {
+      setReleasing(false);
     }
   }
 
@@ -286,12 +312,18 @@ export default function ClaimDetailPage({
             {mode === 'post_match' ? (
               <>
                 <ClaimMatchedItemCard claim={claim} />
-                <ClaimAppointmentCard />
+                <ClaimPickupNoticeCard claim={claim} campusName={campusName} />
                 <ClaimVerificationChecklist
                   value={verification}
                   onChange={setVerification}
                 />
-                <ClaimReleaseCard canRelease={canRelease} />
+                <ClaimReleaseCard
+                  canRelease={canRelease}
+                  disabledReason={releaseDisabledReason}
+                  onRelease={handleRelease}
+                  releasing={releasing}
+                  releaseError={releaseError}
+                />
               </>
             ) : (
               <>

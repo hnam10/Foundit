@@ -7,7 +7,6 @@ import {
   Button,
   Flex,
   Heading,
-  HStack,
   NativeSelect,
   SimpleGrid,
   Spinner,
@@ -18,6 +17,8 @@ import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
 import { fetchCampuses, fetchCategoryStats } from '@/lib/api/items';
 import { ApiError } from '@/lib/api/client';
 import type { Campus, CategoryStat } from '@/types/items';
+import { getCategoryDisplay } from '@/utils/categoryDisplay';
+import { PAGE_BACKGROUND_PROPS } from '@/constants/pageBackground';
 import { debugError } from '@/utils/debug';
 
 export default function StudentDashboardPage() {
@@ -87,6 +88,10 @@ export default function StudentDashboardPage() {
     [categoryStats]
   );
 
+  const storageSummary = loading
+    ? 'Loading found items…'
+    : `${totalItems} item${totalItems === 1 ? '' : 's'} in storage`;
+
   return (
     <Box
       mt="-40px"
@@ -95,38 +100,100 @@ export default function StudentDashboardPage() {
       w="100vw"
       maxW="none"
       mx="calc(50% - 50vw)"
-      backgroundImage="url('/bg.svg')"
-      backgroundSize="cover"
-      backgroundPosition="center"
-      backgroundRepeat="no-repeat"
-      px={{ base: 4, md: 10 }}
-      py={10}
+      {...PAGE_BACKGROUND_PROPS}
+      px={{ base: 5, md: 12 }}
+      py={{ base: 8, md: 12 }}
     >
-      <Stack gap={6} maxW="1100px" mx="auto">
-        <Box textAlign="center" color="white">
-          <Text fontSize="24px" fontWeight="700" lineHeight="36px" mb={2}>
-            Found item dash board
-          </Text>
-          <Heading as="h1" fontSize="40px" fontWeight="700" lineHeight="48px">
-            Hello{displayName ? `, ${displayName}` : ''}
-          </Heading>
-        </Box>
-
-        <Box bg="white" borderRadius="lg" p={{ base: 5, md: 8 }}>
-          <HStack
-            justify="space-between"
-            align="center"
-            mb={4}
-            flexWrap="wrap"
-            gap={4}
-          >
-            <Text fontSize="sm" color="gray.600">
-              {loading
-                ? 'Loading found items…'
-                : `${totalItems} item${totalItems === 1 ? '' : 's'} in storage`}
+      <Stack gap={{ base: 7, md: 8 }} maxW="1100px" mx="auto">
+        <Flex
+          direction={{ base: 'column', md: 'row' }}
+          justify="space-between"
+          align={{ base: 'stretch', md: 'flex-start' }}
+          gap={{ base: 5, md: 6 }}
+          color="white"
+          pt={{ base: 2, md: 4 }}
+        >
+          <Stack gap={3} textAlign="left" maxW="640px">
+            <Heading
+              as="h1"
+              fontSize={{ base: '2xl', md: '40px' }}
+              fontWeight="700"
+              lineHeight={{ base: '1.3', md: '48px' }}
+            >
+              Hello{displayName ? `, ${displayName}` : ''}
+            </Heading>
+            <Text
+              fontSize={{ base: 'sm', md: 'md' }}
+              lineHeight="1.6"
+              color="whiteAlpha.900"
+            >
+              We&apos;re here to help you recover your lost items.
             </Text>
+          </Stack>
 
-            <NativeSelect.Root w="190px">
+          <Button
+            bg="white"
+            color="red.600"
+            size="lg"
+            px={8}
+            minH="52px"
+            alignSelf={{ base: 'stretch', md: 'flex-start' }}
+            flexShrink={0}
+            fontWeight="bold"
+            fontSize="md"
+            borderRadius="lg"
+            borderWidth="2px"
+            borderColor="white"
+            boxShadow="0 8px 28px rgba(0, 0, 0, 0.45)"
+            _hover={{
+              bg: 'red.50',
+              boxShadow: '0 10px 32px rgba(0, 0, 0, 0.5)',
+              transform: 'translateY(-1px)',
+            }}
+            _active={{ bg: 'white', transform: 'translateY(0)' }}
+            loading={isNavigatingToClaim}
+            onClick={() => {
+              setIsNavigatingToClaim(true);
+              router.push('/student/claim-item');
+            }}
+          >
+            + Claim an Item
+          </Button>
+        </Flex>
+
+        <Box
+          bg="white"
+          borderRadius="xl"
+          p={{ base: 6, md: 10 }}
+          boxShadow="sm"
+        >
+          <Flex
+            justify="space-between"
+            align={{ base: 'stretch', md: 'center' }}
+            direction={{ base: 'column', md: 'row' }}
+            gap={{ base: 4, md: 5 }}
+            mb={{ base: 5, md: 6 }}
+          >
+            <Stack gap={1}>
+              <Heading
+                as="h2"
+                fontSize={{ base: 'lg', md: 'xl' }}
+                fontWeight="bold"
+                color="gray.900"
+              >
+                Found Items Overview
+              </Heading>
+              {!error && (
+                <Text fontSize="sm" color="gray.500">
+                  {storageSummary}
+                </Text>
+              )}
+            </Stack>
+
+            <NativeSelect.Root
+              w={{ base: 'full', sm: '190px' }}
+              alignSelf={{ base: 'stretch', md: 'flex-start' }}
+            >
               <NativeSelect.Field
                 aria-label="Filter by campus"
                 value={campusFilter}
@@ -142,77 +209,84 @@ export default function StudentDashboardPage() {
               </NativeSelect.Field>
               <NativeSelect.Indicator />
             </NativeSelect.Root>
-          </HStack>
+          </Flex>
 
-          <Box
-            bg="gray.100"
-            borderRadius="md"
-            p={{ base: 4, md: 8 }}
-            minH="230px"
-          >
-            {loading ? (
-              <Box
-                minH="180px"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-              >
-                <Spinner size="lg" color="blue.500" />
-              </Box>
-            ) : error ? (
-              <Text color="red.600" fontSize="sm" textAlign="center" py={8}>
-                {error}
-              </Text>
-            ) : categoryStats.length === 0 ? (
-              <Text color="gray.600" fontSize="sm" textAlign="center" py={8}>
-                No found items in storage.
-              </Text>
-            ) : (
-              <SimpleGrid columns={{ base: 1, md: 3 }} gap={8}>
-                {categoryStats.map((stat) => (
+          {loading ? (
+            <Box
+              minH="180px"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Spinner size="lg" color="blue.500" />
+            </Box>
+          ) : error ? (
+            <Text color="red.600" fontSize="sm" textAlign="center" py={8}>
+              {error}
+            </Text>
+          ) : categoryStats.length === 0 ? (
+            <Text color="gray.600" fontSize="sm" textAlign="center" py={8}>
+              No found items in storage.
+            </Text>
+          ) : (
+            <SimpleGrid columns={{ base: 1, md: 3 }} gap={{ base: 4, md: 5 }}>
+              {categoryStats.map((stat) => {
+                const {
+                  icon: Icon,
+                  accentColor,
+                  iconBg,
+                  iconBadgeBg,
+                } = getCategoryDisplay(stat.category);
+
+                return (
                   <Flex
                     key={stat.category}
-                    bg="blue.50"
-                    borderRadius="md"
-                    px={4}
-                    py={3}
+                    bg={iconBg}
+                    borderRadius="lg"
+                    px={5}
+                    py={4}
+                    minH="72px"
                     justify="space-between"
                     align="center"
-                    gap={3}
+                    gap={4}
                   >
+                    <Flex align="center" gap={3} minW={0}>
+                      <Flex
+                        align="center"
+                        justify="center"
+                        w={10}
+                        h={10}
+                        borderRadius="md"
+                        bg={iconBadgeBg}
+                        color={accentColor}
+                        flexShrink={0}
+                        aria-hidden
+                      >
+                        <Icon size={20} />
+                      </Flex>
+                      <Text
+                        fontSize="sm"
+                        fontWeight="bold"
+                        color={accentColor}
+                        lineClamp={2}
+                      >
+                        {stat.category}
+                      </Text>
+                    </Flex>
                     <Text
-                      fontSize="sm"
+                      fontSize="lg"
                       fontWeight="bold"
-                      color="blue.500"
-                      lineClamp={2}
+                      color="gray.900"
+                      flexShrink={0}
                     >
-                      {stat.category}
-                    </Text>
-                    <Text fontSize="lg" fontWeight="bold" flexShrink={0}>
                       {stat.count}
                     </Text>
                   </Flex>
-                ))}
-              </SimpleGrid>
-            )}
-          </Box>
+                );
+              })}
+            </SimpleGrid>
+          )}
         </Box>
-
-        <Button
-          bg="blue.500"
-          color="white"
-          size="lg"
-          w="220px"
-          alignSelf="center"
-          _hover={{ bg: 'blue.600' }}
-          loading={isNavigatingToClaim}
-          onClick={() => {
-            setIsNavigatingToClaim(true);
-            router.push('/student/claim-item');
-          }}
-        >
-          Claim Items
-        </Button>
       </Stack>
     </Box>
   );

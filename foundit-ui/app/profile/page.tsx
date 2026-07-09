@@ -2,6 +2,7 @@
 
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { FixedPageBackground } from '@/components/PageBackground';
 import TextInput from '@/components/TextInput';
 import { useProfileForm } from '@/hooks/useProfileForm';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
@@ -16,8 +17,8 @@ import {
   Switch,
   Text,
 } from '@chakra-ui/react';
-import { useSyncExternalStore, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useSyncExternalStore } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // Returns a primitive string so useSyncExternalStore compares by value.
 // Returning an object creates a new reference each render and causes an
@@ -32,11 +33,13 @@ function useLoggedInRole(): 'student' | 'security' {
 
 type ActiveTab = 'profile' | 'notifications';
 
-export default function ProfileSettingsPage() {
+function ProfileSettingsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const navVariant = useLoggedInRole();
   const displayName = useLoggedInDisplayName();
-  const [activeTab, setActiveTab] = useState<ActiveTab>('profile');
+  const activeTab: ActiveTab =
+    searchParams.get('tab') === 'notifications' ? 'notifications' : 'profile';
 
   const {
     fullName,
@@ -54,17 +57,7 @@ export default function ProfileSettingsPage() {
 
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
-      {/* Background */}
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground />
 
       <Box
         position="relative"
@@ -108,7 +101,7 @@ export default function ProfileSettingsPage() {
                 _hover={{
                   bg: activeTab === 'profile' ? 'blue.500' : 'gray.50',
                 }}
-                onClick={() => setActiveTab('profile')}
+                onClick={() => router.push('/profile')}
               >
                 <Text
                   color={activeTab === 'profile' ? 'white' : 'gray.700'}
@@ -127,7 +120,7 @@ export default function ProfileSettingsPage() {
                 _hover={{
                   bg: activeTab === 'notifications' ? 'blue.500' : 'gray.50',
                 }}
-                onClick={() => setActiveTab('notifications')}
+                onClick={() => router.push('/profile?tab=notifications')}
               >
                 <Text
                   color={activeTab === 'notifications' ? 'white' : 'gray.700'}
@@ -316,5 +309,13 @@ export default function ProfileSettingsPage() {
         <Footer />
       </Box>
     </Box>
+  );
+}
+
+export default function ProfileSettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ProfileSettingsContent />
+    </Suspense>
   );
 }

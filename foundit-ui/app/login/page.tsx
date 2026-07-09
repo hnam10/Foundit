@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
+import { FixedPageBackground } from '@/components/PageBackground';
 import TextInput from '../../components/TextInput';
 import { Box, Button, Stack, Heading, Link, Text } from '@chakra-ui/react';
 import { useLoginForm } from '../../hooks/useLoginForm';
@@ -97,17 +98,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground overlay />
 
       <Box
         position="relative"

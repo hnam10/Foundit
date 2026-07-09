@@ -14,6 +14,7 @@ import {
 } from '@chakra-ui/react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { FixedPageBackground } from '@/components/PageBackground';
 import FormTextInput from '@/components/FormTextInput';
 import SelectInput from '@/components/SelectInput';
 import TextAreaInput from '@/components/TextAreaInput';
@@ -192,16 +193,7 @@ function PageShell({
 }) {
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground overlay />
 
       <Box
         position="relative"

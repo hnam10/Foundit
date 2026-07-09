@@ -82,6 +82,21 @@ export async function fetchSecurityItems(
   );
 }
 
+export async function fetchAllSecurityItems(
+  params: Omit<FetchSecurityItemsParams, 'cursor' | 'limit'> = {}
+): Promise<SecurityItemListResponse['data']> {
+  const all: SecurityItemListResponse['data'] = [];
+  let cursor: string | undefined;
+
+  do {
+    const page = await fetchSecurityItems({ ...params, cursor, limit: 50 });
+    all.push(...page.data);
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+
+  return all;
+}
+
 export async function fetchSecurityItem(
   itemId: string
 ): Promise<SecurityItemDetail> {

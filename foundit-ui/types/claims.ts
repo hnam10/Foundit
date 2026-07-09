@@ -1,7 +1,5 @@
 export type ApiClaimStatus =
   | 'submitted'
-  | 'match_found'
-  | 'match_confirmed'
   | 'approved'
   | 'rejected'
   | 'picked_up'

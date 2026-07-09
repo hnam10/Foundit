@@ -2,6 +2,7 @@
 
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
+import { FixedPageBackground } from '@/components/PageBackground';
 import TextInput from '../../components/TextInput';
 import {
   Box,
@@ -17,8 +18,6 @@ import { useSignUpForm } from '../../hooks/useSignupForm';
 import { useState } from 'react';
 import LegalModal from '../../components/legal/LegalModal';
 import LegalAgreement from '../../components/legal/LegalAgreement';
-import { ST } from 'next/dist/shared/lib/utils';
-
 export default function SignUpPage() {
   const {
     email,
@@ -55,16 +54,7 @@ export default function SignUpPage() {
 
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground overlay />
 
       <Box
         position="relative"
