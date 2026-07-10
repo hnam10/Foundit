@@ -123,7 +123,7 @@ export default function SecurityClaimsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [campusFilter, setCampusFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortState, setSortState] = useState<SortState>({
     field: 'submitted',
@@ -379,9 +379,10 @@ export default function SecurityClaimsPage() {
               boxShadow: '0 0 0 2px #009adb',
             }}
           >
-            <option value="">All Statuses</option>
+            <option value="pending">Active claims</option>
+            <option value="">All statuses</option>
             <option value="needs_action">Needs action</option>
-            <option value="waiting_on_student">Waiting on student</option>
+            <option value="ready_for_pickup">Ready for pickup</option>
             <option value="completed">Completed</option>
             <option value="rejected">Closed (rejected)</option>
           </Select>

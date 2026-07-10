@@ -15,6 +15,7 @@ import { LuX } from 'react-icons/lu';
 import type { SecurityClaimListItem } from '@/types/claims';
 import { ClaimStatusProgress } from '@/components/ClaimStatusProgress';
 import { deleteClaim } from '@/lib/api/claims';
+import { formatClaimDateTime } from '@/utils/claimDisplay';
 
 type Props = {
   claim: SecurityClaimListItem | null;
@@ -38,6 +39,9 @@ export function ClaimDetailModal({
   if (!isOpen || !claim) return null;
 
   const canCancel = claim.status === 'submitted';
+  const showPickupInstructions =
+    claim.status === 'approved' && Boolean(claim.item);
+  const showPickupComplete = claim.status === 'picked_up';
 
   async function handleConfirmCancel() {
     if (!claim || cancelling) return;
@@ -163,6 +167,50 @@ export function ClaimDetailModal({
                   />
                 ))}
               </Flex>
+            </Box>
+          )}
+
+          {showPickupInstructions && (
+            <Box
+              mt={6}
+              p={4}
+              borderRadius="lg"
+              bg="blue.50"
+              borderWidth="1px"
+              borderColor="blue.200"
+            >
+              <Text fontWeight="bold" color="blue.900" mb={2}>
+                Ready for Pickup
+              </Text>
+              <Text fontSize="sm" color="blue.800" mb={2}>
+                Your matched item ({claim.item?.title ?? 'item'}) is ready to
+                collect at the {claim.campus?.campusName ?? 'campus'} security
+                office.
+              </Text>
+              <Text fontSize="sm" color="blue.800">
+                Bring your student ID and visit during office hours. Security
+                will verify your identity before releasing the item.
+              </Text>
+            </Box>
+          )}
+
+          {showPickupComplete && (
+            <Box
+              mt={6}
+              p={4}
+              borderRadius="lg"
+              bg="green.50"
+              borderWidth="1px"
+              borderColor="green.200"
+            >
+              <Text fontWeight="bold" color="green.900" mb={1}>
+                Pickup Complete
+              </Text>
+              <Text fontSize="sm" color="green.800">
+                {claim.pickedUpAt
+                  ? `You collected your item on ${formatClaimDateTime(claim.pickedUpAt)}.`
+                  : 'You have collected your item.'}
+              </Text>
             </Box>
           )}
 

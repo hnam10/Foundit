@@ -2,9 +2,11 @@
 
 import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Grid, Spinner, Stack, Text } from '@chakra-ui/react';
+import { Box, Flex, Grid, Spinner, Stack, Text } from '@chakra-ui/react';
 import { notFound } from 'next/navigation';
-import { ClaimAppointmentCard } from '@/components/claims/ClaimAppointmentCard';
+import { ClaimPickupNoticeCard } from '@/components/claims/ClaimPickupNoticeCard';
+import { CloseClaimDialog } from '@/components/claims/CloseClaimDialog';
+import { CloseClaimButton } from '@/components/claims/CloseClaimButton';
 import { ClaimDetailsCard } from '@/components/claims/ClaimDetailsCard';
 import { ClaimDetailHeader } from '@/components/claims/ClaimDetailHeader';
 import { ClaimMatchPanel } from '@/components/claims/ClaimMatchPanel';
@@ -22,11 +24,13 @@ import {
   fetchMatchSuggestions,
   generateMatchSuggestions,
   linkClaimItem,
+  updateClaimStatus,
 } from '@/lib/api/claims';
 import { fetchCampuses } from '@/lib/api/items';
 import type { MatchSuggestion, SecurityClaimDetail } from '@/types/claims';
 import type { Campus } from '@/types/items';
 import {
+  claimCanBeClosedBySecurity,
   claimHasLinkedItem,
   formatClaimDateTime,
   getClaimDetailMode,
@@ -36,11 +40,7 @@ import {
 
 function claimNeedsAutoMatch(claim: SecurityClaimDetail): boolean {
   if (claim.itemId) return false;
-  return (
-    claim.status === 'submitted' ||
-    claim.status === 'under_review' ||
-    claim.status === 'match_found'
-  );
+  return claim.status === 'submitted' || claim.status === 'under_review';
 }
 
 const initialVerification: VerificationState = {
@@ -76,9 +76,33 @@ export default function ClaimDetailPage({
   const [matchError, setMatchError] = useState('');
   const [verification, setVerification] =
     useState<VerificationState>(initialVerification);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState('');
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
+
+    async function loadMatches(
+      claimData: SecurityClaimDetail
+    ): Promise<MatchSuggestion[]> {
+      if (!claimNeedsAutoMatch(claimData)) {
+        return fetchMatchSuggestions(claimId).catch(
+          () => [] as MatchSuggestion[]
+        );
+      }
+
+      setGeneratingMatches(true);
+      try {
+        return await generateMatchSuggestions(claimId);
+      } catch {
+        return fetchMatchSuggestions(claimId).catch(
+          () => [] as MatchSuggestion[]
+        );
+      } finally {
+        if (active) setGeneratingMatches(false);
+      }
+    }
 
     async function load() {
       setLoading(true);
@@ -92,20 +116,7 @@ export default function ClaimDetailPage({
 
         if (!active) return;
 
-        let matchData = await fetchMatchSuggestions(claimId).catch(
-          () => [] as MatchSuggestion[]
-        );
-
-        if (matchData.length === 0 && claimNeedsAutoMatch(claimData)) {
-          setGeneratingMatches(true);
-          try {
-            matchData = await generateMatchSuggestions(claimId);
-          } catch {
-            matchData = [];
-          } finally {
-            if (active) setGeneratingMatches(false);
-          }
-        }
+        const matchData = await loadMatches(claimData);
 
         let resolvedClaim = claimData;
         if (matchData.length > 0 && claimNeedsAutoMatch(claimData)) {
@@ -138,6 +149,47 @@ export default function ClaimDetailPage({
       active = false;
     };
   }, [claimId]);
+
+  useEffect(() => {
+    if (!claim || !claimNeedsAutoMatch(claim)) return;
+
+    let active = true;
+
+    async function refreshMatchesOnFocus() {
+      if (document.visibilityState !== 'visible' || !active) return;
+
+      try {
+        const matchData = await fetchMatchSuggestions(claimId);
+        if (!active) return;
+        setSuggestions(matchData);
+        if (matchData.length > 0) {
+          setSelectedItemId((current) => current ?? matchData[0].itemId);
+        }
+      } catch {
+        // Keep existing suggestions when refresh fails.
+      }
+    }
+
+    function handleVisibilityChange() {
+      void refreshMatchesOnFocus();
+    }
+
+    function handlePageShow(event: PageTransitionEvent) {
+      if (event.persisted) {
+        void refreshMatchesOnFocus();
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('popstate', handleVisibilityChange);
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('popstate', handleVisibilityChange);
+    };
+  }, [claim, claimId]);
 
   const mode = useMemo(
     () => (claim ? getClaimDetailMode(claim, suggestions.length) : 'awaiting'),
@@ -196,7 +248,15 @@ export default function ClaimDetailPage({
   const matchPanelVariant = mode === 'review' ? 'review' : 'awaiting';
   const showMatchingLayout = mode === 'awaiting' || mode === 'review';
   const showWorkflowSidebar = mode === 'post_match' || mode === 'terminal';
-  const canRelease = isVerificationComplete(verification);
+  const verificationComplete = isVerificationComplete(verification);
+  const canRelease = verificationComplete && claim.status === 'approved';
+  const releaseDisabledReason =
+    claim.status !== 'approved'
+      ? 'Claim must be approved before release'
+      : !verificationComplete
+        ? 'Complete all verification checklist items first'
+        : undefined;
+  const canCloseClaim = claimCanBeClosedBySecurity(claim);
 
   async function handleConfirmMatch() {
     if (!claim || !selectedItemId) return;
@@ -216,6 +276,26 @@ export default function ClaimDetailPage({
     }
   }
 
+  async function handleRelease() {
+    if (!claim || !canRelease || releasing) return;
+
+    setReleasing(true);
+    setReleaseError('');
+
+    try {
+      const updated = await updateClaimStatus(claim.claimId, {
+        status: 'picked_up',
+      });
+      setClaim(updated);
+    } catch (err) {
+      setReleaseError(
+        err instanceof Error ? err.message : 'Failed to release item.'
+      );
+    } finally {
+      setReleasing(false);
+    }
+  }
+
   return (
     <Stack gap={6}>
       <ClaimDetailHeader
@@ -224,6 +304,13 @@ export default function ClaimDetailPage({
         status={displayStatus}
         subtitle={headerSubtitle}
         onBack={() => router.push('/security/claims')}
+      />
+
+      <CloseClaimDialog
+        claim={claim}
+        open={closeDialogOpen}
+        onOpenChange={setCloseDialogOpen}
+        onClosed={setClaim}
       />
 
       {claim.rejectionReason ? (
@@ -263,6 +350,9 @@ export default function ClaimDetailPage({
               selectedItemId={selectedItemId}
               onSelectItem={setSelectedItemId}
               onConfirmMatch={handleConfirmMatch}
+              onCloseClaim={
+                canCloseClaim ? () => setCloseDialogOpen(true) : undefined
+              }
               generating={generatingMatches}
               confirming={confirmingMatch}
             />
@@ -286,12 +376,25 @@ export default function ClaimDetailPage({
             {mode === 'post_match' ? (
               <>
                 <ClaimMatchedItemCard claim={claim} />
-                <ClaimAppointmentCard />
+                <ClaimPickupNoticeCard claim={claim} campusName={campusName} />
                 <ClaimVerificationChecklist
                   value={verification}
                   onChange={setVerification}
                 />
-                <ClaimReleaseCard canRelease={canRelease} />
+                <ClaimReleaseCard
+                  canRelease={canRelease}
+                  disabledReason={releaseDisabledReason}
+                  onRelease={handleRelease}
+                  releasing={releasing}
+                  releaseError={releaseError}
+                />
+                {canCloseClaim ? (
+                  <Flex justify="flex-start">
+                    <CloseClaimButton
+                      onClick={() => setCloseDialogOpen(true)}
+                    />
+                  </Flex>
+                ) : null}
               </>
             ) : (
               <>

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Button as ChakraButton, Flex, Stack } from '@chakra-ui/react';
+import { Button as ChakraButton, Box, Flex, Stack } from '@chakra-ui/react';
 import type { MatchSuggestion, SecurityClaimListItem } from '@/types/claims';
 import { Button } from '@/components/ui/Button';
+import { CloseClaimButton } from './CloseClaimButton';
 import { ClaimCard } from './ClaimCard';
 import { ClaimManualSearchList } from './ClaimManualSearchList';
 import { ClaimMatchCard } from './ClaimMatchCard';
@@ -18,6 +19,7 @@ interface ClaimMatchPanelProps {
   selectedItemId: string | null;
   onSelectItem: (itemId: string) => void;
   onConfirmMatch: () => void | Promise<void>;
+  onCloseClaim?: () => void;
   generating?: boolean;
   confirming?: boolean;
 }
@@ -38,6 +40,7 @@ export function ClaimMatchPanel({
   selectedItemId,
   onSelectItem,
   onConfirmMatch,
+  onCloseClaim,
   generating = false,
   confirming = false,
 }: ClaimMatchPanelProps) {
@@ -45,6 +48,7 @@ export function ClaimMatchPanel({
 
   const canConfirm = Boolean(selectedItemId);
   const showMatchActions = variant === 'review' || canConfirm;
+  const showFooter = showMatchActions || Boolean(onCloseClaim);
 
   return (
     <ClaimCard>
@@ -100,7 +104,7 @@ export function ClaimMatchPanel({
         />
       )}
 
-      {showMatchActions ? (
+      {showFooter ? (
         <Flex
           mt={6}
           pt={4}
@@ -108,33 +112,22 @@ export function ClaimMatchPanel({
           borderColor="gray.200"
           gap={3}
           flexWrap="wrap"
-          justify="flex-end"
+          justify="space-between"
           align="center"
         >
-          <Button variant="outline" disabled title="Coming soon">
-            Not a Match
-          </Button>
-          {variant === 'review' ? (
-            <Button variant="muted" disabled title="Coming soon">
-              Request More Info
+          {onCloseClaim ? <CloseClaimButton onClick={onCloseClaim} /> : <Box />}
+          {showMatchActions ? (
+            <Button
+              variant="primary"
+              disabled={!canConfirm || confirming}
+              loading={confirming}
+              onClick={() => void onConfirmMatch()}
+            >
+              Confirm Match
             </Button>
           ) : null}
-          <Button
-            variant="primary"
-            disabled={!canConfirm || confirming}
-            loading={confirming}
-            onClick={() => void onConfirmMatch()}
-          >
-            Confirm Match
-          </Button>
         </Flex>
-      ) : (
-        <Flex mt={6} pt={4} borderTopWidth="1px" borderColor="gray.200" gap={3}>
-          <Button variant="outline" disabled title="Coming soon">
-            Not a Match
-          </Button>
-        </Flex>
-      )}
+      ) : null}
     </ClaimCard>
   );
 }

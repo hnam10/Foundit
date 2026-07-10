@@ -23,6 +23,7 @@ import { useLoggedInUser } from '@/hooks/useLoggedInUser';
 import { getAccessToken } from '@/utils/auth';
 import { API_BASE, authFetch } from '@/lib/api/client';
 import { debugLog, debugWarn } from '@/utils/debug';
+import { FixedPageBackground } from '@/components/PageBackground';
 
 // ─── NOTES FOR THE TEAM ──────────────────────────────────────────────────────
 // Student claim form (Figma nodes 273-891 default / 725-1573 validation).
@@ -59,16 +60,7 @@ export default function ClaimItemPage() {
   return (
     <>
       {/* Full-bleed hero behind RoleShell's content (see notes at top). */}
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground overlay />
 
       <Box
         position="relative"

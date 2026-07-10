@@ -10,6 +10,7 @@ import {
   Grid,
   Heading,
   Input,
+  Menu,
   NativeSelect,
   Portal,
   Spinner,
@@ -258,29 +259,13 @@ export default function SecurityItemDetailPage() {
             Review and update found item information.
           </Text>
         </Stack>
-        <Flex gap={3} wrap="wrap">
-          {canDispose ? (
-            <Button
-              variant="danger"
-              disabled={editing || disposing}
-              minW="155px"
-              fontWeight="semibold"
-              onClick={() => {
-                setDisposeError('');
-                setDisposeDialogOpen(true);
-              }}
-            >
-              Mark as Disposed
-            </Button>
-          ) : null}
+        {!editing && item.status === 'stored' ? (
           <Button
+            {...actionButtonStyles}
             variant="outline"
-            disabled={
-              editing || item.status !== 'stored' || navigatingToRelease
-            }
+            disabled={navigatingToRelease}
             loading={navigatingToRelease}
-            minW="155px"
-            fontWeight="semibold"
+            flexShrink={0}
             onClick={() => {
               setNavigatingToRelease(true);
               router.push(`/security/items/${itemId}/walk-in-release`);
@@ -288,7 +273,7 @@ export default function SecurityItemDetailPage() {
           >
             Walk-in Release
           </Button>
-        </Flex>
+        ) : null}
       </Flex>
 
       <Box
@@ -515,17 +500,26 @@ export default function SecurityItemDetailPage() {
         </Portal>
       </Dialog.Root>
 
-      <Flex justify="flex-end" gap={3} wrap="wrap">
-        {editing ? (
-          <>
-            <Button
-              {...actionButtonStyles}
-              variant="muted"
-              onClick={handleCancelEdit}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
+      <Flex
+        justify="space-between"
+        align="center"
+        gap={3}
+        wrap="wrap"
+        pt={2}
+        borderTopWidth="1px"
+        borderColor="gray.200"
+      >
+        <Button
+          {...actionButtonStyles}
+          variant="muted"
+          onClick={editing ? handleCancelEdit : handleCancel}
+          disabled={saving}
+        >
+          {editing ? 'Cancel' : 'Back to List'}
+        </Button>
+
+        <Flex gap={3} wrap="wrap" justify="flex-end">
+          {editing ? (
             <Button
               {...actionButtonStyles}
               variant="primary"
@@ -536,25 +530,43 @@ export default function SecurityItemDetailPage() {
             >
               Save Changes
             </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              {...actionButtonStyles}
-              variant="muted"
-              onClick={handleCancel}
-            >
-              Back to List
-            </Button>
-            <Button
-              {...actionButtonStyles}
-              variant="primary"
-              onClick={handleStartEdit}
-            >
-              Edit Item
-            </Button>
-          </>
-        )}
+          ) : (
+            <>
+              {canDispose ? (
+                <Menu.Root>
+                  <Menu.Trigger asChild>
+                    <Button {...actionButtonStyles} variant="muted">
+                      More actions
+                    </Button>
+                  </Menu.Trigger>
+                  <Menu.Positioner>
+                    <Menu.Content minW="180px">
+                      <Menu.Item
+                        value="dispose"
+                        fontSize="sm"
+                        color="red.600"
+                        _highlighted={{ bg: 'red.50' }}
+                        onClick={() => {
+                          setDisposeError('');
+                          setDisposeDialogOpen(true);
+                        }}
+                      >
+                        Mark as disposed
+                      </Menu.Item>
+                    </Menu.Content>
+                  </Menu.Positioner>
+                </Menu.Root>
+              ) : null}
+              <Button
+                {...actionButtonStyles}
+                variant="primary"
+                onClick={handleStartEdit}
+              >
+                Edit Item
+              </Button>
+            </>
+          )}
+        </Flex>
       </Flex>
     </Stack>
   );

@@ -15,6 +15,20 @@ const system = createSystem(defaultConfig, {
         body: { value: 'var(--font-inter), sans-serif' },
         heading: { value: 'var(--font-inter), sans-serif' },
       },
+      // Chakra v3 default palette omits amber/sky; used by category cards.
+      colors: {
+        amber: {
+          50: { value: '#fffbeb' },
+          100: { value: '#fef3c7' },
+          600: { value: '#d97706' },
+          700: { value: '#b45309' },
+        },
+        sky: {
+          50: { value: '#f0f9ff' },
+          100: { value: '#e0f2fe' },
+          600: { value: '#0284c7' },
+        },
+      },
     },
     semanticTokens: {
       colors: {

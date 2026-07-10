@@ -28,20 +28,8 @@ export interface ClaimDisplayStatus {
 
 type ClaimPhaseInput = Pick<SecurityClaimListItem, 'status' | 'itemId'>;
 
-/** @deprecated Legacy rows only — new code writes `under_review`. */
-
-export function isLegacyMatchFound(status: ApiClaimStatus): boolean {
-  return status === 'match_found';
-}
-
-/** @deprecated Legacy rows only — new code writes `under_review` + itemId. */
-
-export function isLegacyMatchConfirmed(status: ApiClaimStatus): boolean {
-  return status === 'match_confirmed';
-}
-
 export function claimHasLinkedItem(claim: ClaimPhaseInput): boolean {
-  return Boolean(claim.itemId) || isLegacyMatchConfirmed(claim.status);
+  return Boolean(claim.itemId);
 }
 
 /** Security must confirm an AI-suggested or manually identified match. */
@@ -49,19 +37,18 @@ export function claimHasLinkedItem(claim: ClaimPhaseInput): boolean {
 export function claimAwaitingMatchConfirmation(
   claim: ClaimPhaseInput
 ): boolean {
-  if (claimHasLinkedItem(claim)) return false;
-
-  if (isLegacyMatchFound(claim.status)) return true;
-
   return claim.status === 'under_review' && !claim.itemId;
 }
 
-/** Match confirmed; student schedules pickup. */
+/** Security can reject (close) claims that have not been picked up yet. */
 
-export function claimWaitingOnStudent(claim: ClaimPhaseInput): boolean {
+export function claimCanBeClosedBySecurity(
+  claim: Pick<SecurityClaimListItem, 'status'>
+): boolean {
   return (
-    (claim.status === 'under_review' && Boolean(claim.itemId)) ||
-    isLegacyMatchConfirmed(claim.status)
+    claim.status === 'submitted' ||
+    claim.status === 'under_review' ||
+    claim.status === 'approved'
   );
 }
 
@@ -115,7 +102,7 @@ const statusDisplay: Partial<
   },
 
   approved: {
-    label: 'Pickup Pending',
+    label: 'Ready for Pickup',
 
     colorPalette: 'orange',
 
@@ -150,16 +137,12 @@ export function getClaimSecurityQueue(
     return 'closed';
   }
 
-  if (status === 'approved' || claimAwaitingMatchConfirmation(claim)) {
+  if (
+    status === 'approved' ||
+    claimAwaitingMatchConfirmation(claim) ||
+    status === 'submitted'
+  ) {
     return 'action';
-  }
-
-  if (status === 'submitted') {
-    return 'action';
-  }
-
-  if (claimWaitingOnStudent(claim)) {
-    return 'waiting';
   }
 
   return 'waiting';
@@ -170,10 +153,6 @@ export function getClaimSecurityActionHint(claim: ClaimPhaseInput): string {
 
   if (claimAwaitingMatchConfirmation(claim)) {
     return 'Review AI matches and confirm the correct stored item.';
-  }
-
-  if (claimWaitingOnStudent(claim)) {
-    return 'No action needed until the student schedules a pickup appointment.';
   }
 
   switch (status) {
@@ -215,18 +194,6 @@ export function getClaimDisplayStatus(
     };
   }
 
-  if (claimWaitingOnStudent(claim)) {
-    return {
-      label: 'Appointment Pending',
-
-      colorPalette: 'teal',
-
-      strip: 'teal.500',
-
-      color: 'teal.700',
-    };
-  }
-
   const display = statusDisplay[claim.status];
 
   if (display) return display;
@@ -249,10 +216,6 @@ export function getClaimStatusExplanation(claim: ClaimPhaseInput): string {
 
   if (queue === 'action') {
     return `Your action: ${hint}`;
-  }
-
-  if (queue === 'waiting' && claimWaitingOnStudent(claim)) {
-    return `Waiting on student: ${hint}`;
   }
 
   return hint;
@@ -324,7 +287,7 @@ export function getClaimWorkflowSteps(
         ? 'active'
         : 'pending';
 
-  const appointmentState: WorkflowStepState =
+  const readyForPickupState: WorkflowStepState =
     isPickedUp || isApproved
       ? 'complete'
       : isMatchConfirmed
@@ -341,7 +304,7 @@ export function getClaimWorkflowSteps(
 
   return [
     {
-      key: 'match_found',
+      key: 'match',
 
       label: 'Match Found',
 
@@ -358,19 +321,19 @@ export function getClaimWorkflowSteps(
     },
 
     {
-      key: 'appointment',
+      key: 'ready_for_pickup',
 
-      label: 'Appointment',
+      label: 'Ready for Pickup',
 
       description: isPickedUp
-        ? 'Pickup appointment completed.'
+        ? 'Student notified and item collected.'
         : isApproved
-          ? 'Pickup appointment scheduled.'
-          : isMatchConfirmed
-            ? 'Waiting for student to schedule.'
-            : 'Student notified after match is confirmed.',
+          ? 'Student notified to pick up in person.'
+          : 'Student notified after match is confirmed.',
 
-      state: appointmentState,
+      state: readyForPickupState,
+
+      timestamp: isApproved ? claim.reviewedAt : null,
     },
 
     {
@@ -381,8 +344,8 @@ export function getClaimWorkflowSteps(
       description: isPickedUp
         ? 'Item released to student.'
         : isApproved
-          ? 'Ready for student pickup.'
-          : 'Pending appointment.',
+          ? 'Verify student ID and release the item.'
+          : 'Pending student arrival.',
 
       state: verifyState,
 
@@ -454,8 +417,8 @@ export function matchesClaimStatusFilter(
     case 'needs_action':
       return getClaimSecurityQueue(claim) === 'action';
 
-    case 'waiting_on_student':
-      return claimWaitingOnStudent(claim);
+    case 'ready_for_pickup':
+      return claim.status === 'approved';
 
     case 'completed':
       return getClaimSecurityQueue(claim) === 'closed';
@@ -469,6 +432,57 @@ export function matchesClaimStatusFilter(
     case 'rejected':
       return claim.status === 'rejected';
 
+    default:
+      return true;
+  }
+}
+
+export function isStudentClaimClosed(claim: ClaimPhaseInput): boolean {
+  return claim.status === 'picked_up' || claim.status === 'rejected';
+}
+
+export function matchesStudentClaimFilter(
+  claim: ClaimPhaseInput & {
+    claimId: string;
+    category: string;
+    description: string;
+    item?: { title: string } | null;
+  },
+  statusFilter: string,
+  searchQuery: string
+): boolean {
+  const query = searchQuery.trim().toLowerCase();
+
+  if (query) {
+    const rawName =
+      claim.item?.title?.trim() ||
+      claim.description.trim() ||
+      'lost item claim';
+    const itemName = rawName.toLowerCase();
+    const claimRef = formatClaimId(claim.claimId).toLowerCase();
+    const matchesSearch =
+      itemName.includes(query) ||
+      claim.category.toLowerCase().includes(query) ||
+      claimRef.includes(query) ||
+      claim.claimId.toLowerCase().includes(query) ||
+      claim.description.toLowerCase().includes(query);
+
+    if (!matchesSearch) return false;
+  }
+
+  if (!statusFilter || statusFilter === 'all') return true;
+
+  switch (statusFilter) {
+    case 'active':
+      return !isStudentClaimClosed(claim);
+    case 'in_progress':
+      return !isStudentClaimClosed(claim) && claim.status !== 'approved';
+    case 'pickup':
+      return claim.status === 'approved';
+    case 'complete':
+      return claim.status === 'picked_up';
+    case 'closed':
+      return claim.status === 'rejected';
     default:
       return true;
   }

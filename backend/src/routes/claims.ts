@@ -12,7 +12,7 @@ import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { writeAuditLog } from '../utils/auditLog';
 import { scheduleClaimSearchIndexIngest } from '../lib/matching/ingest';
-import { generateMatchCandidates } from '../lib/matching/matching';
+import { refreshClaimMatchSuggestions } from '../lib/matching/suggestions';
 import { resolveImageUrl } from '../utils/imageUrl';
 import {
   claimAndMatchParamsSchema,
@@ -402,12 +402,42 @@ function createMatchFoundNotificationInput(claim: {
   return {
     recipientId: claim.studentId,
     type: NotificationType.match_found,
-    title: 'A match was found for your claim',
+    title: 'Your matched item is ready for pickup',
     message:
-      'Security matched a found item to your lost item claim. Please schedule a pickup appointment.',
+      'A found item has been matched to your claim. Visit the campus security office with your student ID during office hours to collect it.',
     referenceType: 'claim',
     referenceId: claim.claimId,
   } as const;
+}
+
+async function reserveItemForClaim(
+  tx: Prisma.TransactionClient,
+  itemId: string
+) {
+  const updateResult = await tx.item.updateMany({
+    where: {
+      itemId,
+      status: ItemStatus.stored,
+    },
+    data: { status: ItemStatus.claimed },
+  });
+
+  if (updateResult.count > 0) {
+    return;
+  }
+
+  const item = await tx.item.findUnique({
+    where: { itemId },
+    select: { itemId: true },
+  });
+
+  if (!item) {
+    throw new Error('LINKED_ITEM_NOT_FOUND');
+  }
+
+  const conflictError = new Error('LINKED_ITEM_NOT_STORED');
+  conflictError.name = 'LINKED_ITEM_NOT_STORED';
+  throw conflictError;
 }
 
 async function applyMatchConfirmation(
@@ -416,12 +446,14 @@ async function applyMatchConfirmation(
   itemId: string,
   actorId: string
 ) {
+  await reserveItemForClaim(tx, itemId);
+
   const now = new Date();
   const updatedClaim = await tx.claim.update({
     where: { claimId: claim.claimId },
     data: {
       itemId,
-      status: ClaimStatus.under_review,
+      status: ClaimStatus.approved,
       reviewedBy: actorId,
       reviewedAt: now,
     },
@@ -430,6 +462,13 @@ async function applyMatchConfirmation(
 
   await tx.notification.create({
     data: createMatchFoundNotificationInput(updatedClaim),
+  });
+
+  await tx.notification.create({
+    data: createClaimStatusNotificationInput(
+      updatedClaim,
+      ClaimStatus.approved
+    ),
   });
 
   return updatedClaim;
@@ -1099,6 +1138,10 @@ router.patch(
 
       const updated = await prisma.$transaction(async (tx) => {
         if (status === ClaimStatus.approved && claim.itemId) {
+          await reserveItemForClaim(tx, claim.itemId);
+        }
+
+        if (status === ClaimStatus.picked_up && claim.itemId) {
           const item = await tx.item.findUnique({
             where: { itemId: claim.itemId },
             select: { itemId: true, status: true },
@@ -1108,16 +1151,12 @@ router.patch(
             throw new Error('LINKED_ITEM_NOT_FOUND');
           }
 
-          if (item.status !== ItemStatus.stored) {
-            const conflictError = new Error('LINKED_ITEM_NOT_STORED');
-            conflictError.name = 'LINKED_ITEM_NOT_STORED';
-            throw conflictError;
+          if (item.status === ItemStatus.stored) {
+            await tx.item.update({
+              where: { itemId: item.itemId },
+              data: { status: ItemStatus.claimed },
+            });
           }
-
-          await tx.item.update({
-            where: { itemId: item.itemId },
-            data: { status: ItemStatus.claimed },
-          });
         }
 
         const nextClaim = await tx.claim.update({
@@ -1318,42 +1357,8 @@ router.post(
         return;
       }
 
-      const { candidates: scoredCandidates, candidateCount } =
-        await generateMatchCandidates(claim.claimId);
-
-      if (scoredCandidates.length > 0) {
-        await prisma.$transaction(async (tx) => {
-          await Promise.all(
-            scoredCandidates.map((candidate) =>
-              tx.matchSuggestion.upsert({
-                where: {
-                  claimId_itemId: {
-                    claimId: claim.claimId,
-                    itemId: candidate.itemId,
-                  },
-                },
-                update: {
-                  matchScore: candidate.score,
-                  matchCriteria: candidate.criteria || null,
-                },
-                create: {
-                  claimId: claim.claimId,
-                  itemId: candidate.itemId,
-                  matchScore: candidate.score,
-                  matchCriteria: candidate.criteria || null,
-                },
-              })
-            )
-          );
-
-          if (claim.status === ClaimStatus.submitted) {
-            await tx.claim.update({
-              where: { claimId: claim.claimId },
-              data: { status: ClaimStatus.under_review },
-            });
-          }
-        });
-      }
+      const { candidateCount, suggestionCount } =
+        await refreshClaimMatchSuggestions(claim.claimId);
 
       await writeAuditLog({
         actorId: actor.userId,
@@ -1362,7 +1367,7 @@ router.post(
         entityId: claim.claimId,
         details: {
           candidateCount,
-          suggestionCount: scoredCandidates.length,
+          suggestionCount,
         },
         ipAddress: req.ip,
       });

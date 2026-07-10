@@ -11,6 +11,7 @@ import requireRole from '../middleware/requireRole';
 import { prisma } from '../db';
 import { writeAuditLog } from '../utils/auditLog';
 import { scheduleItemSearchIndexIngest } from '../lib/matching/ingest';
+import { scheduleMatchRefreshForCampus } from '../lib/matching/suggestions';
 import { generateReportLinkToken } from '../utils/reportLinkToken';
 import { validate } from '../validators/shared';
 import {
@@ -688,6 +689,7 @@ router.post(
         ),
         locationFound,
       });
+      scheduleMatchRefreshForCampus(link.campusId);
 
       res.status(201).json({
         reportId: result.report.reportId,

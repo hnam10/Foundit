@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Box, Button, Heading, Stack, Text } from '@chakra-ui/react';
+import { FixedPageBackground } from '@/components/PageBackground';
 import { ROLE_HOME } from '@/utils/routes';
 
 // Confirmation screen the student lands on after a successful claim submit
@@ -13,16 +14,7 @@ export default function ClaimSubmittedPage() {
   return (
     <>
       {/* Same full-bleed hero as app/student/claim-item/page.tsx. */}
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground overlay />
 
       <Box
         position="relative"
