@@ -414,25 +414,30 @@ async function reserveItemForClaim(
   tx: Prisma.TransactionClient,
   itemId: string
 ) {
+  const updateResult = await tx.item.updateMany({
+    where: {
+      itemId,
+      status: ItemStatus.stored,
+    },
+    data: { status: ItemStatus.claimed },
+  });
+
+  if (updateResult.count > 0) {
+    return;
+  }
+
   const item = await tx.item.findUnique({
     where: { itemId },
-    select: { itemId: true, status: true },
+    select: { itemId: true },
   });
 
   if (!item) {
     throw new Error('LINKED_ITEM_NOT_FOUND');
   }
 
-  if (item.status !== ItemStatus.stored) {
-    const conflictError = new Error('LINKED_ITEM_NOT_STORED');
-    conflictError.name = 'LINKED_ITEM_NOT_STORED';
-    throw conflictError;
-  }
-
-  await tx.item.update({
-    where: { itemId: item.itemId },
-    data: { status: ItemStatus.claimed },
-  });
+  const conflictError = new Error('LINKED_ITEM_NOT_STORED');
+  conflictError.name = 'LINKED_ITEM_NOT_STORED';
+  throw conflictError;
 }
 
 async function applyMatchConfirmation(

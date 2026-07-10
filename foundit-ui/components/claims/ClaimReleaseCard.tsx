@@ -41,7 +41,7 @@ export function ClaimReleaseCard({
           </Text>
         ) : null}
         {releaseError ? (
-          <Text fontSize="sm" color="red.500">
+          <Text fontSize="sm" color="fg.error">
             {releaseError}
           </Text>
         ) : null}

@@ -176,7 +176,7 @@ export default function StudentMyClaimsPage() {
                       fontSize="sm"
                       _focusVisible={{
                         outline: 'none',
-                        boxShadow: '0 0 0 2px #009adb',
+                        boxShadow: '0 0 0 2px {colors.focusRing}',
                       }}
                     />
                     <Box
@@ -206,7 +206,7 @@ export default function StudentMyClaimsPage() {
                     color="gray.800"
                     _focusVisible={{
                       outline: 'none',
-                      boxShadow: '0 0 0 2px #009adb',
+                      boxShadow: '0 0 0 2px {colors.focusRing}',
                     }}
                   >
                     <option value="active">Active claims</option>

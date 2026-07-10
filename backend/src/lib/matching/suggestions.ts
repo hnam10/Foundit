@@ -53,12 +53,13 @@ export async function refreshClaimMatchSuggestions(
         )
       );
 
-      if (claim.status === ClaimStatus.submitted) {
-        await tx.claim.update({
-          where: { claimId: claim.claimId },
-          data: { status: ClaimStatus.under_review },
-        });
-      }
+      await tx.claim.updateMany({
+        where: {
+          claimId: claim.claimId,
+          status: ClaimStatus.submitted,
+        },
+        data: { status: ClaimStatus.under_review },
+      });
     });
   }
 
