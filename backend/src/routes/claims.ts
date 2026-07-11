@@ -65,6 +65,12 @@ const claimListSelect = {
     select: {
       itemId: true,
       campusId: true,
+      campus: {
+        select: {
+          campusId: true,
+          campusName: true,
+        },
+      },
       category: true,
       title: true,
       status: true,
@@ -215,6 +221,10 @@ async function toClaimListItemDto(claim: ClaimListRow) {
       ? {
           itemId: claim.item.itemId,
           campusId: claim.item.campusId,
+          campus: {
+            campusId: claim.item.campus.campusId,
+            campusName: claim.item.campus.campusName,
+          },
           category: claim.item.category,
           title: claim.item.title,
           status: claim.item.status,
@@ -398,13 +408,18 @@ const validStatusTransitions: Record<ClaimStatus, ClaimStatus[]> = {
 function createMatchFoundNotificationInput(claim: {
   claimId: string;
   studentId: string;
+  item: { campus: { campusName: string } } | null;
 }) {
+  const campusName = claim.item?.campus.campusName;
+  const officeLocation = campusName
+    ? `the ${campusName} campus security office`
+    : 'the campus security office';
+
   return {
     recipientId: claim.studentId,
     type: NotificationType.match_found,
     title: 'Your matched item is ready for pickup',
-    message:
-      'A found item has been matched to your claim. Visit the campus security office with your student ID during office hours to collect it.',
+    message: `A found item has been matched to your claim. Visit ${officeLocation} with your student ID during office hours to collect it.`,
     referenceType: 'claim',
     referenceId: claim.claimId,
   } as const;
@@ -975,7 +990,6 @@ router.patch(
         where: { itemId },
         select: {
           itemId: true,
-          campusId: true,
           status: true,
         },
       });
@@ -992,14 +1006,6 @@ router.patch(
         res.status(409).json({
           code: 'ITEM_NOT_STORED',
           message: 'Only stored items can be linked to a claim.',
-        });
-        return;
-      }
-
-      if (item.campusId !== claim.campusId) {
-        res.status(409).json({
-          code: 'ITEM_CAMPUS_MISMATCH',
-          message: 'The item campus must match the claim campus.',
         });
         return;
       }

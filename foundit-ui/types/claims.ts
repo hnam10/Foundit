@@ -49,6 +49,10 @@ export interface SecurityClaimListItem {
   item: {
     itemId: string;
     campusId: string;
+    campus: {
+      campusId: string;
+      campusName: string;
+    };
     category: string;
     title: string;
     status: string;

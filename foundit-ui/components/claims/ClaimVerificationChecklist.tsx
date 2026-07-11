@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  Badge,
-  Flex,
-  Heading,
-  Stack,
-  Text,
-  Textarea,
-  chakra,
-} from '@chakra-ui/react';
+import { Heading, Stack, Text, Textarea, Flex, chakra } from '@chakra-ui/react';
 import { ClaimCard } from './ClaimCard';
 
 const Checkbox = chakra('input');
@@ -23,13 +15,14 @@ export interface VerificationState {
 interface ClaimVerificationChecklistProps {
   value: VerificationState;
   onChange: (value: VerificationState) => void;
+  compact?: boolean;
 }
 
 const checklistItems = [
   {
     key: 'verifyStudentId' as const,
-    label: 'Verify Student ID',
-    description: 'Confirm the student presents valid campus identification.',
+    label: 'Verify Photo ID',
+    description: 'Confirm the claimant presents valid photo ID.',
   },
   {
     key: 'proofOfOwnership' as const,
@@ -39,31 +32,33 @@ const checklistItems = [
   },
   {
     key: 'studentConfirmation' as const,
-    label: 'Student Confirmation',
+    label: 'Owner Confirmation',
     description:
-      'Student confirms the item matches their lost item description.',
+      'Claimant confirms the item matches their lost item description.',
   },
 ];
 
 export function ClaimVerificationChecklist({
   value,
   onChange,
+  compact = false,
 }: ClaimVerificationChecklistProps) {
   function toggle(key: keyof Omit<VerificationState, 'notes'>) {
     onChange({ ...value, [key]: !value[key] });
   }
 
   return (
-    <ClaimCard>
-      <Flex justify="space-between" align="start" mb={4} gap={2}>
-        <Heading as="h2" fontSize="lg" fontWeight="bold" color="gray.900">
-          Verification Checklist
-        </Heading>
-        <Badge colorPalette="gray" variant="subtle">
-          Pending
-        </Badge>
-      </Flex>
-      <Stack gap={4}>
+    <ClaimCard p={compact ? 4 : 6}>
+      <Heading
+        as="h2"
+        fontSize={compact ? 'md' : 'lg'}
+        fontWeight="bold"
+        color="gray.900"
+        mb={compact ? 3 : 4}
+      >
+        Verification Checklist
+      </Heading>
+      <Stack gap={compact ? 2.5 : 4}>
         {checklistItems.map((item) => (
           <Flex key={item.key} gap={3} align="start">
             <Checkbox
@@ -96,7 +91,7 @@ export function ClaimVerificationChecklist({
             value={value.notes}
             onChange={(e) => onChange({ ...value, notes: e.target.value })}
             placeholder="Add any verification notes..."
-            rows={3}
+            rows={compact ? 2 : 3}
             fontSize="sm"
           />
         </Stack>

@@ -184,8 +184,8 @@ export function ClaimDetailModal({
               </Text>
               <Text fontSize="sm" color="blue.800" mb={2}>
                 Your matched item ({claim.item?.title ?? 'item'}) is ready to
-                collect at the {claim.campus?.campusName ?? 'campus'} security
-                office.
+                collect at the {claim.item?.campus.campusName ?? 'campus'}{' '}
+                security office.
               </Text>
               <Text fontSize="sm" color="blue.800">
                 Bring your student ID and visit during office hours. Security

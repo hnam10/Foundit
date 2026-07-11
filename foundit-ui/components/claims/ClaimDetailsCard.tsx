@@ -3,7 +3,11 @@
 import { Grid, Heading, Separator, Stack } from '@chakra-ui/react';
 import { DetailImageGallery } from '@/components/DetailImageGallery';
 import type { SecurityClaimDetail } from '@/types/claims';
-import { formatClaimDate } from '@/utils/claimDisplay';
+import {
+  formatClaimDate,
+  formatNotificationPreference,
+  getClaimItemName,
+} from '@/utils/claimDisplay';
 import { ClaimCard } from './ClaimCard';
 import { ClaimDetailField } from './ClaimDetailField';
 
@@ -12,15 +16,9 @@ interface ClaimDetailsCardProps {
   campusName: string;
 }
 
-function descriptionPreview(description: string): string {
-  const trimmed = description.trim();
-  if (!trimmed) return 'Claim photo';
-  return trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
-}
-
 export function ClaimDetailsCard({ claim, campusName }: ClaimDetailsCardProps) {
   const studentName = `${claim.student.firstName} ${claim.student.lastName}`;
-  const imageAlt = descriptionPreview(claim.description);
+  const itemName = getClaimItemName(claim);
   const hasImages = claim.images.length > 0;
 
   return (
@@ -42,16 +40,21 @@ export function ClaimDetailsCard({ claim, campusName }: ClaimDetailsCardProps) {
           />
           <ClaimDetailField label="Email" value={claim.student.email} />
           <ClaimDetailField label="Campus" value={campusName} />
+          <ClaimDetailField
+            label="Notification Preferences"
+            value={formatNotificationPreference(claim.notificationPreference)}
+          />
         </Grid>
 
         <Separator borderColor="gray.200" />
 
         {hasImages ? (
-          <DetailImageGallery images={claim.images} alt={imageAlt} compact />
+          <DetailImageGallery images={claim.images} alt={itemName} compact />
         ) : null}
 
         <Grid templateColumns={{ base: '1fr', sm: '1fr 1fr' }} gap={4}>
           <ClaimDetailField label="Category" value={claim.category} />
+          <ClaimDetailField label="Item Name" value={itemName} />
           <ClaimDetailField
             label="Date Lost"
             value={formatClaimDate(claim.dateLost)}
@@ -65,6 +68,12 @@ export function ClaimDetailsCard({ claim, campusName }: ClaimDetailsCardProps) {
         <ClaimDetailField
           label="Description"
           value={claim.description}
+          wordBreak
+        />
+
+        <ClaimDetailField
+          label="Additional Information"
+          value={claim.additionalInfo?.trim() || '—'}
           wordBreak
         />
       </Stack>

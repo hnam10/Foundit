@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation';
 import { RoleShell } from '@/components/layouts/RoleShell';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
 
+const FULL_BLEED_PATHS = new Set(['/student/dashboard', '/student/my-claims']);
+
 export default function StudentLayout({
   children,
 }: {
@@ -13,7 +15,12 @@ export default function StudentLayout({
   const userName = useLoggedInDisplayName();
 
   return (
-    <RoleShell variant="student" userName={userName} activePath={pathname}>
+    <RoleShell
+      variant="student"
+      userName={userName}
+      activePath={pathname}
+      fullBleed={FULL_BLEED_PATHS.has(pathname)}
+    >
       {children}
     </RoleShell>
   );

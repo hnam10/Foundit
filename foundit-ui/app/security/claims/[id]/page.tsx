@@ -238,6 +238,11 @@ export default function ClaimDetailPage({
   const campusName =
     campuses.find((campus) => campus.campusId === claim.campusId)?.campusName ??
     '—';
+  const pickupCampusName =
+    claim.item?.campus.campusName ??
+    campuses.find((campus) => campus.campusId === claim.item?.campusId)
+      ?.campusName ??
+    '—';
 
   const headerSubtitle = claim.reviewedAt
     ? claimHasLinkedItem(claim) || claim.status === 'approved'
@@ -376,7 +381,10 @@ export default function ClaimDetailPage({
             {mode === 'post_match' ? (
               <>
                 <ClaimMatchedItemCard claim={claim} />
-                <ClaimPickupNoticeCard claim={claim} campusName={campusName} />
+                <ClaimPickupNoticeCard
+                  claim={claim}
+                  campusName={pickupCampusName}
+                />
                 <ClaimVerificationChecklist
                   value={verification}
                   onChange={setVerification}

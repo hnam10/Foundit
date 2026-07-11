@@ -53,13 +53,29 @@ export function claimCanBeClosedBySecurity(
 }
 
 export function getClaimItemName(claim: SecurityClaimListItem): string {
+  const fromClaim = claim.itemName?.trim();
+  if (fromClaim) {
+    return fromClaim.length > 48 ? `${fromClaim.slice(0, 48)}…` : fromClaim;
+  }
+
   if (claim.item?.title) return claim.item.title;
 
-  const trimmed = claim.description.trim();
+  return 'Lost item claim';
+}
 
-  if (!trimmed) return 'Lost item claim';
+const notificationPreferenceLabels: Record<
+  SecurityClaimListItem['notificationPreference'],
+  string
+> = {
+  email: 'Email',
+  phone: 'Phone',
+  email_and_phone: 'Email and phone',
+};
 
-  return trimmed.length > 48 ? `${trimmed.slice(0, 48)}…` : trimmed;
+export function formatNotificationPreference(
+  preference: SecurityClaimListItem['notificationPreference']
+): string {
+  return notificationPreferenceLabels[preference] ?? preference;
 }
 
 export function formatClaimDate(value: string | null): string {
