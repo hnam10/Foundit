@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
-  Button,
   Flex,
   Heading,
   Input,
@@ -14,6 +13,7 @@ import {
   chakra,
 } from '@chakra-ui/react';
 import { IoSearch } from 'react-icons/io5';
+import { Button } from '@/components/ui/Button';
 import { ClaimCard } from '@/components/ClaimCard';
 import { fetchAllClaims } from '@/lib/api/claims';
 import { ClaimDetailModal } from '@/components/StudentClaimDetailModal';
@@ -72,12 +72,8 @@ export default function StudentMyClaimsPage() {
 
   return (
     <Box
-      mt="-40px"
-      mb="-40px"
-      minH="100vh"
-      w="100vw"
-      maxW="none"
-      mx="calc(50% - 50vw)"
+      flex={1}
+      w="full"
       {...PAGE_BACKGROUND_PROPS}
       px={{ base: 5, md: 12 }}
       py={{ base: 8, md: 12 }}
@@ -110,8 +106,7 @@ export default function StudentMyClaimsPage() {
           </Stack>
 
           <Button
-            bg="white"
-            color="red.600"
+            variant="primary"
             size="lg"
             px={8}
             minH="52px"
@@ -120,15 +115,6 @@ export default function StudentMyClaimsPage() {
             fontWeight="bold"
             fontSize="md"
             borderRadius="lg"
-            borderWidth="2px"
-            borderColor="white"
-            boxShadow="0 8px 28px rgba(0, 0, 0, 0.45)"
-            _hover={{
-              bg: 'red.50',
-              boxShadow: '0 10px 32px rgba(0, 0, 0, 0.5)',
-              transform: 'translateY(-1px)',
-            }}
-            _active={{ bg: 'white', transform: 'translateY(0)' }}
             loading={isNavigatingToClaim}
             onClick={() => {
               setIsNavigatingToClaim(true);
@@ -246,10 +232,8 @@ export default function StudentMyClaimsPage() {
                   You don&apos;t have any claims yet.
                 </Text>
                 <Button
-                  bg="red.600"
-                  color="white"
+                  variant="primary"
                   fontWeight="semibold"
-                  _hover={{ bg: 'red.700' }}
                   onClick={() => router.push('/student/claim-item')}
                 >
                   Claim an Item

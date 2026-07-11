@@ -169,7 +169,7 @@ export function ClaimManualSearchList({
   const [categories, setCategories] = useState<CategoryStat[]>([]);
   const [items, setItems] = useState<SecurityItemListItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [campusFilter, setCampusFilter] = useState(claim.campusId);
+  const [campusFilter, setCampusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState(claim.category);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);

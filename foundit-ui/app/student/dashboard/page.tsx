@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
-  Button,
   Flex,
   Heading,
   NativeSelect,
@@ -13,6 +12,7 @@ import {
   Stack,
   Text,
 } from '@chakra-ui/react';
+import { Button } from '@/components/ui/Button';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
 import { fetchCampuses, fetchCategoryStats } from '@/lib/api/items';
 import { ApiError } from '@/lib/api/client';
@@ -94,12 +94,8 @@ export default function StudentDashboardPage() {
 
   return (
     <Box
-      mt="-40px"
-      mb="-40px"
-      minH="100vh"
-      w="100vw"
-      maxW="none"
-      mx="calc(50% - 50vw)"
+      flex={1}
+      w="full"
       {...PAGE_BACKGROUND_PROPS}
       px={{ base: 5, md: 12 }}
       py={{ base: 8, md: 12 }}
@@ -132,8 +128,7 @@ export default function StudentDashboardPage() {
           </Stack>
 
           <Button
-            bg="white"
-            color="red.600"
+            variant="primary"
             size="lg"
             px={8}
             minH="52px"
@@ -142,15 +137,6 @@ export default function StudentDashboardPage() {
             fontWeight="bold"
             fontSize="md"
             borderRadius="lg"
-            borderWidth="2px"
-            borderColor="white"
-            boxShadow="0 8px 28px rgba(0, 0, 0, 0.45)"
-            _hover={{
-              bg: 'red.50',
-              boxShadow: '0 10px 32px rgba(0, 0, 0, 0.5)',
-              transform: 'translateY(-1px)',
-            }}
-            _active={{ bg: 'white', transform: 'translateY(0)' }}
             loading={isNavigatingToClaim}
             onClick={() => {
               setIsNavigatingToClaim(true);

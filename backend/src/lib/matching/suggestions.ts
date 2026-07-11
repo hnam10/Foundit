@@ -74,7 +74,6 @@ export function scheduleMatchRefreshForCampus(campusId: string) {
     try {
       const claims = await prisma.claim.findMany({
         where: {
-          campusId,
           itemId: null,
           status: { in: [...pendingMatchStatuses] },
         },
@@ -92,7 +91,7 @@ export function scheduleMatchRefreshForCampus(campusId: string) {
         }
       }
     } catch (error) {
-      console.error('Failed to schedule campus match refresh', {
+      console.error('Failed to schedule match refresh for pending claims', {
         campusId,
         error,
       });

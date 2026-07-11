@@ -43,12 +43,12 @@ export function ClaimPickupNoticeCard({
         ) : isApproved ? (
           <>
             <Text fontSize="sm" color="gray.600">
-              Student notified to pick up in person at the campus security
-              office.
+              Student notified to pick up in person at the {campusName} campus
+              security office.
             </Text>
             <Text fontSize="sm" color="gray.700">
               <Text as="span" fontWeight="semibold">
-                Campus:
+                Pickup campus:
               </Text>{' '}
               {campusName}
             </Text>
