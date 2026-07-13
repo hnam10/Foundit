@@ -91,6 +91,19 @@ JWT_ACCESS_SECRET=some-long-random-string-here
 JWT_REFRESH_SECRET=another-different-random-string
 ```
 
+### Semantic matching
+
+| Variable                     | Description                                                |
+| ---------------------------- | ---------------------------------------------------------- |
+| `OPENROUTER_API_KEY`         | OpenRouter API key for embedding-based match search        |
+| `OPENROUTER_EMBEDDING_MODEL` | Embedding model (default: `openai/text-embedding-3-small`) |
+
+If unset, a local hash fallback is used (dev only). After deploy, backfill existing rows:
+
+```bash
+pnpm run backfill:embeddings
+```
+
 ---
 
 ## Project Structure
@@ -109,7 +122,8 @@ src/
 │   ├── claims.ts               # Zod schemas for claim routes
 │   └── users.ts                # Zod schemas: replaceProfileSchema, updateProfileSchema, createUserSchema, listUsersQuerySchema
 ├── lib/
-│   └── email.ts                # Nodemailer transporter and email sender
+│   ├── email.ts                # Nodemailer transporter and email sender
+│   └── matching/               # Semantic match ingest, embeddings, scoring
 ├── utils/
 │   ├── token.ts                # JWT signing, refresh token verification, SHA-256 hash helper
 │   ├── password.ts             # bcrypt hash and compare helpers
@@ -188,14 +202,18 @@ Global API rules:
 | POST   | `/api/claims`                                     | student                | Done   | Submit a lost item claim                                 |
 | GET    | `/api/claims`                                     | student/security/admin | Done   | List claims; student sees own, security/admin can filter |
 | GET    | `/api/claims/:claimId`                            | student/security/admin | Done   | Get claim detail with ownership/authorization checks     |
-| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done   | Transition claim status using existing DB enum           |
+| PATCH  | `/api/claims/:claimId/status`                     | security/admin         | Done   | Approve/reject and transition claim status               |
 | DELETE | `/api/claims/:claimId`                            | student                | Done   | Cancel/delete own cancellable claim with audit logging   |
 | PATCH  | `/api/claims/:claimId`                            | security/admin         | Done   | Link a stored item to the claim (`itemId` only)          |
 | GET    | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Retrieve match suggestions for a claim                   |
-| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Trigger match scoring and create suggestions             |
+| POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Run semantic match scoring and upsert suggestions        |
 | PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Done   | Confirm or dismiss a match suggestion                    |
 
+Match suggestions use precomputed `searchText` / `embedding` on claims and stored items (built on create/update). `POST` compares embeddings with hybrid re-ranking (category, date, campus, location). Security still confirms matches manually.
+
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
+
+Claim approval requires a linked stored item and updates that item to `claimed` in the same transaction as the claim status update. Rejection requires `rejectionReason`, leaves the linked item status unchanged, and returns the updated claim detail response with the current nested item status.
 
 ### Report Links & Found Item Reports
 
@@ -262,9 +280,9 @@ Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed
 { "status": "expired", "note": "Retention period ended" }
 ```
 
-Allowed targets: `expired`, `disposed`. Transitions: `stored → expired|disposed`, `expired → disposed`. Blocked when item is `claimed`, `disposed`, or has an approved claim awaiting pickup. Returns updated item detail; rejects active linked claims in the same transaction.
+Allowed targets: `expired`, `disposed`. Transitions: `stored → expired|disposed`, `expired → disposed`. Blocked when item is `claimed` or `disposed`. Returns updated item detail; rejects active linked claims in the same transaction.
 
-A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed (skips items with an approved claim awaiting pickup). Security should use `disposed` to record physical disposal after expiry.
+A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Security should use `disposed` to record physical disposal after expiry.
 
 ### Notifications
 

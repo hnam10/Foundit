@@ -10,11 +10,16 @@ import {
   Heading,
   Image,
   Input,
+  NativeSelect,
   Spinner,
   Stack,
   Text,
-  Textarea,
 } from '@chakra-ui/react';
+import {
+  ClaimVerificationChecklist,
+  isVerificationComplete,
+  type VerificationState,
+} from '@/components/claims/ClaimVerificationChecklist';
 import { ItemStatusBadge } from '@/components/items/ItemStatusProgress';
 import { Button } from '@/components/ui/Button';
 import FieldError from '@/components/FieldError';
@@ -23,6 +28,43 @@ import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
 import { fetchSecurityItem, walkInReleaseItem } from '@/lib/api/items';
 import type { SecurityItemDetail } from '@/types/items';
 import { ITEM_STATUS_LABELS } from '@/types/items';
+
+const initialVerification: VerificationState = {
+  verifyStudentId: false,
+  proofOfOwnership: false,
+  studentConfirmation: false,
+  notes: '',
+};
+
+type ClaimantType = 'student' | 'faculty_staff' | 'visitor';
+
+const CLAIMANT_TYPE_OPTIONS: {
+  value: ClaimantType;
+  label: string;
+  idPlaceholder: string;
+}[] = [
+  {
+    value: 'student',
+    label: 'Student',
+    idPlaceholder: 'Seneca student ID',
+  },
+  {
+    value: 'faculty_staff',
+    label: 'Faculty / Staff',
+    idPlaceholder: 'Employee ID',
+  },
+  {
+    value: 'visitor',
+    label: 'Visitor',
+    idPlaceholder: "Government ID (e.g. driver's licence)",
+  },
+];
+
+const CLAIMANT_TYPE_LABELS: Record<ClaimantType, string> = {
+  student: 'Student',
+  faculty_staff: 'Faculty / Staff',
+  visitor: 'Visitor',
+};
 
 const PLACEHOLDER = '—';
 
@@ -113,10 +155,10 @@ function ReleaseField({
 }
 
 interface FormState {
+  claimantType: ClaimantType;
   studentFullName: string;
   idVerified: string;
   contactNumber: string;
-  verificationNote: string;
 }
 
 interface FormErrors {
@@ -132,10 +174,22 @@ function validateForm(form: FormState): FormErrors {
   }
 
   if (!form.idVerified.trim()) {
-    errors.idVerified = 'Student ID or government ID checked is required.';
+    errors.idVerified = 'Photo ID checked is required.';
   }
 
   return errors;
+}
+
+function buildVerificationNote(
+  claimantType: ClaimantType,
+  notes: string
+): string | null {
+  const parts = [
+    `Claimant type: ${CLAIMANT_TYPE_LABELS[claimantType]}`,
+    notes.trim() || null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join('\n') : null;
 }
 
 export default function WalkInReleasePage() {
@@ -151,12 +205,13 @@ export default function WalkInReleasePage() {
   const [error, setError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const [verification, setVerification] =
+    useState<VerificationState>(initialVerification);
   const [form, setForm] = useState<FormState>({
+    claimantType: 'student',
     studentFullName: '',
     idVerified: '',
     contactNumber: '',
-    verificationNote: '',
   });
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -198,17 +253,20 @@ export default function WalkInReleasePage() {
     setSubmitError('');
   }
 
-  const canRelease = item?.status === 'stored';
-
+  const itemCanRelease = item?.status === 'stored';
+  const verificationComplete = isVerificationComplete(verification);
   const formComplete =
-    !!form.studentFullName.trim() && !!form.idVerified.trim() && confirmed;
+    !!form.studentFullName.trim() && !!form.idVerified.trim();
+  const canRelease =
+    itemCanRelease && formComplete && verificationComplete && !submitting;
 
   async function handleSubmit() {
-    if (!itemId || !item || !canRelease || submitting) return;
+    if (!itemId || !item || !canRelease) return;
 
     const nextErrors = validateForm(form);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
+    if (!verificationComplete) return;
 
     setSubmitting(true);
     setSubmitError('');
@@ -218,7 +276,10 @@ export default function WalkInReleasePage() {
         studentFullName: form.studentFullName.trim(),
         idVerified: form.idVerified.trim(),
         contactNumber: form.contactNumber.trim() || null,
-        verificationNote: form.verificationNote.trim() || null,
+        verificationNote: buildVerificationNote(
+          form.claimantType,
+          verification.notes
+        ),
       });
       router.push('/security/items');
     } catch (err) {
@@ -270,12 +331,12 @@ export default function WalkInReleasePage() {
           Walk-in Release
         </Heading>
         <Text fontSize="sm" color="gray.600" maxW="720px">
-          Use this when a student collects an item in person without a prior
+          Use this when someone collects an item in person without a prior
           claim. Verify ownership before releasing.
         </Text>
       </Stack>
 
-      {!canRelease ? (
+      {!itemCanRelease ? (
         <Box
           bg="orange.50"
           border="1px solid"
@@ -294,7 +355,7 @@ export default function WalkInReleasePage() {
       <Grid
         templateColumns={{ base: '1fr', lg: '1fr 1fr' }}
         gap={6}
-        alignItems="stretch"
+        alignItems="start"
       >
         <Box
           bg="white"
@@ -355,126 +416,136 @@ export default function WalkInReleasePage() {
           </Box>
         </Box>
 
-        <Box
-          bg="white"
-          borderRadius="lg"
-          borderWidth="1px"
-          borderColor="gray.200"
-          p={6}
-          display="flex"
-          flexDirection="column"
-        >
-          <Heading
-            as="h2"
-            fontSize="lg"
-            fontWeight="bold"
-            color="gray.900"
-            mb={4}
+        <Stack gap={4}>
+          <Box
+            bg="white"
+            borderRadius="lg"
+            borderWidth="1px"
+            borderColor="gray.200"
+            px={4}
+            py={3}
           >
-            Release Details
-          </Heading>
+            <Heading
+              as="h2"
+              fontSize="md"
+              fontWeight="bold"
+              color="gray.900"
+              mb={2}
+            >
+              Release Details
+            </Heading>
 
-          <Stack gap={2} flex={1}>
-            <Grid templateColumns={{ base: '1fr', sm: '1fr 1fr' }} gap={2}>
-              <ReleaseField
-                id="studentFullName"
-                label="Owner Full Name"
-                required
-                error={errors.studentFullName}
+            <Stack gap={1.5}>
+              <Grid
+                templateColumns={{ base: '1fr', sm: '9.5rem minmax(0, 1fr)' }}
+                gap={1.5}
               >
-                <Input
-                  {...inputStyles}
-                  value={form.studentFullName}
-                  onChange={(e) =>
-                    handleFormChange('studentFullName', e.target.value)
-                  }
-                />
-              </ReleaseField>
+                <ReleaseField id="claimantType" label="Claimant Type" required>
+                  <NativeSelect.Root>
+                    <NativeSelect.Field
+                      {...inputStyles}
+                      value={form.claimantType}
+                      onChange={(e) =>
+                        handleFormChange(
+                          'claimantType',
+                          e.target.value as ClaimantType
+                        )
+                      }
+                    >
+                      {CLAIMANT_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </NativeSelect.Field>
+                    <NativeSelect.Indicator />
+                  </NativeSelect.Root>
+                </ReleaseField>
 
-              <ReleaseField id="contactNumber" label="Contact Number">
-                <Input
-                  {...inputStyles}
-                  value={form.contactNumber}
-                  onChange={(e) =>
-                    handleFormChange('contactNumber', e.target.value)
-                  }
-                />
-              </ReleaseField>
-            </Grid>
-
-            <ReleaseField
-              id="idVerified"
-              label="Student ID / Government ID Checked"
-              required
-              error={errors.idVerified}
-            >
-              <Input
-                {...inputStyles}
-                value={form.idVerified}
-                onChange={(e) => handleFormChange('idVerified', e.target.value)}
-              />
-            </ReleaseField>
-
-            <ReleaseField id="verificationNote" label="Verification Note">
-              <Textarea
-                {...inputStyles}
-                minH="56px"
-                py={2}
-                rows={2}
-                resize="vertical"
-                placeholder="e.g., matched lock screen photo, serial number verified"
-                value={form.verificationNote}
-                onChange={(e) =>
-                  handleFormChange('verificationNote', e.target.value)
-                }
-              />
-            </ReleaseField>
-
-            <Box
-              bg="gray.50"
-              borderRadius="md"
-              borderWidth="1px"
-              borderColor="gray.100"
-              px={3}
-              py={2}
-            >
-              <Grid templateColumns={{ base: '1fr', sm: '1fr 1fr' }} gap={2}>
-                <DetailField label="Released By" value={releasedBy} />
-                <DetailField
-                  label="Date & Time Released"
-                  value={releaseDateTime}
-                />
+                <ReleaseField
+                  id="studentFullName"
+                  label="Full Name"
+                  required
+                  error={errors.studentFullName}
+                >
+                  <Input
+                    {...inputStyles}
+                    value={form.studentFullName}
+                    onChange={(e) =>
+                      handleFormChange('studentFullName', e.target.value)
+                    }
+                  />
+                </ReleaseField>
               </Grid>
-            </Box>
 
-            <Flex align="flex-start" gap={2} pt={0.5}>
-              <input
-                type="checkbox"
-                id="confirmRelease"
-                checked={confirmed}
-                disabled={!canRelease}
-                onChange={(e) => setConfirmed(e.target.checked)}
-                style={{ marginTop: '3px', flexShrink: 0 }}
-              />
-              <label
-                htmlFor="confirmRelease"
-                style={{
-                  fontSize: '0.875rem',
-                  color: '#374151',
-                  lineHeight: 1.4,
-                  cursor: canRelease ? 'pointer' : 'not-allowed',
-                }}
+              <Grid templateColumns={{ base: '1fr', sm: '1fr 1fr' }} gap={1.5}>
+                <ReleaseField
+                  id="idVerified"
+                  label="ID Checked"
+                  required
+                  error={errors.idVerified}
+                >
+                  <Input
+                    {...inputStyles}
+                    placeholder={
+                      CLAIMANT_TYPE_OPTIONS.find(
+                        (option) => option.value === form.claimantType
+                      )?.idPlaceholder
+                    }
+                    value={form.idVerified}
+                    onChange={(e) =>
+                      handleFormChange('idVerified', e.target.value)
+                    }
+                  />
+                </ReleaseField>
+
+                <ReleaseField id="contactNumber" label="Contact Number">
+                  <Input
+                    {...inputStyles}
+                    value={form.contactNumber}
+                    onChange={(e) =>
+                      handleFormChange('contactNumber', e.target.value)
+                    }
+                  />
+                </ReleaseField>
+              </Grid>
+
+              <Box
+                bg="gray.50"
+                borderRadius="md"
+                borderWidth="1px"
+                borderColor="gray.100"
+                px={3}
+                py={2}
               >
-                I confirm this item was handed to the verified owner.
-              </label>
-            </Flex>
-          </Stack>
-        </Box>
+                <Grid templateColumns={{ base: '1fr', sm: '1fr 1fr' }} gap={2}>
+                  <DetailField label="Released By" value={releasedBy} />
+                  <DetailField
+                    label="Date & Time Released"
+                    value={releaseDateTime}
+                  />
+                </Grid>
+              </Box>
+            </Stack>
+          </Box>
+
+          <ClaimVerificationChecklist
+            value={verification}
+            onChange={setVerification}
+            compact
+          />
+        </Stack>
       </Grid>
 
       {submitError ? (
         <Text fontSize="sm" color="red.500" textAlign="right">
           {submitError}
+        </Text>
+      ) : null}
+
+      {!verificationComplete && itemCanRelease ? (
+        <Text fontSize="sm" color="orange.700" textAlign="right">
+          Complete all verification checklist items before releasing.
         </Text>
       ) : null}
 
@@ -489,7 +560,7 @@ export default function WalkInReleasePage() {
           variant="danger"
           loading={submitting}
           loadingText="Releasing..."
-          disabled={!canRelease || !formComplete || submitting}
+          disabled={!canRelease}
           onClick={handleSubmit}
         >
           Confirm Release

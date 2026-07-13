@@ -2,19 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { getLoggedInUser, getAccessToken } from '@/utils/auth';
-import { MOCK_STUDENT_USER, formatDisplayName } from '@/constants/mockSession';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+import { API_BASE } from '@/lib/api/client';
 
 // TODO: Remove PLACEHOLDER once GET /api/users/me is implemented.
 // Prefill sources per field once the endpoint is live:
 //   fullName, email            → localStorage key 'user' (stored at login, read via getLoggedInUser())
 //   phoneNumber                → GET /api/users/me  → response.phone
 //   emailNotificationOptIn     → GET /api/users/me  → response.emailNotificationOptIn
+// Empty strings (not fake sample data) so a real user never sees a wrong
+// name/phone while the endpoint is missing.
 const PLACEHOLDER = {
-  fullName: formatDisplayName(MOCK_STUDENT_USER),
-  email: 'alice@myseneca.ca',
-  phoneNumber: '4161234567',
+  fullName: '',
+  email: '',
+  phoneNumber: '',
   emailNotificationOptIn: true,
 };
 
@@ -83,10 +84,16 @@ export function useProfileForm() {
     loadProfile();
   }, []);
 
-  // Called only when the user clicks Save. Sends PATCH requests to the backend.
+  // Called only when the user clicks Save. PUT replaces editable profile fields.
   const handleSave = async () => {
     const token = getAccessToken();
     if (!token) {
+      setSaveStatus('error');
+      return;
+    }
+
+    const normalizedPhone = phoneNumber.replace(/\D/g, '');
+    if (phoneNumber.trim() && normalizedPhone.length !== 10) {
       setSaveStatus('error');
       return;
     }
@@ -96,36 +103,22 @@ export function useProfileForm() {
 
     try {
       const [firstName = '', ...rest] = fullName.trim().split(/\s+/);
-      const lastName = rest.join(' ') || undefined;
+      const lastName = rest.join(' ');
 
-      const [profileRes, notifRes] = await Promise.all([
-        // PATCH /api/users/me — updates firstName, lastName, phone
-        fetch(`${API_BASE}/api/users/me`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            firstName,
-            lastName,
-            phone: phoneNumber || null,
-          }),
+      const profileRes = await fetch(`${API_BASE}/api/users/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          firstName,
+          lastName: lastName || firstName,
+          phone: normalizedPhone || null,
         }),
-        // PATCH /api/users/me/notifications — updates email notification opt-in
-        fetch(`${API_BASE}/api/users/me/notifications`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            emailNotificationOptIn: allowEmailNotifications,
-          }),
-        }),
-      ]);
+      });
 
-      setSaveStatus(profileRes.ok && notifRes.ok ? 'success' : 'error');
+      setSaveStatus(profileRes.ok ? 'success' : 'error');
     } catch {
       setSaveStatus('error');
     } finally {

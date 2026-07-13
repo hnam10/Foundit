@@ -11,10 +11,14 @@ import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { writeAuditLog } from '../utils/auditLog';
+import { scheduleClaimSearchIndexIngest } from '../lib/matching/ingest';
+import { refreshClaimMatchSuggestions } from '../lib/matching/suggestions';
+import { resolveImageUrl } from '../utils/imageUrl';
 import {
   claimAndMatchParamsSchema,
   claimParamsSchema,
   createClaimSchema,
+  type CreateClaimInput,
   linkClaimItemSchema,
   listClaimsQuerySchema,
   reviewMatchSuggestionSchema,
@@ -29,8 +33,17 @@ const claimListSelect = {
   studentId: true,
   itemId: true,
   category: true,
+  itemName: true,
   campusId: true,
+  campus: {
+    select: {
+      campusId: true,
+      campusName: true,
+    },
+  },
   description: true,
+  additionalInfo: true,
+  notificationPreference: true,
   dateLost: true,
   locationLost: true,
   status: true,
@@ -45,12 +58,19 @@ const claimListSelect = {
       firstName: true,
       lastName: true,
       email: true,
+      studentNumber: true,
     },
   },
   item: {
     select: {
       itemId: true,
       campusId: true,
+      campus: {
+        select: {
+          campusId: true,
+          campusName: true,
+        },
+      },
       category: true,
       title: true,
       status: true,
@@ -58,6 +78,17 @@ const claimListSelect = {
       color: true,
       locationFound: true,
       dateFound: true,
+    },
+  },
+  images: {
+    select: {
+      imageId: true,
+      imageUrl: true,
+      fileType: true,
+      fileSizeKb: true,
+    },
+    orderBy: {
+      createdAt: 'asc' as const,
     },
   },
 } as const;
@@ -144,14 +175,30 @@ function sendValidationError(res: Response, details: unknown) {
   });
 }
 
-function toClaimListItemDto(claim: ClaimListRow) {
+async function toClaimListItemDto(claim: ClaimListRow) {
+  const images = await Promise.all(
+    claim.images.map(async (image) => ({
+      imageId: image.imageId,
+      imageUrl: await resolveImageUrl(image.imageUrl),
+      fileType: image.fileType,
+      fileSizeKb: image.fileSizeKb,
+    }))
+  );
+
   return {
     claimId: claim.claimId,
     studentId: claim.studentId,
     itemId: claim.itemId,
     category: claim.category,
+    itemName: claim.itemName,
     campusId: claim.campusId,
+    campus: {
+      campusId: claim.campus.campusId,
+      campusName: claim.campus.campusName,
+    },
     description: claim.description,
+    additionalInfo: claim.additionalInfo,
+    notificationPreference: claim.notificationPreference,
     dateLost: claim.dateLost,
     locationLost: claim.locationLost,
     status: claim.status,
@@ -165,11 +212,19 @@ function toClaimListItemDto(claim: ClaimListRow) {
       firstName: claim.student.firstName,
       lastName: claim.student.lastName,
       email: claim.student.email,
+      studentNumber:
+        claim.student.studentNumber !== null
+          ? Number(claim.student.studentNumber)
+          : null,
     },
     item: claim.item
       ? {
           itemId: claim.item.itemId,
           campusId: claim.item.campusId,
+          campus: {
+            campusId: claim.item.campus.campusId,
+            campusName: claim.item.campus.campusName,
+          },
           category: claim.item.category,
           title: claim.item.title,
           status: claim.item.status,
@@ -179,12 +234,14 @@ function toClaimListItemDto(claim: ClaimListRow) {
           dateFound: claim.item.dateFound,
         }
       : null,
+    images,
   };
 }
 
-function toClaimDetailDto(claim: ClaimDetailRow) {
+async function toClaimDetailDto(claim: ClaimDetailRow) {
+  const base = await toClaimListItemDto(claim);
   return {
-    ...toClaimListItemDto(claim),
+    ...base,
     reviewedBy: claim.reviewedBy,
     verifiedBy: claim.verifiedBy,
     reviewer: claim.reviewer
@@ -286,6 +343,34 @@ function canAccessClaim(user: RequestUser, claim: { studentId: string }) {
   return user.role === 'security' || user.role === 'admin';
 }
 
+const claimListOrderBy: Prisma.ClaimOrderByWithRelationInput[] = [
+  { createdAt: 'desc' },
+  { claimId: 'desc' },
+];
+
+async function getClaimListCursorWhere(
+  cursorClaimId: string
+): Promise<Prisma.ClaimWhereInput> {
+  const cursorClaim = await prisma.claim.findUnique({
+    where: { claimId: cursorClaimId },
+    select: { createdAt: true, claimId: true },
+  });
+
+  if (!cursorClaim) {
+    return {};
+  }
+
+  return {
+    OR: [
+      { createdAt: { lt: cursorClaim.createdAt } },
+      {
+        createdAt: cursorClaim.createdAt,
+        claimId: { lt: cursorClaim.claimId },
+      },
+    ],
+  };
+}
+
 function getClaimListWhere(
   user: RequestUser,
   query: {
@@ -313,12 +398,96 @@ function getClaimListWhere(
 const cancellableClaimStatuses = new Set<ClaimStatus>([ClaimStatus.submitted]);
 
 const validStatusTransitions: Record<ClaimStatus, ClaimStatus[]> = {
-  [ClaimStatus.submitted]: [ClaimStatus.under_review, ClaimStatus.rejected],
+  [ClaimStatus.submitted]: [ClaimStatus.rejected],
   [ClaimStatus.under_review]: [ClaimStatus.approved, ClaimStatus.rejected],
-  [ClaimStatus.approved]: [ClaimStatus.picked_up],
+  [ClaimStatus.approved]: [ClaimStatus.picked_up, ClaimStatus.rejected],
   [ClaimStatus.rejected]: [],
   [ClaimStatus.picked_up]: [],
 };
+
+function createMatchFoundNotificationInput(claim: {
+  claimId: string;
+  studentId: string;
+  item: { campus: { campusName: string } } | null;
+}) {
+  const campusName = claim.item?.campus.campusName;
+  const officeLocation = campusName
+    ? `the ${campusName} campus security office`
+    : 'the campus security office';
+
+  return {
+    recipientId: claim.studentId,
+    type: NotificationType.match_found,
+    title: 'Your matched item is ready for pickup',
+    message: `A found item has been matched to your claim. Visit ${officeLocation} with your student ID during office hours to collect it.`,
+    referenceType: 'claim',
+    referenceId: claim.claimId,
+  } as const;
+}
+
+async function reserveItemForClaim(
+  tx: Prisma.TransactionClient,
+  itemId: string
+) {
+  const updateResult = await tx.item.updateMany({
+    where: {
+      itemId,
+      status: ItemStatus.stored,
+    },
+    data: { status: ItemStatus.claimed },
+  });
+
+  if (updateResult.count > 0) {
+    return;
+  }
+
+  const item = await tx.item.findUnique({
+    where: { itemId },
+    select: { itemId: true },
+  });
+
+  if (!item) {
+    throw new Error('LINKED_ITEM_NOT_FOUND');
+  }
+
+  const conflictError = new Error('LINKED_ITEM_NOT_STORED');
+  conflictError.name = 'LINKED_ITEM_NOT_STORED';
+  throw conflictError;
+}
+
+async function applyMatchConfirmation(
+  tx: Prisma.TransactionClient,
+  claim: { claimId: string; studentId: string },
+  itemId: string,
+  actorId: string
+) {
+  await reserveItemForClaim(tx, itemId);
+
+  const now = new Date();
+  const updatedClaim = await tx.claim.update({
+    where: { claimId: claim.claimId },
+    data: {
+      itemId,
+      status: ClaimStatus.approved,
+      reviewedBy: actorId,
+      reviewedAt: now,
+    },
+    select: claimDetailSelect,
+  });
+
+  await tx.notification.create({
+    data: createMatchFoundNotificationInput(updatedClaim),
+  });
+
+  await tx.notification.create({
+    data: createClaimStatusNotificationInput(
+      updatedClaim,
+      ClaimStatus.approved
+    ),
+  });
+
+  return updatedClaim;
+}
 
 function createClaimStatusNotificationInput(
   claim: ClaimDetailRow,
@@ -333,85 +502,6 @@ function createClaimStatusNotificationInput(
     referenceType: 'claim',
     referenceId: claim.claimId,
   } as const;
-}
-
-function tokenize(text: string | null | undefined) {
-  if (!text) {
-    return new Set<string>();
-  }
-
-  return new Set(
-    text
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .map((token) => token.trim())
-      .filter((token) => token.length >= 3)
-  );
-}
-
-function intersectionSize(left: Set<string>, right: Set<string>) {
-  let count = 0;
-  for (const token of left) {
-    if (right.has(token)) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
-function scoreCandidateItem(
-  claim: Pick<ClaimDetailRow, 'category' | 'description' | 'locationLost'>,
-  item: {
-    category: string;
-    locationFound: string | null;
-    title: string;
-    descriptionPublic: string | null;
-    brand: string | null;
-    color: string | null;
-  }
-) {
-  let score = 0;
-  const criteria: string[] = [];
-
-  if (claim.category.toLowerCase() === item.category.toLowerCase()) {
-    score += 60;
-    criteria.push('category');
-  }
-
-  const claimLocationTokens = tokenize(claim.locationLost);
-  const itemLocationTokens = tokenize(item.locationFound);
-  if (
-    claimLocationTokens.size > 0 &&
-    intersectionSize(claimLocationTokens, itemLocationTokens) > 0
-  ) {
-    score += 20;
-    criteria.push('location');
-  }
-
-  const claimDescriptionTokens = tokenize(claim.description);
-  const itemDescriptionTokens = new Set<string>([
-    ...tokenize(item.title),
-    ...tokenize(item.descriptionPublic),
-    ...tokenize(item.brand),
-    ...tokenize(item.color),
-  ]);
-  const descriptionMatches = intersectionSize(
-    claimDescriptionTokens,
-    itemDescriptionTokens
-  );
-
-  if (descriptionMatches >= 2) {
-    score += 20;
-    criteria.push('description');
-  } else if (descriptionMatches === 1) {
-    score += 10;
-    criteria.push('description');
-  }
-
-  return {
-    score,
-    criteria: criteria.join(','),
-  };
 }
 
 /**
@@ -432,13 +522,33 @@ function scoreCandidateItem(
  *             properties:
  *               category:
  *                 type: string
+ *               itemName:
+ *                 type: string
  *               description:
  *                 type: string
+ *               additionalInfo:
+ *                 type: string
+ *               notificationPreference:
+ *                 type: string
+ *                 enum: [email, phone, email_and_phone]
  *               dateLost:
  *                 type: string
  *                 format: date
  *               locationLost:
  *                 type: string
+ *               images:
+ *                 type: array
+ *                 maxItems: 3
+ *                 items:
+ *                   type: object
+ *                   required: [imageUrl, fileType, fileSizeKb]
+ *                   properties:
+ *                     imageUrl:
+ *                       type: string
+ *                     fileType:
+ *                       type: string
+ *                     fileSizeKb:
+ *                       type: integer
  *     responses:
  *       '201':
  *         description: Claim created
@@ -468,23 +578,44 @@ router.post(
         });
         return;
       }
+      const campusId = actor.campusId;
 
-      const payload = req.body as {
-        category: string;
-        description: string;
-        dateLost?: Date;
-        locationLost?: string;
-      };
-      const claim = await prisma.claim.create({
-        data: {
-          studentId: actor.userId,
-          campusId: actor.campusId,
-          category: payload.category,
-          description: payload.description,
-          dateLost: payload.dateLost,
-          locationLost: payload.locationLost,
-        },
-        select: claimDetailSelect,
+      const payload = req.body as CreateClaimInput;
+
+      const claim = await prisma.$transaction(async (tx) => {
+        const created = await tx.claim.create({
+          data: {
+            studentId: actor.userId,
+            campusId,
+            category: payload.category,
+            itemName: payload.itemName,
+            description: payload.description,
+            additionalInfo: payload.additionalInfo,
+            ...(payload.notificationPreference
+              ? { notificationPreference: payload.notificationPreference }
+              : {}),
+            dateLost: payload.dateLost,
+            locationLost: payload.locationLost,
+          },
+          select: { claimId: true },
+        });
+
+        if (payload.images.length > 0) {
+          await tx.itemImage.createMany({
+            data: payload.images.map((image) => ({
+              claimId: created.claimId,
+              imageUrl: image.imageUrl,
+              uploadedBy: actor.userId,
+              fileType: image.fileType,
+              fileSizeKb: image.fileSizeKb,
+            })),
+          });
+        }
+
+        return tx.claim.findUniqueOrThrow({
+          where: { claimId: created.claimId },
+          select: claimDetailSelect,
+        });
       });
 
       await writeAuditLog({
@@ -500,7 +631,15 @@ router.post(
         ipAddress: req.ip,
       });
 
-      res.status(201).json(toClaimDetailDto(claim));
+      scheduleClaimSearchIndexIngest(claim.claimId, {
+        category: claim.category,
+        itemName: claim.itemName,
+        description: claim.description,
+        additionalInfo: claim.additionalInfo,
+        locationLost: claim.locationLost,
+      });
+
+      res.status(201).json(await toClaimDetailDto(claim));
     } catch (err) {
       next(err);
     }
@@ -576,24 +715,25 @@ router.get(
         limit: number;
       };
 
+      const baseWhere = getClaimListWhere(actor, query);
+      const cursorWhere = query.cursor
+        ? await getClaimListCursorWhere(query.cursor)
+        : {};
+
       const claims = await prisma.claim.findMany({
-        where: getClaimListWhere(actor, query),
-        orderBy: { claimId: 'desc' },
+        where: {
+          AND: [baseWhere, cursorWhere],
+        },
+        orderBy: claimListOrderBy,
         take: query.limit + 1,
-        ...(query.cursor
-          ? {
-              cursor: { claimId: query.cursor },
-              skip: 1,
-            }
-          : {}),
         select: claimListSelect,
       });
 
       const nextCursor =
         claims.length > query.limit ? claims[query.limit].claimId : null;
-      const data = claims
-        .slice(0, query.limit)
-        .map((claim) => toClaimListItemDto(claim));
+      const data = await Promise.all(
+        claims.slice(0, query.limit).map((claim) => toClaimListItemDto(claim))
+      );
 
       res.status(200).json({ data, nextCursor });
     } catch (err) {
@@ -661,7 +801,7 @@ router.get('/:claimId', authenticate, async (req, res, next) => {
       return;
     }
 
-    res.status(200).json(toClaimDetailDto(claim));
+    res.status(200).json(await toClaimDetailDto(claim));
   } catch (err) {
     next(err);
   }
@@ -850,7 +990,6 @@ router.patch(
         where: { itemId },
         select: {
           itemId: true,
-          campusId: true,
           status: true,
         },
       });
@@ -871,18 +1010,13 @@ router.patch(
         return;
       }
 
-      if (item.campusId !== claim.campusId) {
-        res.status(409).json({
-          code: 'ITEM_CAMPUS_MISMATCH',
-          message: 'The item campus must match the claim campus.',
-        });
-        return;
-      }
+      const updated = await prisma.$transaction(async (tx) => {
+        await applyMatchConfirmation(tx, claim, item.itemId, actor.userId);
 
-      const updated = await prisma.claim.update({
-        where: { claimId: claim.claimId },
-        data: { itemId: item.itemId },
-        select: claimDetailSelect,
+        return tx.claim.findUniqueOrThrow({
+          where: { claimId: claim.claimId },
+          select: claimDetailSelect,
+        });
       });
 
       await writeAuditLog({
@@ -897,7 +1031,7 @@ router.patch(
         ipAddress: req.ip,
       });
 
-      res.status(200).json(toClaimDetailDto(updated));
+      res.status(200).json(await toClaimDetailDto(updated));
     } catch (err) {
       next(err);
     }
@@ -1009,6 +1143,10 @@ router.patch(
       }
 
       const updated = await prisma.$transaction(async (tx) => {
+        if (status === ClaimStatus.approved && claim.itemId) {
+          await reserveItemForClaim(tx, claim.itemId);
+        }
+
         if (status === ClaimStatus.picked_up && claim.itemId) {
           const item = await tx.item.findUnique({
             where: { itemId: claim.itemId },
@@ -1019,16 +1157,12 @@ router.patch(
             throw new Error('LINKED_ITEM_NOT_FOUND');
           }
 
-          if (item.status !== ItemStatus.stored) {
-            const conflictError = new Error('LINKED_ITEM_NOT_STORED');
-            conflictError.name = 'LINKED_ITEM_NOT_STORED';
-            throw conflictError;
+          if (item.status === ItemStatus.stored) {
+            await tx.item.update({
+              where: { itemId: item.itemId },
+              data: { status: ItemStatus.claimed },
+            });
           }
-
-          await tx.item.update({
-            where: { itemId: item.itemId },
-            data: { status: ItemStatus.claimed },
-          });
         }
 
         const nextClaim = await tx.claim.update({
@@ -1049,9 +1183,25 @@ router.patch(
           select: claimDetailSelect,
         });
 
-        await tx.notification.create({
+        const notification = await tx.notification.create({
           data: createClaimStatusNotificationInput(nextClaim, status),
         });
+
+        await writeAuditLog(
+          {
+            actorId: actor.userId,
+            action: 'claim_notification_sent',
+            entityType: 'notification',
+            entityId: notification.notificationId,
+            details: {
+              claimId: nextClaim.claimId,
+              recipientId: nextClaim.studentId,
+              claimStatus: status,
+            },
+            ipAddress: req.ip,
+          },
+          tx
+        );
 
         return nextClaim;
       });
@@ -1069,12 +1219,12 @@ router.patch(
         ipAddress: req.ip,
       });
 
-      res.status(200).json(toClaimDetailDto(updated));
+      res.status(200).json(await toClaimDetailDto(updated));
     } catch (err) {
       if (err instanceof Error && err.name === 'LINKED_ITEM_NOT_STORED') {
         res.status(409).json({
           code: 'LINKED_ITEM_NOT_STORED',
-          message: 'The linked item must still be stored before pickup.',
+          message: 'The linked item must still be stored before approval.',
         });
         return;
       }
@@ -1213,54 +1363,8 @@ router.post(
         return;
       }
 
-      const candidates = await prisma.item.findMany({
-        where: {
-          campusId: claim.campusId,
-          status: ItemStatus.stored,
-        },
-        select: {
-          itemId: true,
-          category: true,
-          locationFound: true,
-          title: true,
-          descriptionPublic: true,
-          brand: true,
-          color: true,
-          status: true,
-          campusId: true,
-        },
-      });
-
-      const upserts = candidates
-        .map((item) => {
-          const { score, criteria } = scoreCandidateItem(claim, item);
-          return { item, score, criteria };
-        })
-        .filter((candidate) => candidate.score >= 60)
-        .map((candidate) =>
-          prisma.matchSuggestion.upsert({
-            where: {
-              claimId_itemId: {
-                claimId: claim.claimId,
-                itemId: candidate.item.itemId,
-              },
-            },
-            update: {
-              matchScore: candidate.score,
-              matchCriteria: candidate.criteria || null,
-            },
-            create: {
-              claimId: claim.claimId,
-              itemId: candidate.item.itemId,
-              matchScore: candidate.score,
-              matchCriteria: candidate.criteria || null,
-            },
-          })
-        );
-
-      if (upserts.length > 0) {
-        await prisma.$transaction(upserts);
-      }
+      const { candidateCount, suggestionCount } =
+        await refreshClaimMatchSuggestions(claim.claimId);
 
       await writeAuditLog({
         actorId: actor.userId,
@@ -1268,8 +1372,8 @@ router.post(
         entityType: 'claim',
         entityId: claim.claimId,
         details: {
-          candidateCount: candidates.length,
-          suggestionCount: upserts.length,
+          candidateCount,
+          suggestionCount,
         },
         ipAddress: req.ip,
       });
@@ -1367,6 +1471,19 @@ router.patch(
         return;
       }
 
+      const claim = await prisma.claim.findUnique({
+        where: { claimId: match.claimId },
+        select: { claimId: true, studentId: true },
+      });
+
+      if (!claim) {
+        res.status(404).json({
+          code: 'CLAIM_NOT_FOUND',
+          message: 'Claim not found.',
+        });
+        return;
+      }
+
       const { status } = req.body as { status: MatchStatus };
 
       const updated = await prisma.$transaction(async (tx) => {
@@ -1386,10 +1503,12 @@ router.patch(
             throw conflictError;
           }
 
-          await tx.claim.update({
-            where: { claimId: match.claimId },
-            data: { itemId: match.itemId },
-          });
+          await applyMatchConfirmation(
+            tx,
+            { claimId: match.claimId, studentId: claim.studentId },
+            match.itemId,
+            actor.userId
+          );
         }
 
         await tx.matchSuggestion.updateMany({

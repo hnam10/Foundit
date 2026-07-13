@@ -2,8 +2,9 @@
 
 import { usePathname } from 'next/navigation';
 import { RoleShell } from '@/components/layouts/RoleShell';
-import { MOCK_STUDENT_DISPLAY_NAME } from '@/constants/mockSession';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
+
+const FULL_BLEED_PATHS = new Set(['/student/dashboard', '/student/my-claims']);
 
 export default function StudentLayout({
   children,
@@ -11,10 +12,15 @@ export default function StudentLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const userName = useLoggedInDisplayName(MOCK_STUDENT_DISPLAY_NAME);
+  const userName = useLoggedInDisplayName();
 
   return (
-    <RoleShell variant="student" userName={userName} activePath={pathname}>
+    <RoleShell
+      variant="student"
+      userName={userName}
+      activePath={pathname}
+      fullBleed={FULL_BLEED_PATHS.has(pathname)}
+    >
       {children}
     </RoleShell>
   );

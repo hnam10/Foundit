@@ -3,6 +3,11 @@
 import React, { useState } from 'react';
 import { Box, Field, IconButton, Input } from '@chakra-ui/react';
 import { LuEye, LuEyeOff } from 'react-icons/lu';
+import {
+  fieldControlStyles,
+  fieldHelperStyles,
+  fieldLabelStyles,
+} from './ui/field-styles';
 
 // ─── Map fixed width variants to Chakra UI size units ───────────────────────
 const widthMap = {
@@ -48,24 +53,12 @@ export default function TextInput({
   const inputType = isPasswordField && showPassword ? 'text' : type;
 
   const inputStyles = {
+    ...fieldControlStyles,
     type: inputType,
     autoComplete,
     placeholder: undefined,
     h: 12,
     px: 4,
-    fontSize: '1rem',
-    fontWeight: 'normal' as const,
-    color: '#1a1a1a',
-    bg: 'white',
-    borderWidth: '1px',
-    borderRadius: 'md',
-    borderColor: '#D9D9D9',
-    _invalid: { borderColor: '#cd0000' },
-    _focusVisible: {
-      outline: 'none',
-      boxShadow: '0 0 0 2px #009adb',
-      borderColor: 'inherit',
-    },
     w: widthMap[width],
     maxW: widthMap[width],
     onBlur,
@@ -76,25 +69,13 @@ export default function TextInput({
     // 1. In v3, FormControl is replaced by Field.Root
     <Field.Root id={id} required={required} invalid={isInvalid} mb={0}>
       {/* 2. In v3, FormLabel is replaced by Field.Label */}
-      <Field.Label
-        fontSize="1rem"
-        fontWeight="semibold"
-        lineHeight="1.6"
-        color="#1a1a1a"
-        mb={1}
-      >
+      <Field.Label {...fieldLabelStyles} mb={1}>
         {label}
       </Field.Label>
 
       {/* 3. In v3, FormHelperText is replaced by Field.HelperText */}
       {hint && (
-        <Field.HelperText
-          fontSize="0.875rem"
-          lineHeight="1.6"
-          color="#666666"
-          mt={0.5}
-          mb={1}
-        >
+        <Field.HelperText {...fieldHelperStyles} mt={0.5} mb={1}>
           {hint}
         </Field.HelperText>
       )}
@@ -104,7 +85,7 @@ export default function TextInput({
         <Field.ErrorText
           fontSize="0.875rem"
           fontWeight="normal"
-          color="#cd0000"
+          color="fg.error"
           mt={0.2}
           mb={1}
         >
@@ -125,7 +106,7 @@ export default function TextInput({
             right={2}
             top="50%"
             transform="translateY(-50%)"
-            color="#666666"
+            color="fg.muted"
             onClick={() => setShowPassword((prev) => !prev)}
             css={{
               _icon: {

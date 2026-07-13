@@ -21,6 +21,10 @@ export const publicItemsQuerySchema = z.object({
   campusId: z.uuid().optional(),
 });
 
+export const expiredItemCountQuerySchema = publicItemsQuerySchema.pick({
+  campusId: true,
+});
+
 export const listSecurityItemsQuerySchema = z.object({
   status: z.enum(itemStatusValues).optional(),
   campusId: z.uuid().optional(),

@@ -13,7 +13,7 @@ export default function FieldError({ error }: { error?: string }) {
         <Field.ErrorText
           fontSize="0.875rem"
           fontWeight="normal"
-          color="#cd0000"
+          color="fg.error"
           m={0}
         >
           <HStack gap={1} align="center">

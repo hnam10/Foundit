@@ -2,12 +2,20 @@
 
 import { useState } from 'react';
 import { validateEmail } from '@/utils/validation';
+import { apiFetch } from '@/lib/api/client';
 import {
   getRoleHome,
   sanitizeRedirect,
   setSessionRole,
-  type UserRole,
+  setTokens,
+  type LoggedInUser,
 } from '@/utils/auth';
+
+interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: LoggedInUser;
+}
 
 export function useLoginForm(redirectTo?: string | null) {
   const [email, setEmail] = useState('');
@@ -44,26 +52,16 @@ export function useLoginForm(redirectTo?: string | null) {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${apiUrl}/api/auth/login`, {
+      const result = await apiFetch<LoginResponse>('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        auth: false,
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        setPasswordError(result.message || 'Login failed.');
-        return;
-      }
-
-      localStorage.setItem('accessToken', result.accessToken);
-      localStorage.setItem('refreshToken', result.refreshToken);
+      setTokens(result.accessToken, result.refreshToken);
       localStorage.setItem('user', JSON.stringify(result.user));
 
-      const role = result.user.role as UserRole;
+      const role = result.user.role;
       setSessionRole(role);
 
       const destination = sanitizeRedirect(redirectTo) ?? getRoleHome(role);

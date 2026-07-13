@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
+import { FixedPageBackground } from '@/components/PageBackground';
 import TextInput from '../../components/TextInput';
 import { Box, Button, Stack, Heading, Link, Text } from '@chakra-ui/react';
 import { useLoginForm } from '../../hooks/useLoginForm';
@@ -24,7 +25,14 @@ function LoginForm() {
   } = useLoginForm(redirectTo);
 
   return (
+    // A real <form> so Enter submits from either field (and password
+    // managers recognize the login form).
     <Stack
+      as="form"
+      onSubmit={(e: React.FormEvent) => {
+        e.preventDefault();
+        handleLogin();
+      }}
       bg="white"
       p={8}
       my={12}
@@ -35,7 +43,7 @@ function LoginForm() {
       align="stretch"
       padding={85}
     >
-      <Heading fontSize="40px" textAlign="center" color="#1a1a1a">
+      <Heading fontSize="40px" textAlign="center" color="fg">
         Login
       </Heading>
       <Stack gap="20px" alignItems="center" pt={62} pb={62}>
@@ -63,12 +71,12 @@ function LoginForm() {
         />
       </Stack>
       <Button
+        type="submit"
         w="172px"
         h="48px"
         rounded="12px"
         fontSize="16px"
         colorPalette="blue"
-        onClick={handleLogin}
         alignSelf="center"
         disabled={isSubmitting}
         loading={isSubmitting}
@@ -90,17 +98,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground overlay />
 
       <Box
         position="relative"

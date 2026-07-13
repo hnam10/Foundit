@@ -3,12 +3,47 @@
 import { ChakraProvider, createSystem, defaultConfig } from '@chakra-ui/react';
 import { ColorModeProvider, type ColorModeProviderProps } from './color-mode';
 
+/**
+ * App design system. Component code must reference these tokens
+ * (color="fg", borderColor="border.input", …) instead of raw hex values so
+ * palette changes stay a one-file edit.
+ */
 const system = createSystem(defaultConfig, {
   theme: {
     tokens: {
       fonts: {
         body: { value: 'var(--font-inter), sans-serif' },
         heading: { value: 'var(--font-inter), sans-serif' },
+      },
+      // Chakra v3 default palette omits amber/sky; used by category cards.
+      colors: {
+        amber: {
+          50: { value: '#fffbeb' },
+          100: { value: '#fef3c7' },
+          600: { value: '#d97706' },
+          700: { value: '#b45309' },
+        },
+        sky: {
+          50: { value: '#f0f9ff' },
+          100: { value: '#e0f2fe' },
+          600: { value: '#0284c7' },
+        },
+      },
+    },
+    semanticTokens: {
+      colors: {
+        // Text: default body ink + secondary/hint text.
+        fg: {
+          DEFAULT: { value: '#1a1a1a' },
+          muted: { value: '#666666' },
+          error: { value: '#cd0000' },
+        },
+        border: {
+          input: { value: '#D9D9D9' },
+          error: { value: '#cd0000' },
+        },
+        // Focus outline used by all form controls.
+        focusRing: { value: '#009adb' },
       },
     },
   },
@@ -17,7 +52,10 @@ const system = createSystem(defaultConfig, {
 export function Provider(props: ColorModeProviderProps) {
   return (
     <ChakraProvider value={system}>
-      <ColorModeProvider {...props} />
+      {/* The palette above is light-only; force light so an OS dark-mode
+          preference can't produce a half-dark page. Remove `forcedTheme`
+          once tokens carry dark values. */}
+      <ColorModeProvider forcedTheme="light" {...props} />
     </ChakraProvider>
   );
 }

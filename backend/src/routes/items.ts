@@ -6,10 +6,13 @@ import requireRole from '../middleware/requireRole';
 import { validateQuery, validate } from '../validators/shared';
 import { resolveImageUrl } from '../utils/imageUrl';
 import { writeAuditLog } from '../utils/auditLog';
+import { scheduleItemSearchIndexIngest } from '../lib/matching/ingest';
+import { scheduleMatchRefreshForCampus } from '../lib/matching/suggestions';
 import {
   itemParamsSchema,
   listSecurityItemsQuerySchema,
   publicItemsQuerySchema,
+  expiredItemCountQuerySchema,
   updateSecurityItemSchema,
   createSecurityItemSchema,
   walkInReleaseSchema,
@@ -589,7 +592,65 @@ router.post(
         ipAddress: req.ip,
       });
 
+      scheduleItemSearchIndexIngest(detail.itemId, {
+        category: detail.category,
+        title: detail.title,
+        descriptionPublic: detail.descriptionPublic,
+        descriptionInternal: detail.descriptionInternal,
+        brand: detail.brand,
+        color: detail.color,
+        locationFound: detail.locationFound,
+      });
+      scheduleMatchRefreshForCampus(campusId);
+
       res.status(201).json(await toSecurityItemDetailDto(detail));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/items/expired-count:
+ *   get:
+ *     summary: Count items with expired retention status
+ *     tags: [Items]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: campusId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       '200':
+ *         description: Expired item count
+ *       '400':
+ *         description: Invalid query parameters
+ *       '401':
+ *         description: Missing or invalid token
+ *       '403':
+ *         description: Forbidden
+ */
+router.get(
+  '/items/expired-count',
+  authenticate,
+  requireRole('security', 'admin'),
+  validateQuery(expiredItemCountQuerySchema),
+  async (req, res, next) => {
+    try {
+      const { campusId } = req.query as { campusId?: string };
+
+      const count = await prisma.item.count({
+        where: {
+          status: ItemStatus.expired,
+          ...(campusId ? { campusId } : {}),
+        },
+      });
+
+      res.status(200).json({ count });
     } catch (err) {
       next(err);
     }
@@ -796,7 +857,7 @@ router.patch(
         res.status(409).json({
           code: 'ITEM_HAS_APPROVED_CLAIM',
           message:
-            'This item has an approved claim awaiting pickup and cannot be expired or disposed.',
+            'This item has an approved claim and cannot be expired or disposed.',
         });
         return;
       }
@@ -954,6 +1015,16 @@ router.patch(
           dateFound: dateFound.toISOString().slice(0, 10),
         },
         ipAddress: req.ip,
+      });
+
+      scheduleItemSearchIndexIngest(updated.itemId, {
+        category: updated.category,
+        title: updated.title,
+        descriptionPublic: updated.descriptionPublic,
+        descriptionInternal: updated.descriptionInternal,
+        brand: updated.brand,
+        color: updated.color,
+        locationFound: updated.locationFound,
       });
 
       res.status(200).json(await toSecurityItemDetailDto(updated));

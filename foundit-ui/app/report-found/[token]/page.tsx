@@ -14,10 +14,11 @@ import {
 } from '@chakra-ui/react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { FixedPageBackground } from '@/components/PageBackground';
 import FormTextInput from '@/components/FormTextInput';
 import SelectInput from '@/components/SelectInput';
 import TextAreaInput from '@/components/TextAreaInput';
-import ImageUploadGallery from '@/components/uploadImage';
+import ImageUploadGallery from '@/components/ImageUploadGallery';
 import { LuCircleAlert } from 'react-icons/lu';
 import { CATEGORIES } from '@/constants/categories';
 import { CAMPUSES } from '@/constants/campuses';
@@ -25,14 +26,14 @@ import { useReportFoundItemForm } from '@/hooks/useReportFoundItemForm';
 import { useLoggedInDisplayName } from '@/hooks/useLoggedInDisplayName';
 import { getAccessToken, getLoggedInUser } from '@/utils/auth';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+import { API_BASE } from '@/lib/api/client';
 
 // ─── NOTES FOR THE TEAM ──────────────────────────────────────────────────────
 // Wired to existing teammate utils:
 //   • utils/auth.ts        → getAccessToken (upload + submit Bearer),
 //                            getLoggedInUser (identity rows + student gate)
 //   • constants/campuses.ts→ CAMPUSES (Campus stub options)
-//   • components/uploadImage.tsx (ImageUploadGallery) + its hook/util chain
+//   • components/ImageUploadGallery.tsx (ImageUploadGallery) + its hook/util chain
 //
 // Still stubbed / needs backend work (kept UI-only for now):
 //   1. Contact Information + Campus — rendered for design parity but NOT sent.
@@ -192,16 +193,7 @@ function PageShell({
 }) {
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground overlay />
 
       <Box
         position="relative"
@@ -241,7 +233,7 @@ function ReadonlyRow({ label, value }: { label: string; value: string }) {
         flexShrink={0}
         fontSize="1rem"
         fontWeight="semibold"
-        color="#1a1a1a"
+        color="fg"
       >
         {label}
       </Text>
@@ -267,7 +259,7 @@ function MessageCard({ title, body }: { title: string; body: string }) {
       <Heading size="md" color="gray.900">
         {title}
       </Heading>
-      <Text fontSize="sm" color="#666666">
+      <Text fontSize="sm" color="fg.muted">
         {body}
       </Text>
     </Stack>
@@ -311,7 +303,7 @@ function ReportForm({
         <Heading size="lg" color="gray.900">
           Report Found Item
         </Heading>
-        <Text fontSize="sm" color="#666666" mt={1}>
+        <Text fontSize="sm" color="fg.muted" mt={1}>
           Please provide as much detail as possible to help with identification.
         </Text>
       </Box>
@@ -410,18 +402,18 @@ function ReportForm({
           required
           options={CAMPUSES.map((c) => c.name)}
           placeholder="Select a campus"
-          value={form.campus}
-          error={form.errors.campus}
+          value={form.campusId}
+          error={form.errors.campusId}
           onChange={(e) => {
-            form.setCampus(e.target.value);
-            form.clearError('campus');
+            form.setCampusId(e.target.value);
+            form.clearError('campusId');
           }}
         />
 
         {/* Image + Description span full width with the label above (design). */}
         {accessToken && (
           <Box>
-            <Text mb={2} fontSize="1rem" fontWeight="semibold" color="#1a1a1a">
+            <Text mb={2} fontSize="1rem" fontWeight="semibold" color="fg">
               Image
             </Text>
             <ImageUploadGallery
@@ -458,7 +450,7 @@ function ReportForm({
       <HStack justify="center" gap={4} pt={2}>
         <Button
           variant="outline"
-          borderColor="#D9D9D9"
+          borderColor="border.input"
           w="140px"
           onClick={form.handleCancel}
           disabled={form.isSubmitting}

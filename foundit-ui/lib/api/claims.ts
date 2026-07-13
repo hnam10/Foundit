@@ -1,6 +1,7 @@
 import { authFetch, parseApiError } from '@/lib/api/client';
 import type {
   ApiClaimStatus,
+  MatchSuggestion,
   SecurityClaimDetail,
   SecurityClaimListResponse,
 } from '@/types/claims';
@@ -63,6 +64,37 @@ export async function fetchClaimById(
   return res.json() as Promise<SecurityClaimDetail>;
 }
 
+export async function fetchMatchSuggestions(
+  claimId: string
+): Promise<MatchSuggestion[]> {
+  const res = await authFetch(
+    `${API_BASE}/api/claims/${claimId}/match-suggestions`
+  );
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<MatchSuggestion[]>;
+}
+
+export async function generateMatchSuggestions(
+  claimId: string
+): Promise<MatchSuggestion[]> {
+  const res = await authFetch(
+    `${API_BASE}/api/claims/${claimId}/match-suggestions`,
+    {
+      method: 'POST',
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<MatchSuggestion[]>;
+}
+
 export interface UpdateClaimStatusInput {
   status: ApiClaimStatus;
   rejectionReason?: string;
@@ -76,6 +108,40 @@ export async function updateClaimStatus(
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<SecurityClaimDetail>;
+}
+
+/** Cancels a submitted claim. Only the owning student can cancel, and only
+ * while the claim is still `submitted` — the backend rejects (409) once a
+ * claim has moved to under_review or beyond. */
+export async function deleteClaim(
+  claimId: string
+): Promise<{ deleted: boolean; claimId: string }> {
+  const res = await authFetch(`${API_BASE}/api/claims/${claimId}`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+
+  return res.json() as Promise<{ deleted: boolean; claimId: string }>;
+}
+
+export async function linkClaimItem(
+  claimId: string,
+  itemId: string
+): Promise<SecurityClaimDetail> {
+  const res = await authFetch(`${API_BASE}/api/claims/${claimId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemId }),
   });
 
   if (!res.ok) {

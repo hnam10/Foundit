@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_BASE } from '@/lib/api/client';
 import {
   validateRequired,
   validatePassword,
@@ -9,12 +10,9 @@ import {
   validateEmail,
 } from '@/utils/validation';
 
-type Role = 'student' | 'security';
-
 export function useSignUpForm() {
   const router = useRouter();
 
-  const [role, setRole] = useState<Role>('student');
   const [email, setEmail] = useState('');
 
   const [firstName, setFirstName] = useState('');
@@ -27,12 +25,21 @@ export function useSignUpForm() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [agreedToLegal, setAgreedToLegal] = useState(false);
+  const [legalAgreementError, setLegalAgreementError] = useState('');
 
   function handleEmailBlur() {
     setEmailError(validateEmail(email));
   }
+  function handleLegalAgreementChange(checked: boolean) {
+    setAgreedToLegal(checked);
 
+    if (checked) {
+      setLegalAgreementError('');
+    }
+  }
   async function handleSignUp() {
     if (isSubmitting) return;
 
@@ -41,7 +48,8 @@ export function useSignUpForm() {
     const lastError = validateRequired(lastName);
     const passError = validatePassword(password);
     const confirmError = validatePasswordMatch(password, confirmPassword);
-
+    const legalError = validateRequired(agreedToLegal ? 'agreed' : '');
+    setLegalAgreementError(legalError);
     setEmailError(emailValidation);
     setFirstNameError(firstError);
     setLastNameError(lastError);
@@ -53,27 +61,25 @@ export function useSignUpForm() {
       firstError ||
       lastError ||
       passError ||
-      confirmError
+      confirmError ||
+      legalError
     ) {
       return;
     }
     setIsSubmitting(true);
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            firstName,
-            lastName,
-          }),
-        }
-      );
+      const response = await fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          firstName,
+          lastName,
+        }),
+      });
 
       const result = await response.json();
 
@@ -116,5 +122,9 @@ export function useSignUpForm() {
     handleEmailBlur,
     handleSignUp,
     isSubmitting,
+    agreedToLegal,
+    setAgreedToLegal,
+    legalAgreementError,
+    handleLegalAgreementChange,
   };
 }

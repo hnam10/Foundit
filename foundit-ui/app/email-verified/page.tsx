@@ -1,25 +1,16 @@
 'use client';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { FixedPageBackground } from '@/components/PageBackground';
 import { Box, Button, Heading, Stack, Text } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
 
-export default function SignupSuccessPage() {
+export default function EmailVerifiedPage() {
   const router = useRouter();
 
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground overlay />
 
       <Box
         position="relative"
@@ -50,7 +41,7 @@ export default function SignupSuccessPage() {
               Welcome
             </Heading>
 
-            <Text mb={12} color="#666666" pt={10}>
+            <Text mb={12} color="fg.muted" pt={10}>
               Your account is now verified.
               <br />
               Please log in to continue.

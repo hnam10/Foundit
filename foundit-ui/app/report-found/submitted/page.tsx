@@ -1,22 +1,13 @@
 'use client';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { FixedPageBackground } from '@/components/PageBackground';
 import { Box, Heading, Stack, Text } from '@chakra-ui/react';
 
 export default function ReportSubmitted() {
   return (
     <Box minH="100vh" display="flex" flexDirection="column" position="relative">
-      <Box
-        position="fixed"
-        inset={0}
-        backgroundImage="url('/bg.svg')"
-        backgroundSize="cover"
-        backgroundPosition="center"
-        backgroundRepeat="no-repeat"
-        zIndex={0}
-      />
-
-      <Box position="fixed" inset={0} bg="blackAlpha.700" zIndex={0} />
+      <FixedPageBackground overlay />
 
       <Box
         position="relative"
@@ -56,11 +47,11 @@ export default function ReportSubmitted() {
               </Heading>
 
               <Stack gap={1} align="center" px={10}>
-                <Text color="#666666">
+                <Text color="fg.muted">
                   Your found item report has been submitted.
                 </Text>
 
-                <Text color="#666666">
+                <Text color="fg.muted">
                   Thank you for taking the time to help return lost items to
                   their owners.
                 </Text>

@@ -19,6 +19,7 @@ export const registerSchema = z.object({
     .refine((val) => val.endsWith('@myseneca.ca'), {
       message: 'Must be a Seneca email address (@myseneca.ca)',
     }),
+  agreedToLegal: z.literal(true),
   password: z
     .string()
     .min(8)
