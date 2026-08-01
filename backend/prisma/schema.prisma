@@ -35,7 +35,7 @@ enum ClaimStatus {
   approved
   rejected
   picked_up
-  
+
   @@map("claim_status")
 }
 
@@ -76,8 +76,6 @@ enum EmailDeliveryStatus {
 
 enum ClaimNotificationPreference {
   email
-  phone
-  email_and_phone
 
   @@map("claim_notification_preference")
 }
@@ -112,6 +110,7 @@ model User {
   studentNumber             BigInt?   @unique @map("student_number")
   employeeId                String?   @unique @map("employee_id") @db.VarChar(12)
   phone                     String?   @db.VarChar(10)
+  profilePhotoUrl           String?   @map("profile_photo_url") @db.VarChar(500)
   emailNotificationOptIn    Boolean   @default(false) @map("email_notification_opt_in")
   isActive                  Boolean   @default(true) @map("is_active")
   createdAt                 DateTime  @default(now()) @map("created_at")
@@ -130,7 +129,6 @@ model User {
   imagesUploaded       ItemImage[]          @relation("UploadedBy")
   matchesReviewed      MatchSuggestion[]    @relation("MatchReviewedBy")
   notifications        Notification[]
-  auditLogs            AuditLog[]
   refreshTokenLogs     RefreshTokenLog[]
   photoUploadSessions  PhotoUploadSession[] @relation("PhotoSessionCreatedBy")
 
@@ -350,20 +348,40 @@ model RefreshTokenLog {
 }
 
 model AuditLog {
-  logId      String   @id @default(uuid()) @map("log_id") @db.Uuid
-  actorId    String?  @map("actor_id") @db.Uuid
-  action     String   @db.VarChar(100)
-  entityType String   @map("entity_type") @db.VarChar(50)
-  entityId   String   @map("entity_id") @db.Uuid
+  logId      String         @id @default(uuid()) @map("log_id") @db.Uuid
+  actorId    String?        @map("actor_id") @db.Uuid
+  actorType  AuditActorType @map("actor_type")
+  action     String         @db.VarChar(100)
+  entityType String         @map("entity_type") @db.VarChar(50)
+  entityId   String?        @map("entity_id") @db.Uuid
+  outcome    AuditOutcome
+  reasonCode String?        @map("reason_code") @db.VarChar(100)
+  requestId  String?        @map("request_id") @db.Uuid
+  runId      String?        @map("run_id") @db.Uuid
   details    Json?
-  ipAddress  String?  @map("ip_address") @db.VarChar(45)
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  actor User? @relation(fields: [actorId], references: [userId])
+  ipAddress  String?        @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime       @default(now()) @map("created_at")
 
   @@index([actorId])
   @@index([entityType, entityId])
   @@index([action])
   @@index([createdAt])
+  @@index([requestId])
+  @@index([runId])
+  @@index([actorType])
+  @@index([outcome])
   @@map("audit_log")
+}
+
+enum AuditActorType {
+  anonymous
+  user
+  system
+  unknown
+}
+
+enum AuditOutcome {
+  success
+  denied
+  failure
 }

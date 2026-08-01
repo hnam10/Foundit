@@ -1,7 +1,18 @@
 import cron from 'node-cron';
-import { ClaimStatus, ItemStatus, MatchStatus } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import {
+  ClaimStatus,
+  ItemStatus,
+  MatchStatus,
+  NotificationType,
+  Prisma,
+} from '@prisma/client';
 import { prisma } from '../db';
-import { writeAuditLog } from '../utils/auditLog';
+import { writeAuditLog, writeAuditLogs } from '../utils/auditLog';
+import {
+  createClaimStatusUpdateInput,
+  fanOutToCampusSecurity,
+} from '../lib/notifications';
 
 const AUTO_EXPIRE_REJECTION_REASON = 'Item retention period ended.';
 
@@ -13,6 +24,7 @@ function getTodayUtcDate(): Date {
 
 export async function expireDueItems(): Promise<number> {
   const today = getTodayUtcDate();
+  const runId = randomUUID();
 
   const candidates = await prisma.item.findMany({
     where: {
@@ -47,6 +59,7 @@ export async function expireDueItems(): Promise<number> {
       select: {
         itemId: true,
         retentionExpiryDate: true,
+        campusId: true,
       },
     });
 
@@ -54,11 +67,62 @@ export async function expireDueItems(): Promise<number> {
       return 0;
     }
 
-    const eligibleItemIds = eligibleItems.map((item) => item.itemId);
+    const expiredItems = await tx.$queryRaw<
+      Array<{
+        itemId: string;
+        campusId: string;
+        retentionExpiryDate: Date | null;
+      }>
+    >(
+      Prisma.sql`
+        UPDATE "item"
+        SET
+          "status" = ${ItemStatus.expired}::"item_status",
+          "updated_at" = CURRENT_TIMESTAMP
+        WHERE "item_id" IN (${Prisma.join(
+          eligibleItems.map((item) => Prisma.sql`${item.itemId}::uuid`)
+        )})
+          AND "status" = ${ItemStatus.stored}::"item_status"
+          AND "retention_expiry_date" <= ${today}
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "claim"
+            WHERE "claim"."item_id" = "item"."item_id"
+              AND "claim"."status" = ${ClaimStatus.approved}::"claim_status"
+          )
+        RETURNING
+          "item_id" AS "itemId",
+          "campus_id" AS "campusId",
+          "retention_expiry_date" AS "retentionExpiryDate"
+      `
+    );
+
+    if (expiredItems.length === 0) {
+      return 0;
+    }
+
+    const expiredItemIds = expiredItems.map((item) => item.itemId);
+
+    // Snapshot claims only after confirming that their item was expired.
+    const affectedClaims = await tx.claim.findMany({
+      where: {
+        itemId: { in: expiredItemIds },
+        status: {
+          in: [ClaimStatus.submitted, ClaimStatus.under_review],
+        },
+      },
+      select: {
+        claimId: true,
+        studentId: true,
+        itemName: true,
+        status: true,
+        itemId: true,
+      },
+    });
 
     await tx.claim.updateMany({
       where: {
-        itemId: { in: eligibleItemIds },
+        itemId: { in: expiredItemIds },
         status: {
           in: [ClaimStatus.submitted, ClaimStatus.under_review],
         },
@@ -71,46 +135,103 @@ export async function expireDueItems(): Promise<number> {
       },
     });
 
-    await tx.item.updateMany({
-      where: {
-        itemId: { in: eligibleItemIds },
-        status: ItemStatus.stored,
-        retentionExpiryDate: { lte: today },
-        claims: {
-          none: { status: ClaimStatus.approved },
-        },
-      },
-      data: { status: ItemStatus.expired },
-    });
-
     await tx.matchSuggestion.updateMany({
       where: {
-        itemId: { in: eligibleItemIds },
+        itemId: { in: expiredItemIds },
         status: MatchStatus.suggested,
       },
       data: { status: MatchStatus.dismissed },
     });
 
-    await Promise.all(
-      eligibleItems.map((item) =>
-        writeAuditLog(
-          {
-            action: 'item_auto_expired',
-            entityType: 'item',
-            entityId: item.itemId,
-            details: {
-              previousStatus: ItemStatus.stored,
-              nextStatus: ItemStatus.expired,
-              retentionExpiryDate:
-                item.retentionExpiryDate?.toISOString() ?? null,
-            },
+    // Notify students whose claims were auto-rejected.
+    if (affectedClaims.length > 0) {
+      await tx.notification.createMany({
+        data: affectedClaims.map((claim) =>
+          createClaimStatusUpdateInput(claim, 'rejected')
+        ),
+      });
+      await writeAuditLog(
+        {
+          actorType: 'system',
+          action: 'notification_fanout_created',
+          entityType: 'notification',
+          entityId: null,
+          outcome: 'success',
+          runId,
+          details: {
+            recipientCount: affectedClaims.length,
+            sourceEntityType: 'claim',
+            notificationType: NotificationType.claim_status_update,
           },
-          tx
-        )
-      )
+        },
+        tx
+      );
+    }
+
+    await writeAuditLogs(
+      affectedClaims.map((claim) => ({
+        actorType: 'system',
+        action: 'claim_status_updated',
+        entityType: 'claim',
+        entityId: claim.claimId,
+        outcome: 'success',
+        reasonCode: 'item_retention_expired',
+        runId,
+        entityLabel: claim.itemName ?? undefined,
+        details: {
+          previousStatus: claim.status,
+          nextStatus: ClaimStatus.rejected,
+          itemId: claim.itemId,
+        },
+      })),
+      tx
     );
 
-    return eligibleItems.length;
+    // Notify security at each affected campus, batched per campus.
+    const expiredCountByCampus = new Map<string, number>();
+    for (const item of expiredItems) {
+      expiredCountByCampus.set(
+        item.campusId,
+        (expiredCountByCampus.get(item.campusId) ?? 0) + 1
+      );
+    }
+
+    for (const [campusId, count] of expiredCountByCampus) {
+      await fanOutToCampusSecurity(
+        tx,
+        campusId,
+        {
+          type: NotificationType.item_expiring,
+          title: 'Item retention expired',
+          message: `${count} stored item${count === 1 ? '' : 's'} reached the end of retention and ${count === 1 ? 'was' : 'were'} marked expired.`,
+        },
+        { actorType: 'system', runId }
+      );
+    }
+
+    await writeAuditLogs(
+      expiredItems.map((item) => ({
+        action: 'item_auto_expired',
+        actorType: 'system',
+        entityType: 'item',
+        entityId: item.itemId,
+        outcome: 'success',
+        runId,
+        entityLabel: `campus ${item.campusId}${
+          item.retentionExpiryDate
+            ? `, retention expired ${item.retentionExpiryDate.toISOString().slice(0, 10)}`
+            : ''
+        }`,
+        details: {
+          previousStatus: ItemStatus.stored,
+          nextStatus: ItemStatus.expired,
+          retentionExpiryDate: item.retentionExpiryDate?.toISOString() ?? null,
+        },
+      })),
+      tx
+    );
+
+    return expiredItems.length;
   });
 
   return expiredCount;

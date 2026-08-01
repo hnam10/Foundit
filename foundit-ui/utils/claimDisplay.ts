@@ -68,8 +68,6 @@ const notificationPreferenceLabels: Record<
   string
 > = {
   email: 'Email',
-  phone: 'Phone',
-  email_and_phone: 'Email and phone',
 };
 
 export function formatNotificationPreference(
@@ -245,10 +243,53 @@ export interface ClaimCardStatus {
   color: string;
 }
 
+/** Student-facing claim statuses (mirrors ClaimStatusProgress labels). */
+export function getStudentClaimDisplayStatus(
+  claim: Pick<SecurityClaimListItem, 'status'>
+): ClaimDisplayStatus {
+  switch (claim.status) {
+    case 'submitted':
+      return {
+        label: 'Submitted',
+        colorPalette: 'gray',
+        strip: 'gray.400',
+        color: 'gray.600',
+      };
+    case 'under_review':
+      return {
+        label: 'Under Review',
+        colorPalette: 'blue',
+        strip: 'blue.500',
+        color: 'blue.700',
+      };
+    case 'approved':
+      return {
+        label: 'Match Found',
+        colorPalette: 'orange',
+        strip: 'orange.500',
+        color: 'orange.700',
+      };
+    case 'picked_up':
+      return {
+        label: 'Completed',
+        colorPalette: 'green',
+        strip: 'green.500',
+        color: 'green.700',
+      };
+    case 'rejected':
+      return {
+        label: 'Rejected',
+        colorPalette: 'red',
+        strip: 'red.500',
+        color: 'red.700',
+      };
+  }
+}
+
 export function getClaimCardStatus(
-  claim: Pick<SecurityClaimListItem, 'status' | 'itemId'>
+  claim: Pick<SecurityClaimListItem, 'status'>
 ): ClaimCardStatus {
-  const { label, strip, color } = getClaimDisplayStatus(claim);
+  const { label, strip, color } = getStudentClaimDisplayStatus(claim);
 
   return { label, strip, color };
 }
@@ -407,19 +448,13 @@ export function formatClaimDateTime(value: string | null): string {
 }
 
 export function buildManualSearchHref(claim: SecurityClaimListItem): string {
-  const params = new URLSearchParams();
-
-  if (claim.campusId) params.set('campusId', claim.campusId);
-
-  if (claim.category) params.set('category', claim.category);
-
-  const trimmed = claim.description.trim();
-
-  if (trimmed) params.set('q', trimmed.slice(0, 80));
-
-  const query = params.toString();
-
-  return `/security/items${query ? `?${query}` : ''}`;
+  return buildSecurityItemsHref({
+    campusId: claim.campusId || undefined,
+    category: claim.category || undefined,
+    q: claim.description.trim()
+      ? claim.description.trim().slice(0, 80)
+      : undefined,
+  });
 }
 
 export function matchesClaimStatusFilter(
@@ -430,8 +465,11 @@ export function matchesClaimStatusFilter(
   if (!filter) return true;
 
   switch (filter) {
-    case 'needs_action':
-      return getClaimSecurityQueue(claim) === 'action';
+    case 'awaiting_match':
+      return claim.status === 'submitted' && !claim.itemId;
+
+    case 'match_pending':
+      return claimAwaitingMatchConfirmation(claim);
 
     case 'ready_for_pickup':
       return claim.status === 'approved';
@@ -451,6 +489,32 @@ export function matchesClaimStatusFilter(
     default:
       return true;
   }
+}
+
+export function buildSecurityClaimsHref(options?: {
+  status?: string;
+  campusId?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (options?.status) params.set('status', options.status);
+  if (options?.campusId) params.set('campusId', options.campusId);
+  const query = params.toString();
+  return `/security/claims${query ? `?${query}` : ''}`;
+}
+
+export function buildSecurityItemsHref(options?: {
+  status?: string;
+  campusId?: string;
+  category?: string;
+  q?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (options?.status) params.set('status', options.status);
+  if (options?.campusId) params.set('campusId', options.campusId);
+  if (options?.category) params.set('category', options.category);
+  if (options?.q) params.set('q', options.q);
+  const query = params.toString();
+  return `/security/items${query ? `?${query}` : ''}`;
 }
 
 export function isStudentClaimClosed(claim: ClaimPhaseInput): boolean {

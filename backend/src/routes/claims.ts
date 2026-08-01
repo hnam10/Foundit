@@ -10,7 +10,21 @@ import {
 import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
-import { writeAuditLog } from '../utils/auditLog';
+import {
+  auditContextFromRequest,
+  writeAuditLog,
+  writeAuditLogBestEffort,
+} from '../utils/auditLog';
+import {
+  createClaimStatusUpdateInput,
+  fanOutToCampusSecurity,
+  shortClaimRef,
+} from '../lib/notifications';
+import {
+  deliverStudentClaimEmail,
+  studentNotificationEmailSelect,
+  type StudentNotificationEmailRow,
+} from '../lib/claimEmailNotifications';
 import { scheduleClaimSearchIndexIngest } from '../lib/matching/ingest';
 import { refreshClaimMatchSuggestions } from '../lib/matching/suggestions';
 import { resolveImageUrl } from '../utils/imageUrl';
@@ -27,6 +41,7 @@ import {
 import { validate, validateQuery } from '../validators/shared';
 
 const router = Router();
+const MISSING_CAMPUS_ID = '00000000-0000-0000-0000-000000000000';
 
 const claimListSelect = {
   claimId: true,
@@ -58,6 +73,7 @@ const claimListSelect = {
       firstName: true,
       lastName: true,
       email: true,
+      emailNotificationOptIn: true,
       studentNumber: true,
     },
   },
@@ -78,6 +94,15 @@ const claimListSelect = {
       color: true,
       locationFound: true,
       dateFound: true,
+      images: {
+        select: {
+          imageUrl: true,
+        },
+        take: 1,
+        orderBy: {
+          createdAt: 'asc' as const,
+        },
+      },
     },
   },
   images: {
@@ -137,6 +162,15 @@ const matchSuggestionSelect = {
       locationFound: true,
       dateFound: true,
       descriptionPublic: true,
+      images: {
+        select: {
+          imageUrl: true,
+        },
+        take: 1,
+        orderBy: {
+          createdAt: 'asc' as const,
+        },
+      },
     },
   },
   reviewer: {
@@ -185,6 +219,8 @@ async function toClaimListItemDto(claim: ClaimListRow) {
     }))
   );
 
+  const matchedItemImageUrl = claim.item?.images[0]?.imageUrl ?? null;
+
   return {
     claimId: claim.claimId,
     studentId: claim.studentId,
@@ -232,6 +268,9 @@ async function toClaimListItemDto(claim: ClaimListRow) {
           color: claim.item.color,
           locationFound: claim.item.locationFound,
           dateFound: claim.item.dateFound,
+          imageUrl: matchedItemImageUrl
+            ? await resolveImageUrl(matchedItemImageUrl)
+            : null,
         }
       : null,
     images,
@@ -263,7 +302,9 @@ async function toClaimDetailDto(claim: ClaimDetailRow) {
   };
 }
 
-function toMatchSuggestionDto(match: MatchSuggestionRow) {
+async function toMatchSuggestionDto(match: MatchSuggestionRow) {
+  const storedImageUrl = match.item.images[0]?.imageUrl ?? null;
+
   return {
     matchId: match.matchId,
     claimId: match.claimId,
@@ -285,6 +326,7 @@ function toMatchSuggestionDto(match: MatchSuggestionRow) {
       locationFound: match.item.locationFound,
       dateFound: match.item.dateFound,
       descriptionPublic: match.item.descriptionPublic,
+      imageUrl: storedImageUrl ? await resolveImageUrl(storedImageUrl) : null,
     },
     reviewer: match.reviewer
       ? {
@@ -405,6 +447,17 @@ const validStatusTransitions: Record<ClaimStatus, ClaimStatus[]> = {
   [ClaimStatus.picked_up]: [],
 };
 
+function createClaimSubmittedNotificationInput(claim: ClaimDetailRow) {
+  return {
+    recipientId: claim.studentId,
+    type: NotificationType.claim_status_update,
+    title: 'Claim submitted',
+    message: `Your claim ${shortClaimRef(claim.claimId)} has been submitted.`,
+    referenceType: 'claim',
+    referenceId: claim.claimId,
+  } as const;
+}
+
 function createMatchFoundNotificationInput(claim: {
   claimId: string;
   studentId: string;
@@ -418,7 +471,7 @@ function createMatchFoundNotificationInput(claim: {
   return {
     recipientId: claim.studentId,
     type: NotificationType.match_found,
-    title: 'Your matched item is ready for pickup',
+    title: 'A match was found for your claim',
     message: `A found item has been matched to your claim. Visit ${officeLocation} with your student ID during office hours to collect it.`,
     referenceType: 'claim',
     referenceId: claim.claimId,
@@ -457,9 +510,17 @@ async function reserveItemForClaim(
 
 async function applyMatchConfirmation(
   tx: Prisma.TransactionClient,
-  claim: { claimId: string; studentId: string },
+  claim: {
+    claimId: string;
+    studentId: string;
+    status?: ClaimStatus;
+    itemId?: string | null;
+  },
   itemId: string,
-  actorId: string
+  actorId: string,
+  role: UserRole,
+  context: { requestId: string; ipAddress?: string },
+  itemLabel?: string
 ) {
   await reserveItemForClaim(tx, itemId);
 
@@ -475,33 +536,106 @@ async function applyMatchConfirmation(
     select: claimDetailSelect,
   });
 
-  await tx.notification.create({
+  const matchNotification = await tx.notification.create({
     data: createMatchFoundNotificationInput(updatedClaim),
+    select: studentNotificationEmailSelect,
   });
 
-  await tx.notification.create({
+  const statusNotification = await tx.notification.create({
     data: createClaimStatusNotificationInput(
       updatedClaim,
       ClaimStatus.approved
     ),
+    select: studentNotificationEmailSelect,
   });
 
-  return updatedClaim;
+  await Promise.all([
+    writeAuditLog(
+      {
+        actorId,
+        actorType: 'user',
+        actorRole: role,
+        action: 'claim_item_linked',
+        entityType: 'claim',
+        entityId: claim.claimId,
+        entityLabel: itemLabel,
+        outcome: 'success',
+        details: {
+          previousItemId: claim.itemId ?? null,
+          nextItemId: itemId,
+        },
+        ...context,
+      },
+      tx
+    ),
+    writeAuditLog(
+      {
+        actorId,
+        actorType: 'user',
+        actorRole: role,
+        action: 'claim_status_updated',
+        entityType: 'claim',
+        entityId: claim.claimId,
+        entityLabel: itemLabel,
+        outcome: 'success',
+        details: {
+          previousStatus: claim.status ?? ClaimStatus.under_review,
+          nextStatus: ClaimStatus.approved,
+          itemId,
+        },
+        ...context,
+      },
+      tx
+    ),
+    writeAuditLog(
+      {
+        actorId,
+        actorType: 'user',
+        actorRole: role,
+        action: 'item_status_updated',
+        entityType: 'item',
+        entityId: itemId,
+        entityLabel: itemLabel,
+        outcome: 'success',
+        details: {
+          previousStatus: ItemStatus.stored,
+          nextStatus: ItemStatus.claimed,
+          claimId: claim.claimId,
+        },
+        ...context,
+      },
+      tx
+    ),
+    ...[matchNotification, statusNotification].map((notification) =>
+      writeAuditLog(
+        {
+          actorId,
+          actorType: 'user',
+          actorRole: role,
+          action: 'notification_created',
+          entityType: 'notification',
+          entityId: notification.notificationId,
+          entityLabel: itemLabel,
+          outcome: 'success',
+          details: { claimId: claim.claimId },
+          ...context,
+        },
+        tx
+      )
+    ),
+  ]);
+
+  return { claim: updatedClaim, matchNotification, statusNotification };
 }
 
 function createClaimStatusNotificationInput(
   claim: ClaimDetailRow,
   nextStatus: ClaimStatus
 ) {
-  const statusText = nextStatus.replace('_', ' ');
-  return {
-    recipientId: claim.studentId,
-    type: NotificationType.claim_status_update,
-    title: `Claim status updated: ${statusText}`,
-    message: `Your claim ${claim.claimId} is now ${statusText}.`,
-    referenceType: 'claim',
-    referenceId: claim.claimId,
-  } as const;
+  return createClaimStatusUpdateInput(claim, nextStatus.replace('_', ' '), {
+    reason:
+      nextStatus === ClaimStatus.rejected ? claim.rejectionReason : undefined,
+  });
 }
 
 /**
@@ -524,13 +658,16 @@ function createClaimStatusNotificationInput(
  *                 type: string
  *               itemName:
  *                 type: string
+ *               campusId:
+ *                 type: string
+ *                 format: uuid
  *               description:
  *                 type: string
  *               additionalInfo:
  *                 type: string
  *               notificationPreference:
  *                 type: string
- *                 enum: [email, phone, email_and_phone]
+ *                 enum: [email]
  *               dateLost:
  *                 type: string
  *                 format: date
@@ -571,18 +708,29 @@ router.post(
         return;
       }
 
-      if (!actor.campusId) {
-        res.status(409).json({
-          code: 'CLAIM_CAMPUS_REQUIRED',
-          message: 'A campus must be assigned before a claim can be submitted.',
-        });
-        return;
-      }
-      const campusId = actor.campusId;
-
       const payload = req.body as CreateClaimInput;
+      // If the claim form provides a campus, honor it. Otherwise store the
+      // claim under the sentinel "missing" campus until the student chooses one.
+      const campusId = payload.campusId ?? MISSING_CAMPUS_ID;
 
-      const claim = await prisma.$transaction(async (tx) => {
+      if (payload.campusId) {
+        const campus = await prisma.campus.findUnique({
+          where: { campusId: payload.campusId },
+          select: { campusId: true },
+        });
+
+        if (!campus) {
+          res.status(404).json({
+            code: 'CAMPUS_NOT_FOUND',
+            message: 'Campus not found.',
+          });
+          return;
+        }
+      }
+
+      const auditContext = auditContextFromRequest(req);
+
+      const { claim, notification } = await prisma.$transaction(async (tx) => {
         const created = await tx.claim.create({
           data: {
             studentId: actor.userId,
@@ -612,23 +760,84 @@ router.post(
           });
         }
 
-        return tx.claim.findUniqueOrThrow({
+        await fanOutToCampusSecurity(
+          tx,
+          campusId,
+          {
+            type: NotificationType.claim_status_update,
+            title: 'New Claim Submitted',
+            message: 'A claim was submitted by a student.',
+            referenceType: 'claim',
+            referenceId: created.claimId,
+          },
+          {
+            actorId: actor.userId,
+            actorType: 'user',
+            actorRole: actor.role,
+            entityLabel: payload.itemName ?? undefined,
+            ...auditContext,
+          }
+        );
+
+        const nextClaim = await tx.claim.findUniqueOrThrow({
           where: { claimId: created.claimId },
           select: claimDetailSelect,
         });
+
+        const studentNotification = await tx.notification.create({
+          data: createClaimSubmittedNotificationInput(nextClaim),
+          select: studentNotificationEmailSelect,
+        });
+
+        const claimLabel = nextClaim.itemName ?? undefined;
+
+        await Promise.all([
+          writeAuditLog(
+            {
+              actorId: actor.userId,
+              actorType: 'user',
+              actorRole: actor.role,
+              action: 'claim_created',
+              entityType: 'claim',
+              entityId: nextClaim.claimId,
+              entityLabel: claimLabel,
+              outcome: 'success',
+              details: {
+                category: nextClaim.category,
+                campusId: nextClaim.campusId,
+                status: nextClaim.status,
+                imageCount: payload.images.length,
+              },
+              ...auditContext,
+            },
+            tx
+          ),
+          writeAuditLog(
+            {
+              actorId: actor.userId,
+              actorType: 'user',
+              actorRole: actor.role,
+              action: 'notification_created',
+              entityType: 'notification',
+              entityId: studentNotification.notificationId,
+              entityLabel: claimLabel,
+              outcome: 'success',
+              details: { claimId: nextClaim.claimId },
+              ...auditContext,
+            },
+            tx
+          ),
+        ]);
+
+        return { claim: nextClaim, notification: studentNotification };
       });
 
-      await writeAuditLog({
+      await deliverStudentClaimEmail(notification, claim, {
         actorId: actor.userId,
-        action: 'claim_created',
-        entityType: 'claim',
-        entityId: claim.claimId,
-        details: {
-          category: claim.category,
-          campusId: claim.campusId,
-          status: claim.status,
-        },
+        role: actor.role,
         ipAddress: req.ip,
+        requestId: auditContext.requestId,
+        event: 'claim_created',
       });
 
       scheduleClaimSearchIndexIngest(claim.claimId, {
@@ -865,6 +1074,18 @@ router.delete(
       }
 
       if (claim.studentId !== actor.userId) {
+        await writeAuditLogBestEffort({
+          actorId: actor.userId,
+          actorType: 'user',
+          actorRole: actor.role,
+          action: 'claim_transition_denied',
+          entityType: 'claim',
+          entityId: claim.claimId,
+          entityLabel: claim.itemName ?? undefined,
+          outcome: 'denied',
+          reasonCode: 'claim_ownership_mismatch',
+          ...auditContextFromRequest(req),
+        });
         res.status(403).json({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions',
@@ -873,6 +1094,20 @@ router.delete(
       }
 
       if (!cancellableClaimStatuses.has(claim.status)) {
+        const context = auditContextFromRequest(req);
+        await writeAuditLogBestEffort({
+          actorId: actor.userId,
+          actorType: 'user',
+          actorRole: actor.role,
+          action: 'claim_transition_denied',
+          entityType: 'claim',
+          entityId: claim.claimId,
+          entityLabel: claim.itemName ?? undefined,
+          outcome: 'denied',
+          reasonCode: 'claim_not_cancellable',
+          details: { currentStatus: claim.status },
+          ...context,
+        });
         res.status(409).json({
           code: 'CLAIM_NOT_CANCELLABLE',
           message: 'Only submitted claims can be deleted.',
@@ -880,24 +1115,47 @@ router.delete(
         return;
       }
 
-      await prisma.$transaction([
-        prisma.matchSuggestion.deleteMany({
+      const deleteContext = auditContextFromRequest(req);
+      await prisma.$transaction(async (tx) => {
+        await fanOutToCampusSecurity(
+          tx,
+          claim.campusId,
+          {
+            type: NotificationType.claim_status_update,
+            title: 'Claim Cancelled',
+            message: `A student cancelled ${claim.itemName ? `their claim for "${claim.itemName}"` : `claim ${shortClaimRef(claim.claimId)}`}.`,
+            referenceType: 'claim',
+            referenceId: claim.claimId,
+          },
+          {
+            actorId: actor.userId,
+            actorType: 'user',
+            actorRole: actor.role,
+            entityLabel: claim.itemName ?? undefined,
+            ...deleteContext,
+          }
+        );
+        await tx.matchSuggestion.deleteMany({
           where: { claimId: claim.claimId },
-        }),
-        prisma.claim.delete({
+        });
+        await tx.claim.delete({
           where: { claimId: claim.claimId },
-        }),
-      ]);
-
-      await writeAuditLog({
-        actorId: actor.userId,
-        action: 'claim_deleted',
-        entityType: 'claim',
-        entityId: claim.claimId,
-        details: {
-          previousStatus: claim.status,
-        },
-        ipAddress: req.ip,
+        });
+        await writeAuditLog(
+          {
+            actorId: actor.userId,
+            actorType: 'user',
+            actorRole: actor.role,
+            action: 'claim_deleted',
+            entityType: 'claim',
+            entityId: claim.claimId,
+            entityLabel: claim.itemName ?? undefined,
+            outcome: 'success',
+            details: { previousStatus: claim.status },
+            ...deleteContext,
+          },
+          tx
+        );
       });
 
       res.status(200).json({ deleted: true, claimId: claim.claimId });
@@ -990,6 +1248,8 @@ router.patch(
         where: { itemId },
         select: {
           itemId: true,
+          title: true,
+          category: true,
           status: true,
         },
       });
@@ -1003,6 +1263,20 @@ router.patch(
       }
 
       if (item.status !== ItemStatus.stored) {
+        const context = auditContextFromRequest(req);
+        await writeAuditLogBestEffort({
+          actorId: actor.userId,
+          actorType: 'user',
+          actorRole: actor.role,
+          action: 'claim_transition_denied',
+          entityType: 'claim',
+          entityId: claim.claimId,
+          entityLabel: `${item.title} (${item.category})`,
+          outcome: 'denied',
+          reasonCode: 'item_not_stored',
+          details: { itemId: item.itemId, itemStatus: item.status },
+          ...context,
+        });
         res.status(409).json({
           code: 'ITEM_NOT_STORED',
           message: 'Only stored items can be linked to a claim.',
@@ -1010,26 +1284,39 @@ router.patch(
         return;
       }
 
-      const updated = await prisma.$transaction(async (tx) => {
-        await applyMatchConfirmation(tx, claim, item.itemId, actor.userId);
+      const linkContext = auditContextFromRequest(req);
+      const {
+        claim: updated,
+        matchNotification,
+        statusNotification,
+      } = await prisma.$transaction(async (tx) =>
+        applyMatchConfirmation(
+          tx,
+          claim,
+          item.itemId,
+          actor.userId,
+          actor.role,
+          linkContext,
+          claim.itemName ?? undefined
+        )
+      );
 
-        return tx.claim.findUniqueOrThrow({
-          where: { claimId: claim.claimId },
-          select: claimDetailSelect,
-        });
-      });
-
-      await writeAuditLog({
-        actorId: actor.userId,
-        action: 'claim_item_linked',
-        entityType: 'claim',
-        entityId: claim.claimId,
-        details: {
-          previousItemId: claim.itemId,
-          nextItemId: item.itemId,
-        },
-        ipAddress: req.ip,
-      });
+      await Promise.all([
+        deliverStudentClaimEmail(matchNotification, updated, {
+          actorId: actor.userId,
+          role: actor.role,
+          ipAddress: req.ip,
+          requestId: linkContext.requestId,
+          event: 'match_confirmed',
+        }),
+        deliverStudentClaimEmail(statusNotification, updated, {
+          actorId: actor.userId,
+          role: actor.role,
+          ipAddress: req.ip,
+          requestId: linkContext.requestId,
+          event: 'claim_status_approved',
+        }),
+      ]);
 
       res.status(200).json(await toClaimDetailDto(updated));
     } catch (err) {
@@ -1116,6 +1403,23 @@ router.patch(
       };
 
       if (!validStatusTransitions[claim.status].includes(status)) {
+        const context = auditContextFromRequest(req);
+        await writeAuditLogBestEffort({
+          actorId: actor.userId,
+          actorType: 'user',
+          actorRole: actor.role,
+          action: 'claim_transition_denied',
+          entityType: 'claim',
+          entityId: claim.claimId,
+          entityLabel: claim.itemName ?? undefined,
+          outcome: 'denied',
+          reasonCode: 'invalid_status_transition',
+          details: {
+            previousStatus: claim.status,
+            requestedStatus: status,
+          },
+          ...context,
+        });
         res.status(409).json({
           code: 'INVALID_STATUS_TRANSITION',
           message: `Cannot change claim status from ${claim.status} to ${status}.`,
@@ -1142,81 +1446,133 @@ router.patch(
         return;
       }
 
-      const updated = await prisma.$transaction(async (tx) => {
-        if (status === ClaimStatus.approved && claim.itemId) {
-          await reserveItemForClaim(tx, claim.itemId);
-        }
+      const statusContext = auditContextFromRequest(req);
+      const { claim: updated, notification } = await prisma.$transaction(
+        async (tx) => {
+          let itemTransitioned = false;
+          if (status === ClaimStatus.approved && claim.itemId) {
+            await reserveItemForClaim(tx, claim.itemId);
+            itemTransitioned = true;
+          }
 
-        if (status === ClaimStatus.picked_up && claim.itemId) {
-          const item = await tx.item.findUnique({
-            where: { itemId: claim.itemId },
-            select: { itemId: true, status: true },
+          if (status === ClaimStatus.picked_up && claim.itemId) {
+            const item = await tx.item.findUnique({
+              where: { itemId: claim.itemId },
+              select: { itemId: true, status: true },
+            });
+
+            if (!item) {
+              throw new Error('LINKED_ITEM_NOT_FOUND');
+            }
+
+            if (item.status === ItemStatus.stored) {
+              await tx.item.update({
+                where: { itemId: item.itemId },
+                data: { status: ItemStatus.claimed },
+              });
+              itemTransitioned = true;
+            }
+          }
+
+          const nextClaim = await tx.claim.update({
+            where: { claimId: claim.claimId },
+            data: {
+              status,
+              rejectionReason:
+                status === ClaimStatus.rejected ? rejectionReason : null,
+              reviewedBy: actor.userId,
+              reviewedAt: new Date(),
+              ...(status === ClaimStatus.picked_up
+                ? {
+                    pickedUpAt: new Date(),
+                    verifiedBy: actor.userId,
+                  }
+                : {}),
+            },
+            select: claimDetailSelect,
           });
 
-          if (!item) {
-            throw new Error('LINKED_ITEM_NOT_FOUND');
-          }
+          const notification = await tx.notification.create({
+            data: createClaimStatusNotificationInput(nextClaim, status),
+            select: studentNotificationEmailSelect,
+          });
 
-          if (item.status === ItemStatus.stored) {
-            await tx.item.update({
-              where: { itemId: item.itemId },
-              data: { status: ItemStatus.claimed },
-            });
-          }
-        }
+          const claimLabel = claim.itemName ?? undefined;
 
-        const nextClaim = await tx.claim.update({
-          where: { claimId: claim.claimId },
-          data: {
-            status,
-            rejectionReason:
-              status === ClaimStatus.rejected ? rejectionReason : null,
-            reviewedBy: actor.userId,
-            reviewedAt: new Date(),
-            ...(status === ClaimStatus.picked_up
-              ? {
-                  pickedUpAt: new Date(),
-                  verifiedBy: actor.userId,
-                }
-              : {}),
-          },
-          select: claimDetailSelect,
-        });
-
-        const notification = await tx.notification.create({
-          data: createClaimStatusNotificationInput(nextClaim, status),
-        });
-
-        await writeAuditLog(
-          {
-            actorId: actor.userId,
-            action: 'claim_notification_sent',
-            entityType: 'notification',
-            entityId: notification.notificationId,
-            details: {
-              claimId: nextClaim.claimId,
-              recipientId: nextClaim.studentId,
-              claimStatus: status,
+          await writeAuditLog(
+            {
+              actorId: actor.userId,
+              actorType: 'user',
+              actorRole: actor.role,
+              action: 'claim_notification_sent',
+              entityType: 'notification',
+              entityId: notification.notificationId,
+              entityLabel: claimLabel,
+              outcome: 'success',
+              details: {
+                claimId: nextClaim.claimId,
+                recipientId: nextClaim.studentId,
+                claimStatus: status,
+              },
+              ...statusContext,
             },
-            ipAddress: req.ip,
-          },
-          tx
-        );
+            tx
+          );
 
-        return nextClaim;
-      });
+          await writeAuditLog(
+            {
+              actorId: actor.userId,
+              actorType: 'user',
+              actorRole: actor.role,
+              action: 'claim_status_updated',
+              entityType: 'claim',
+              entityId: claim.claimId,
+              entityLabel: claimLabel,
+              outcome: 'success',
+              details: {
+                previousStatus: claim.status,
+                nextStatus: status,
+                itemId: claim.itemId,
+                reasonCategory:
+                  status === ClaimStatus.rejected ? 'manual_rejection' : null,
+              },
+              ...statusContext,
+            },
+            tx
+          );
 
-      await writeAuditLog({
+          if (itemTransitioned && claim.itemId) {
+            await writeAuditLog(
+              {
+                actorId: actor.userId,
+                actorType: 'user',
+                actorRole: actor.role,
+                action: 'item_status_updated',
+                entityType: 'item',
+                entityId: claim.itemId,
+                entityLabel: claimLabel,
+                outcome: 'success',
+                details: {
+                  previousStatus: ItemStatus.stored,
+                  nextStatus: ItemStatus.claimed,
+                  claimId: claim.claimId,
+                },
+                ...statusContext,
+              },
+              tx
+            );
+          }
+
+          return { claim: nextClaim, notification };
+        }
+      );
+
+      await deliverStudentClaimEmail(notification, updated, {
         actorId: actor.userId,
-        action: 'claim_status_updated',
-        entityType: 'claim',
-        entityId: claim.claimId,
-        details: {
-          previousStatus: claim.status,
-          nextStatus: status,
-          rejectionReason: rejectionReason ?? null,
-        },
+        role: actor.role,
         ipAddress: req.ip,
+        requestId: statusContext.requestId,
+        event: `claim_status_${status}`,
       });
 
       res.status(200).json(await toClaimDetailDto(updated));
@@ -1302,7 +1658,11 @@ router.get(
         select: matchSuggestionSelect,
       });
 
-      res.status(200).json(matches.map((match) => toMatchSuggestionDto(match)));
+      res
+        .status(200)
+        .json(
+          await Promise.all(matches.map((match) => toMatchSuggestionDto(match)))
+        );
     } catch (err) {
       next(err);
     }
@@ -1363,19 +1723,13 @@ router.post(
         return;
       }
 
-      const { candidateCount, suggestionCount } =
-        await refreshClaimMatchSuggestions(claim.claimId);
-
-      await writeAuditLog({
+      const generationContext = auditContextFromRequest(req);
+      await refreshClaimMatchSuggestions(claim.claimId, {
         actorId: actor.userId,
-        action: 'claim_match_suggestions_generated',
-        entityType: 'claim',
-        entityId: claim.claimId,
-        details: {
-          candidateCount,
-          suggestionCount,
-        },
-        ipAddress: req.ip,
+        actorType: 'user',
+        actorRole: actor.role,
+        entityLabel: claim.itemName ?? undefined,
+        ...generationContext,
       });
 
       const matches = await prisma.matchSuggestion.findMany({
@@ -1384,7 +1738,11 @@ router.post(
         select: matchSuggestionSelect,
       });
 
-      res.status(200).json(matches.map((match) => toMatchSuggestionDto(match)));
+      res
+        .status(200)
+        .json(
+          await Promise.all(matches.map((match) => toMatchSuggestionDto(match)))
+        );
     } catch (err) {
       next(err);
     }
@@ -1485,70 +1843,121 @@ router.patch(
       }
 
       const { status } = req.body as { status: MatchStatus };
+      const matchContext = auditContextFromRequest(req);
 
-      const updated = await prisma.$transaction(async (tx) => {
-        if (status === MatchStatus.confirmed) {
-          const item = await tx.item.findUnique({
-            where: { itemId: match.itemId },
-            select: { itemId: true, status: true },
+      const { updated, confirmedMatchEmail } = await prisma.$transaction(
+        async (tx) => {
+          let matchEmail: {
+            claim: ClaimDetailRow;
+            matchNotification: StudentNotificationEmailRow;
+            statusNotification: StudentNotificationEmailRow;
+          } | null = null;
+
+          if (status === MatchStatus.confirmed) {
+            const item = await tx.item.findUnique({
+              where: { itemId: match.itemId },
+              select: { itemId: true, status: true },
+            });
+
+            if (!item) {
+              throw new Error('MATCH_ITEM_NOT_FOUND');
+            }
+
+            if (item.status !== ItemStatus.stored) {
+              const conflictError = new Error('MATCH_ITEM_NOT_STORED');
+              conflictError.name = 'MATCH_ITEM_NOT_STORED';
+              throw conflictError;
+            }
+
+            matchEmail = await applyMatchConfirmation(
+              tx,
+              { claimId: match.claimId, studentId: claim.studentId },
+              match.itemId,
+              actor.userId,
+              actor.role,
+              matchContext,
+              `${match.item.title} (${match.item.category})`
+            );
+          }
+
+          await tx.matchSuggestion.updateMany({
+            where: {
+              claimId: match.claimId,
+              matchId: { not: match.matchId },
+              status: MatchStatus.confirmed,
+            },
+            data: {
+              status: MatchStatus.dismissed,
+              reviewedBy: actor.userId,
+              reviewedAt: new Date(),
+            },
           });
 
-          if (!item) {
-            throw new Error('MATCH_ITEM_NOT_FOUND');
-          }
+          const updatedSuggestion = await tx.matchSuggestion.update({
+            where: { matchId: match.matchId },
+            data: {
+              status,
+              reviewedBy: actor.userId,
+              reviewedAt: new Date(),
+            },
+            select: matchSuggestionSelect,
+          });
 
-          if (item.status !== ItemStatus.stored) {
-            const conflictError = new Error('MATCH_ITEM_NOT_STORED');
-            conflictError.name = 'MATCH_ITEM_NOT_STORED';
-            throw conflictError;
-          }
-
-          await applyMatchConfirmation(
-            tx,
-            { claimId: match.claimId, studentId: claim.studentId },
-            match.itemId,
-            actor.userId
+          await writeAuditLog(
+            {
+              actorId: actor.userId,
+              actorType: 'user',
+              actorRole: actor.role,
+              action: 'claim_match_suggestion_reviewed',
+              entityType: 'match_suggestion',
+              entityId: match.matchId,
+              entityLabel: `${match.item.title} (${match.item.category})`,
+              outcome: 'success',
+              details: {
+                claimId: match.claimId,
+                previousStatus: match.status,
+                nextStatus: status,
+              },
+              ...matchContext,
+            },
+            tx
           );
+
+          return {
+            updated: updatedSuggestion,
+            confirmedMatchEmail: matchEmail,
+          };
         }
+      );
 
-        await tx.matchSuggestion.updateMany({
-          where: {
-            claimId: match.claimId,
-            matchId: { not: match.matchId },
-            status: MatchStatus.confirmed,
-          },
-          data: {
-            status: MatchStatus.dismissed,
-            reviewedBy: actor.userId,
-            reviewedAt: new Date(),
-          },
-        });
+      if (confirmedMatchEmail) {
+        await Promise.all([
+          deliverStudentClaimEmail(
+            confirmedMatchEmail.matchNotification,
+            confirmedMatchEmail.claim,
+            {
+              actorId: actor.userId,
+              role: actor.role,
+              ipAddress: req.ip,
+              requestId: matchContext.requestId,
+              event: 'match_confirmed',
+            }
+          ),
+          deliverStudentClaimEmail(
+            confirmedMatchEmail.statusNotification,
+            confirmedMatchEmail.claim,
+            {
+              actorId: actor.userId,
+              role: actor.role,
+              ipAddress: req.ip,
+              requestId: matchContext.requestId,
+              event: 'claim_status_approved',
+            }
+          ),
+        ]);
+      }
 
-        return tx.matchSuggestion.update({
-          where: { matchId: match.matchId },
-          data: {
-            status,
-            reviewedBy: actor.userId,
-            reviewedAt: new Date(),
-          },
-          select: matchSuggestionSelect,
-        });
-      });
-
-      await writeAuditLog({
-        actorId: actor.userId,
-        action: 'claim_match_suggestion_reviewed',
-        entityType: 'match_suggestion',
-        entityId: match.matchId,
-        details: {
-          claimId: match.claimId,
-          previousStatus: match.status,
-          nextStatus: status,
-        },
-        ipAddress: req.ip,
-      });
-
-      res.status(200).json(toMatchSuggestionDto(updated));
+      res.status(200).json(await toMatchSuggestionDto(updated));
     } catch (err) {
       if (err instanceof Error && err.name === 'MATCH_ITEM_NOT_STORED') {
         res.status(409).json({

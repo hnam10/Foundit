@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import authRouter from '../src/routes/auth';
+import authRouter, { loginRateLimiter } from '../src/routes/auth';
 import { UserRole } from '@prisma/client';
 
 const activeVerifiedUser = {
@@ -36,6 +36,7 @@ vi.mock('../src/db', () => ({
     refreshTokenLog: {
       create: vi.fn(),
     },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -58,6 +59,11 @@ vi.mock('../src/utils/token', () => ({
 
 vi.mock('../src/utils/auditLog', () => ({
   writeAuditLog: vi.fn(),
+  writeAuditLogBestEffort: vi.fn(),
+  auditContextFromRequest: vi.fn(() => ({
+    requestId: '11111111-1111-4111-8111-111111111111',
+    ipAddress: '127.0.0.1',
+  })),
 }));
 
 import { prisma } from '../src/db';
@@ -67,7 +73,27 @@ import {
   signRefreshToken,
   hashTokenForStorage,
 } from '../src/utils/token';
-import { writeAuditLog } from '../src/utils/auditLog';
+import {
+  writeAuditLog,
+  writeAuditLogBestEffort,
+  type AuditLogParams,
+} from '../src/utils/auditLog';
+import { auditSummaries } from '../src/utils/auditSummaries';
+
+// auditLog is mocked wholesale in this file, so the real summary-generation
+// logic never runs. Feed the params our route actually passed into the real
+// (unmocked) auditSummaries registry to prove the persisted summary would be
+// non-empty and free of secrets.
+function summaryFromCall(call: AuditLogParams): string {
+  return auditSummaries[call.action]({
+    actorType: call.actorType ?? 'anonymous',
+    actorRole: call.actorRole,
+    entityLabel: call.entityLabel,
+    outcome: call.outcome ?? 'success',
+    reasonCode: call.reasonCode ?? null,
+    details: call.details as Record<string, unknown> | undefined,
+  });
+}
 
 function createTestApp() {
   const app = express();
@@ -79,6 +105,11 @@ function createTestApp() {
 describe('POST /api/auth/login', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    loginRateLimiter.resetKey('::ffff:127.0.0.1');
+    loginRateLimiter.resetKey('127.0.0.1');
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) =>
+      (callback as (tx: typeof prisma) => Promise<unknown>)(prisma)
+    );
   });
 
   test('returns 401 if user does not exist', async () => {
@@ -96,6 +127,25 @@ describe('POST /api/auth/login', () => {
       code: 'INVALID_CREDENTIALS',
       message: 'Email or password is incorrect.',
     });
+    expect(writeAuditLogBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorType: 'anonymous',
+        action: 'user_login_denied',
+        entityId: null,
+        outcome: 'denied',
+        reasonCode: 'unknown_email',
+        requestId: '11111111-1111-4111-8111-111111111111',
+      })
+    );
+
+    // No account was resolved, so no entityLabel — but a summary is still generated.
+    const call = vi.mocked(writeAuditLogBestEffort).mock.calls[0][0];
+    expect(call).not.toHaveProperty('entityLabel');
+    expect(call).not.toHaveProperty('actorRole');
+    const summary = summaryFromCall(call);
+    expect(summary.length).toBeGreaterThan(0);
+    expect(summary).not.toContain('student@myseneca.ca');
+    expect(JSON.stringify(call)).not.toContain('student@myseneca.ca');
   });
 
   test('returns 403 if account is inactive', async () => {
@@ -113,6 +163,14 @@ describe('POST /api/auth/login', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('ACCOUNT_INACTIVE');
+    expect(writeAuditLogBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorType: 'anonymous',
+        action: 'user_login_denied',
+        entityId: 'user-1',
+        reasonCode: 'account_inactive',
+      })
+    );
   });
 
   test('returns 401 if password is wrong', async () => {
@@ -128,6 +186,17 @@ describe('POST /api/auth/login', () => {
 
     expect(res.status).toBe(401);
     expect(res.body.code).toBe('INVALID_CREDENTIALS');
+    expect(writeAuditLogBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorType: 'anonymous',
+        action: 'user_login_denied',
+        entityId: 'user-1',
+        reasonCode: 'wrong_password',
+      })
+    );
+    expect(
+      JSON.stringify(vi.mocked(writeAuditLogBestEffort).mock.calls)
+    ).not.toContain('WrongPassword123');
   });
 
   test('returns 403 if email is not verified', async () => {
@@ -146,6 +215,14 @@ describe('POST /api/auth/login', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('EMAIL_NOT_VERIFIED');
+    expect(writeAuditLogBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorType: 'anonymous',
+        action: 'user_login_denied',
+        entityId: 'user-1',
+        reasonCode: 'email_not_verified',
+      })
+    );
   });
 
   test('returns 200 with tokens and user when login succeeds', async () => {
@@ -188,7 +265,28 @@ describe('POST /api/auth/login', () => {
       expect.objectContaining({
         actorId: 'user-1',
         action: 'user_login',
-      })
+        outcome: 'success',
+        requestId: '11111111-1111-4111-8111-111111111111',
+      }),
+      prisma
     );
+  });
+
+  test('audits only the first rate-limited request in a limiter window', async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+    const app = createTestApp();
+
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      await request(app).post('/api/auth/login').send({
+        email: 'student@myseneca.ca',
+        password: 'Password123',
+      });
+    }
+
+    const rateLimitedCalls = vi
+      .mocked(writeAuditLogBestEffort)
+      .mock.calls.filter(([event]) => event.reasonCode === 'rate_limited');
+    expect(rateLimitedCalls).toHaveLength(1);
+    expect(prisma.user.findUnique).toHaveBeenCalledTimes(10);
   });
 });

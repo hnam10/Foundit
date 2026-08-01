@@ -8,8 +8,10 @@ import { validate } from '../validators/shared';
 import {
   replaceProfileSchema,
   updateNotificationSchema,
+  updateProfilePhotoSchema,
 } from '../validators/users';
-import { writeAuditLog } from '../utils/auditLog';
+import { auditContextFromRequest, writeAuditLog } from '../utils/auditLog';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 const router = Router();
 
@@ -22,9 +24,9 @@ const userProfileSelect = {
   firstName: true,
   lastName: true,
   campusId: true,
-  phone: true,
   studentNumber: true,
   employeeId: true,
+  profilePhotoUrl: true,
   emailNotificationOptIn: true,
   isActive: true,
   createdAt: true,
@@ -35,7 +37,12 @@ type UserProfileRow = Pick<User, keyof typeof userProfileSelect> & {
   campus?: { campusName: string } | null;
 };
 
-function toUserProfileDto(user: UserProfileRow) {
+/**
+ * `profilePhotoUrl` is stored as a bucket key but returned resolved (public or
+ * presigned GET), matching how items and claims expose image URLs. The resolve
+ * step is async, so every call site awaits.
+ */
+async function toUserProfileDto(user: UserProfileRow) {
   return {
     userId: user.userId,
     email: user.email,
@@ -45,10 +52,12 @@ function toUserProfileDto(user: UserProfileRow) {
     lastName: user.lastName,
     campusId: user.campusId,
     campusName: user.campus?.campusName ?? null,
-    phone: user.phone,
     studentNumber:
       user.studentNumber !== null ? Number(user.studentNumber) : null,
     employeeId: user.employeeId,
+    profilePhotoUrl: user.profilePhotoUrl
+      ? await resolveImageUrl(user.profilePhotoUrl)
+      : null,
     emailNotificationOptIn: user.emailNotificationOptIn,
     isActive: user.isActive,
     createdAt: user.createdAt,
@@ -121,15 +130,16 @@ async function loadActiveUserProfile(
  *                   type: string
  *                   format: uuid
  *                   nullable: true
- *                 phone:
- *                   type: string
- *                   nullable: true
  *                 studentNumber:
  *                   type: integer
  *                   nullable: true
  *                 employeeId:
  *                   type: string
  *                   nullable: true
+ *                 profilePhotoUrl:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Resolved image URL, or null when no photo is set
  *                 emailNotificationOptIn:
  *                   type: boolean
  *                 isActive:
@@ -154,7 +164,7 @@ router.get('/me', authenticate, async (req, res, next) => {
       return;
     }
 
-    res.status(200).json(toUserProfileDto(user));
+    res.status(200).json(await toUserProfileDto(user));
   } catch (err) {
     next(err);
   }
@@ -165,7 +175,7 @@ router.get('/me', authenticate, async (req, res, next) => {
  * /api/users/me:
  *   put:
  *     summary: Replace the authenticated user's editable profile fields
- *     description: Updates `firstName`, `lastName`, and `phone` only. Send `phone` as `null` to clear it.
+ *     description: Updates `firstName` and `lastName`. Students may also set `studentNumber` (9-digit Seneca ID) or send `null` to clear it.
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -175,16 +185,18 @@ router.get('/me', authenticate, async (req, res, next) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [firstName, lastName, phone]
+ *             required: [firstName, lastName]
  *             properties:
  *               firstName:
  *                 type: string
  *               lastName:
  *                 type: string
- *               phone:
- *                 type: string
+ *               studentNumber:
+ *                 type: integer
  *                 nullable: true
- *                 example: '4161234567'
+ *                 minimum: 100000000
+ *                 maximum: 999999999
+ *                 description: Seneca student number (students only)
  *     responses:
  *       '200':
  *         description: Updated user profile
@@ -196,6 +208,8 @@ router.get('/me', authenticate, async (req, res, next) => {
  *         description: Account has been deactivated
  *       '404':
  *         description: User no longer exists
+ *       '409':
+ *         description: Student number already in use
  */
 router.put(
   '/me',
@@ -209,53 +223,259 @@ router.put(
         return;
       }
 
-      const { firstName, lastName, phone } = req.body as z.infer<
+      const { firstName, lastName, studentNumber } = req.body as z.infer<
         typeof replaceProfileSchema
       >;
 
-      const updated = await prisma.user.update({
-        where: { userId },
-        data: { firstName, lastName, phone },
-        select: {
-          ...userProfileSelect,
-          campus: { select: { campusName: true } },
-        },
-      });
+      const isStudent = existing.role === 'student';
+      const data: {
+        firstName: string;
+        lastName: string;
+        studentNumber?: bigint | null;
+      } = { firstName, lastName };
 
-      await writeAuditLog({
-        actorId: userId,
-        action: 'user_profile_updated',
-        entityType: 'user',
-        entityId: userId,
-        details: {
-          previous: {
-            firstName: existing.firstName,
-            lastName: existing.lastName,
-            phone: existing.phone,
-          },
-          updated: { firstName, lastName, phone },
-        },
-        ipAddress: req.ip,
-      });
+      if (isStudent && studentNumber !== undefined) {
+        data.studentNumber =
+          studentNumber === null ? null : BigInt(studentNumber);
+      }
 
-      res.status(200).json(toUserProfileDto(updated));
+      let updated;
+      try {
+        const context = auditContextFromRequest(req);
+        const changedFields = [
+          ...(existing.firstName !== firstName ? ['firstName'] : []),
+          ...(existing.lastName !== lastName ? ['lastName'] : []),
+          ...(isStudent && studentNumber !== undefined
+            ? ['studentNumber']
+            : []),
+        ];
+        updated = await prisma.$transaction(async (tx) => {
+          const profile = await tx.user.update({
+            where: { userId },
+            data,
+            select: {
+              ...userProfileSelect,
+              campus: { select: { campusName: true } },
+            },
+          });
+          await writeAuditLog(
+            {
+              actorId: userId,
+              actorType: 'user',
+              actorRole: req.user!.role,
+              action: 'user_profile_updated',
+              entityType: 'user',
+              entityId: userId,
+              outcome: 'success',
+              details: { changedFields },
+              ...context,
+            },
+            tx
+          );
+          return profile;
+        });
+      } catch (err: unknown) {
+        if (
+          typeof err === 'object' &&
+          err !== null &&
+          'code' in err &&
+          (err as { code: string }).code === 'P2002'
+        ) {
+          res.status(409).json({
+            code: 'STUDENT_NUMBER_TAKEN',
+            message: 'That student ID is already linked to another account.',
+          });
+          return;
+        }
+        throw err;
+      }
+
+      res.status(200).json(await toUserProfileDto(updated));
     } catch (err) {
       next(err);
     }
   }
 );
 
-// TODO: Toggle email_notification_opt_in (students only)
 router.patch(
   '/me/notifications',
   authenticate,
   requireRole('student'),
   validate(updateNotificationSchema),
-  (_req, res) => {
-    res.status(501).json({
-      code: 'NOT_IMPLEMENTED',
-      message: 'PATCH /api/users/me/notifications not yet implemented',
-    });
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.user_id;
+      const { emailNotificationOptIn } = req.body as z.infer<
+        typeof updateNotificationSchema
+      >;
+
+      const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.user.findUnique({
+          where: { userId },
+          select: {
+            ...userProfileSelect,
+            campus: { select: { campusName: true } },
+          },
+        });
+
+        if (!existing) {
+          return {
+            updated: undefined,
+            error: {
+              status: 404,
+              body: {
+                code: 'USER_NOT_FOUND',
+                message: 'User account no longer exists.',
+              },
+            },
+          } as const;
+        }
+
+        if (!existing.isActive) {
+          return {
+            updated: undefined,
+            error: {
+              status: 403,
+              body: {
+                code: 'ACCOUNT_INACTIVE',
+                message:
+                  'Your account has been deactivated. Contact an administrator.',
+              },
+            },
+          } as const;
+        }
+
+        const updated = await tx.user.update({
+          where: { userId },
+          data: { emailNotificationOptIn },
+          select: {
+            ...userProfileSelect,
+            campus: { select: { campusName: true } },
+          },
+        });
+
+        await writeAuditLog(
+          {
+            actorId: userId,
+            actorRole: req.user!.role,
+            action: 'user_notification_preferences_updated',
+            entityType: 'user',
+            entityId: userId,
+            details: {
+              previous: {
+                emailNotificationOptIn: existing.emailNotificationOptIn,
+              },
+              updated: { emailNotificationOptIn },
+            },
+            ipAddress: req.ip,
+          },
+          tx
+        );
+
+        return { updated, error: undefined } as const;
+      });
+
+      if (result.error) {
+        res.status(result.error.status).json(result.error.body);
+        return;
+      }
+
+      res.status(200).json(await toUserProfileDto(result.updated));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/users/me/photo:
+ *   patch:
+ *     summary: Set or clear the authenticated user's profile photo
+ *     description: >
+ *       Accepts the object key returned by `POST /api/uploads/presigned-url`
+ *       with `purpose: avatar`, or `null` to remove the photo. Absolute URLs
+ *       are rejected — the profile response returns a resolved (and possibly
+ *       expiring) URL that must not be written back.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [profilePhotoUrl]
+ *             properties:
+ *               profilePhotoUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: avatars/2f6c1b90-1f7c-4a1f-9a6e-6f0f2d1c9b11.webp
+ *     responses:
+ *       '200':
+ *         description: Updated user profile
+ *       '400':
+ *         description: Validation error
+ *       '401':
+ *         description: Missing or invalid access token
+ *       '403':
+ *         description: Account has been deactivated
+ *       '404':
+ *         description: User no longer exists
+ */
+router.patch(
+  '/me/photo',
+  // No requireRole — every role has a profile photo.
+  authenticate,
+  validate(updateProfilePhotoSchema),
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.user_id;
+      const existing = await loadActiveUserProfile(userId, res);
+      if (!existing) {
+        return;
+      }
+
+      const { profilePhotoUrl } = req.body as z.infer<
+        typeof updateProfilePhotoSchema
+      >;
+      const context = auditContextFromRequest(req);
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const profile = await tx.user.update({
+          where: { userId },
+          data: { profilePhotoUrl },
+          select: {
+            ...userProfileSelect,
+            campus: { select: { campusName: true } },
+          },
+        });
+
+        await writeAuditLog(
+          {
+            actorId: userId,
+            actorType: 'user',
+            actorRole: req.user!.role,
+            action: 'user_profile_photo_updated',
+            entityType: 'user',
+            entityId: userId,
+            outcome: 'success',
+            details: {
+              operation: profilePhotoUrl === null ? 'cleared' : 'set',
+            },
+            ...context,
+          },
+          tx
+        );
+
+        return profile;
+      });
+
+      res.status(200).json(await toUserProfileDto(updated));
+    } catch (err) {
+      next(err);
+    }
   }
 );
 

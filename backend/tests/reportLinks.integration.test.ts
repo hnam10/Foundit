@@ -45,6 +45,10 @@ vi.mock('../src/utils/reportLinkToken', () => ({
 
 vi.mock('../src/utils/auditLog', () => ({
   writeAuditLog: vi.fn(),
+  auditContextFromRequest: vi.fn(() => ({
+    requestId: '11111111-1111-4111-8111-111111111111',
+    ipAddress: '127.0.0.1',
+  })),
 }));
 
 vi.mock('../src/db', () => ({
@@ -95,6 +99,9 @@ describe('report links routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.authUser = { user_id: 'security-1', role: 'security' };
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) =>
+      (callback as (tx: typeof prisma) => Promise<unknown>)(prisma)
+    );
   });
 
   test('POST /api/report-links returns 401 if not authenticated', async () => {
@@ -169,7 +176,8 @@ describe('report links routes', () => {
         actorId: 'security-1',
         action: 'report_link_created',
         entityType: 'report_link',
-      })
+      }),
+      prisma
     );
   });
 
@@ -307,12 +315,18 @@ describe('report links routes', () => {
 
     vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(activeStudent);
 
+    const notificationCreate = vi
+      .fn()
+      .mockResolvedValue({ notificationId: 'notification-1' });
     vi.mocked(prisma.$transaction).mockImplementationOnce(async (callback) => {
       return callback({
         campus: {
           findUnique: vi.fn().mockResolvedValueOnce({
             retentionDays: 30,
           }),
+        },
+        notification: {
+          create: notificationCreate,
         },
         foundItemReport: {
           create: vi.fn().mockResolvedValueOnce({
@@ -363,5 +377,14 @@ describe('report links routes', () => {
     expect(res.body.reportId).toBe('report-1');
     expect(res.body.itemId).toBe('item-1');
     expect(res.body.status).toBe('linked_to_item');
+    expect(notificationCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        recipientId: 'student-1',
+        type: 'report_confirmation',
+        title: 'Report received',
+        referenceType: 'item',
+        referenceId: 'item-1',
+      }),
+    });
   });
 });

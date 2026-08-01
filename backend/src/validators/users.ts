@@ -1,33 +1,28 @@
 import { z } from 'zod';
 
 // PUT /api/users/me — replaces the user's editable profile fields.
-// phone: null clears the number; a 10-digit string sets it.
 export const replaceProfileSchema = z.object({
   firstName: z.string().min(1).max(100).trim(),
   lastName: z.string().min(1).max(100).trim(),
-  phone: z
-    .string()
-    .regex(/^\d{10}$/)
-    .nullable(),
+  studentNumber: z
+    .union([z.null(), z.coerce.number().int().min(100000000).max(999999999)])
+    .optional(),
 });
 
 // PATCH /api/users/me — all fields optional but at least one must be present.
-// phone: null = clear the number; undefined = no change; "1234567890" = set new value.
 export const updateProfileSchema = z
   .object({
     firstName: z.string().min(1).max(100).trim().optional(),
     lastName: z.string().min(1).max(100).trim().optional(),
-    phone: z
-      .string()
-      .regex(/^\d{10}$/)
-      .nullable()
+    studentNumber: z
+      .union([z.null(), z.coerce.number().int().min(100000000).max(999999999)])
       .optional(),
   })
   .refine(
     (data) =>
       data.firstName !== undefined ||
       data.lastName !== undefined ||
-      data.phone !== undefined,
+      data.studentNumber !== undefined,
     {
       message: 'At least one field must be provided',
     }
@@ -36,6 +31,29 @@ export const updateProfileSchema = z
 // PATCH /api/users/me/notifications
 export const updateNotificationSchema = z.object({
   emailNotificationOptIn: z.boolean(),
+});
+
+// PATCH /api/users/me/photo
+// Accepts only a bucket key produced by POST /api/uploads/presigned-url with
+// purpose 'avatar', or null to clear the photo. Absolute URLs are rejected on
+// purpose: the profile DTO returns a *resolved* URL (a presigned GET that
+// expires within the hour when R2_PUBLIC_BASE_URL is unset), so a client that
+// echoes a fetched value back must fail loudly rather than persist a URL that
+// will rot.
+export const AVATAR_KEY_PATTERN =
+  /^avatars\/[A-Za-z0-9-]+\.(jpeg|jpg|png|webp)$/;
+
+export const updateProfilePhotoSchema = z.object({
+  profilePhotoUrl: z.union([
+    z.null(),
+    z
+      .string()
+      .max(500)
+      .regex(
+        AVATAR_KEY_PATTERN,
+        'profilePhotoUrl must be an avatar object key, not a URL.'
+      ),
+  ]),
 });
 
 // POST /api/admin/users — password and role-conditional fields (studentNumber/employeeId)
