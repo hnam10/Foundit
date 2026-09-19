@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import itemsRouter from '../src/routes/items';
 import { ItemStatus } from '@prisma/client';
 import { auditSummaries } from '../src/utils/auditSummaries';
+import errorHandler from '../src/middleware/errorHandler';
 
 const mocks = vi.hoisted(() => ({
   authUser: { user_id: 'security-1', role: 'security' } as {
@@ -77,6 +78,7 @@ function createTestApp() {
   const app = express();
   app.use(express.json());
   app.use('/api', itemsRouter);
+  app.use(errorHandler);
   return app;
 }
 
@@ -242,17 +244,25 @@ describe('items routes', () => {
     );
     vi.mocked(prisma.item.findUnique).mockResolvedValueOnce(itemDetailRow);
 
-    const res = await request(createTestApp()).post('/api/items').send({
-      campusId,
-      title: 'iPhone',
-      description: 'Black iPhone',
-      category: 'Electronics',
-      locationFound: 'Library',
-      dateFound: '2026-07-01',
-      images: [],
-    });
+    const res = await request(createTestApp())
+      .post('/api/items')
+      .send({
+        campusId,
+        title: 'iPhone',
+        description: 'Black iPhone',
+        category: 'Electronics',
+        locationFound: 'Library',
+        dateFound: '2026-07-01',
+        images: [
+          {
+            imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg',
+            fileType: 'jpg',
+            fileSizeKb: 128,
+          },
+        ],
+      });
 
-    expect(res.status).toBe(201);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'security-1',
@@ -263,7 +273,7 @@ describe('items routes', () => {
         outcome: 'success',
         requestId: '11111111-1111-4111-8111-111111111111',
         details: expect.objectContaining({
-          imageCount: 0,
+          imageCount: 1,
           source: 'security_direct_intake',
         }),
       }),
@@ -297,7 +307,7 @@ describe('items routes', () => {
         descriptionInternal: 'Private description',
       });
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'item_updated',
@@ -369,7 +379,7 @@ describe('items routes', () => {
       .patch(`/api/items/${itemId}/status`)
       .send({ status: 'expired' });
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(writeAuditLogs).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
@@ -398,7 +408,7 @@ describe('items routes', () => {
       .patch(`/api/items/${itemId}/status`)
       .send({ status: 'disposed' });
 
-    expect(res.status).toBe(409);
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(writeAuditLogBestEffort).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -3,6 +3,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import claimsRouter from '../src/routes/claims';
 import { UserRole, ClaimStatus, ItemStatus } from '@prisma/client';
+import errorHandler from '../src/middleware/errorHandler';
 
 const mocks = vi.hoisted(() => ({
   authUser: { user_id: 'student-1' } as {
@@ -58,9 +59,13 @@ vi.mock('../src/lib/matching/suggestions', () => ({
   refreshClaimMatchSuggestions: vi.fn(),
 }));
 
-vi.mock('../src/lib/email', () => ({
-  sendNotificationEmail: vi.fn(),
-}));
+vi.mock('../src/lib/email', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/email')>();
+  return {
+    ...actual,
+    sendNotificationEmail: vi.fn(),
+  };
+});
 
 import { prisma } from '../src/db';
 import { sendNotificationEmail } from '../src/lib/email';
@@ -71,6 +76,7 @@ function createTestApp() {
   const app = express();
   app.use(express.json());
   app.use('/api/claims', claimsRouter);
+  app.use(errorHandler);
   return app;
 }
 
@@ -324,7 +330,7 @@ describe('claims routes', () => {
       .post('/api/claims')
       .send({ category: 'Electronics', description: 'Lost my iPhone' });
 
-    expect(res.status).toBe(201);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(tx.claim.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -374,7 +380,7 @@ describe('claims routes', () => {
       .post('/api/claims')
       .send({ category: 'Electronics', description: 'Lost my iPhone' });
 
-    expect(res.status).toBe(201);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(prisma.campus.findFirst).not.toHaveBeenCalled();
     expect(tx.claim.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -458,7 +464,7 @@ describe('claims routes', () => {
       description: 'Lost my iPhone',
     });
 
-    expect(res.status).toBe(201);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(prisma.campus.findUnique).toHaveBeenCalledWith({
       where: { campusId: selectedCampusId },
       select: { campusId: true },
@@ -551,7 +557,7 @@ describe('claims routes', () => {
       '/api/claims/550e8400-e29b-41d4-a716-446655440000'
     );
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.deleted).toBe(true);
     expect(tx.notification.createMany).toHaveBeenCalledWith({
       data: [
@@ -637,7 +643,7 @@ describe('claims routes', () => {
         rejectionReason: 'Not enough ownership details.',
       });
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(tx.item.updateMany).toHaveBeenCalledWith({
       where: {
         itemId: '550e8400-e29b-41d4-a716-446655440010',
@@ -738,7 +744,7 @@ describe('claims routes', () => {
       .patch('/api/claims/550e8400-e29b-41d4-a716-446655440000/status')
       .send({ status: 'picked_up' });
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(sendNotificationEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'student@myseneca.ca',
@@ -780,7 +786,13 @@ describe('claims routes', () => {
       message: 'Your claim for "iPhone 15" is now approved.',
     };
     const tx = {
-      item: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      item: {
+        findUnique: vi.fn().mockResolvedValue({
+          itemId: '550e8400-e29b-41d4-a716-446655440010',
+          status: ItemStatus.stored,
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       claim: { update: vi.fn().mockResolvedValue(approvedClaim) },
       notification: { create: vi.fn().mockResolvedValue(notification) },
       auditLog: { create: vi.fn().mockResolvedValue({ logId: 'log-4' }) },
@@ -793,7 +805,7 @@ describe('claims routes', () => {
       .patch('/api/claims/550e8400-e29b-41d4-a716-446655440000/status')
       .send({ status: 'approved' });
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     const auditRows = tx.auditLog.create.mock.calls.map(
       ([input]) => input.data
     );

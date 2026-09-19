@@ -74,7 +74,13 @@ describe('items validators', () => {
       category: 'Electronics',
       locationFound: 'Library',
       dateFound: '2026-07-01',
-      images: [],
+      images: [
+        {
+          imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg',
+          fileType: 'jpg',
+          fileSizeKb: 128,
+        },
+      ],
     });
 
     expect(result.success).toBe(true);

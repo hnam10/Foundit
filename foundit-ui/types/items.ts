@@ -35,6 +35,7 @@ export interface SecurityItemListItem {
   category: string;
   title: string;
   dateFound: string;
+  createdAt: string;
   status: ItemStatus;
   retentionExpiryDate: string | null;
   imageUrl: string | null;
@@ -71,7 +72,6 @@ export interface SecurityItemDetail extends SecurityItemListItem {
   brand: string | null;
   locationFound: string | null;
   foundItemReportId: string | null;
-  createdAt: string;
   updatedAt: string;
   images: SecurityItemImage[];
   registeredBy: {

@@ -28,6 +28,7 @@ import {
 import { scheduleClaimSearchIndexIngest } from '../lib/matching/ingest';
 import { refreshClaimMatchSuggestions } from '../lib/matching/suggestions';
 import { resolveImageUrl } from '../utils/imageUrl';
+import { MISSING_CAMPUS_ID } from '../constants/campus';
 import {
   claimAndMatchParamsSchema,
   claimParamsSchema,
@@ -41,7 +42,6 @@ import {
 import { validate, validateQuery } from '../validators/shared';
 
 const router = Router();
-const MISSING_CAMPUS_ID = '00000000-0000-0000-0000-000000000000';
 
 const claimListSelect = {
   claimId: true,
@@ -161,6 +161,7 @@ const matchSuggestionSelect = {
       color: true,
       locationFound: true,
       dateFound: true,
+      createdAt: true,
       descriptionPublic: true,
       images: {
         select: {
@@ -325,6 +326,7 @@ async function toMatchSuggestionDto(match: MatchSuggestionRow) {
       color: match.item.color,
       locationFound: match.item.locationFound,
       dateFound: match.item.dateFound,
+      createdAt: match.item.createdAt,
       descriptionPublic: match.item.descriptionPublic,
       imageUrl: storedImageUrl ? await resolveImageUrl(storedImageUrl) : null,
     },
@@ -481,26 +483,32 @@ function createMatchFoundNotificationInput(claim: {
 async function reserveItemForClaim(
   tx: Prisma.TransactionClient,
   itemId: string
-) {
+): Promise<ItemStatus> {
+  const item = await tx.item.findUnique({
+    where: { itemId },
+    select: { itemId: true, status: true },
+  });
+
+  if (!item) {
+    throw new Error('LINKED_ITEM_NOT_FOUND');
+  }
+
+  if (item.status !== ItemStatus.stored && item.status !== ItemStatus.expired) {
+    const conflictError = new Error('LINKED_ITEM_NOT_STORED');
+    conflictError.name = 'LINKED_ITEM_NOT_STORED';
+    throw conflictError;
+  }
+
   const updateResult = await tx.item.updateMany({
     where: {
       itemId,
-      status: ItemStatus.stored,
+      status: item.status,
     },
     data: { status: ItemStatus.claimed },
   });
 
   if (updateResult.count > 0) {
-    return;
-  }
-
-  const item = await tx.item.findUnique({
-    where: { itemId },
-    select: { itemId: true },
-  });
-
-  if (!item) {
-    throw new Error('LINKED_ITEM_NOT_FOUND');
+    return item.status;
   }
 
   const conflictError = new Error('LINKED_ITEM_NOT_STORED');
@@ -522,7 +530,7 @@ async function applyMatchConfirmation(
   context: { requestId: string; ipAddress?: string },
   itemLabel?: string
 ) {
-  await reserveItemForClaim(tx, itemId);
+  const previousItemStatus = await reserveItemForClaim(tx, itemId);
 
   const now = new Date();
   const updatedClaim = await tx.claim.update({
@@ -598,7 +606,7 @@ async function applyMatchConfirmation(
         entityLabel: itemLabel,
         outcome: 'success',
         details: {
-          previousStatus: ItemStatus.stored,
+          previousStatus: previousItemStatus,
           nextStatus: ItemStatus.claimed,
           claimId: claim.claimId,
         },
@@ -1262,7 +1270,10 @@ router.patch(
         return;
       }
 
-      if (item.status !== ItemStatus.stored) {
+      if (
+        item.status !== ItemStatus.stored &&
+        item.status !== ItemStatus.expired
+      ) {
         const context = auditContextFromRequest(req);
         await writeAuditLogBestEffort({
           actorId: actor.userId,
@@ -1279,7 +1290,7 @@ router.patch(
         });
         res.status(409).json({
           code: 'ITEM_NOT_STORED',
-          message: 'Only stored items can be linked to a claim.',
+          message: 'Only stored or expired items can be linked to a claim.',
         });
         return;
       }
@@ -1454,7 +1465,7 @@ router.patch(
           let nextItemStatus: ItemStatus = ItemStatus.claimed;
 
           if (status === ClaimStatus.approved && claim.itemId) {
-            await reserveItemForClaim(tx, claim.itemId);
+            previousItemStatus = await reserveItemForClaim(tx, claim.itemId);
             itemTransitioned = true;
           }
 
@@ -1603,7 +1614,8 @@ router.patch(
       if (err instanceof Error && err.name === 'LINKED_ITEM_NOT_STORED') {
         res.status(409).json({
           code: 'LINKED_ITEM_NOT_STORED',
-          message: 'The linked item must still be stored before approval.',
+          message:
+            'The linked item must still be stored or expired before approval.',
         });
         return;
       }
@@ -1886,7 +1898,10 @@ router.patch(
               throw new Error('MATCH_ITEM_NOT_FOUND');
             }
 
-            if (item.status !== ItemStatus.stored) {
+            if (
+              item.status !== ItemStatus.stored &&
+              item.status !== ItemStatus.expired
+            ) {
               const conflictError = new Error('MATCH_ITEM_NOT_STORED');
               conflictError.name = 'MATCH_ITEM_NOT_STORED';
               throw conflictError;
@@ -1985,7 +2000,7 @@ router.patch(
       if (err instanceof Error && err.name === 'MATCH_ITEM_NOT_STORED') {
         res.status(409).json({
           code: 'MATCH_ITEM_NOT_STORED',
-          message: 'Only stored items can be confirmed as a match.',
+          message: 'Only stored or expired items can be confirmed as a match.',
         });
         return;
       }

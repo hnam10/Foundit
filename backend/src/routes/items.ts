@@ -68,6 +68,7 @@ const securityItemListSelect = {
   category: true,
   title: true,
   dateFound: true,
+  createdAt: true,
   status: true,
   retentionExpiryDate: true,
   campus: {
@@ -219,6 +220,7 @@ async function toSecurityItemListDto(item: SecurityItemListRow) {
     category: item.category,
     title: item.title,
     dateFound: item.dateFound,
+    createdAt: item.createdAt,
     status: item.status,
     retentionExpiryDate: item.retentionExpiryDate,
     imageUrl: storedImageUrl ? await resolveImageUrl(storedImageUrl) : null,
