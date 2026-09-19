@@ -1,7 +1,11 @@
 import crypto from 'crypto';
 import { Router, Response } from 'express';
 import rateLimit from 'express-rate-limit';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
@@ -24,6 +28,8 @@ import {
 import { getUploadSizeCategory } from '../utils/uploadMetadata';
 
 const MAX_IMAGES_PER_SESSION = 3;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const PRESIGNED_UPLOAD_TTL_SECONDS = 60 * 60;
 
 class PhotoSessionFullError extends Error {
   readonly code = 'PHOTO_SESSION_FULL';
@@ -107,7 +113,7 @@ async function createPresignedReportUpload(
   });
 
   const uploadUrl = await getSignedUrl(r2, command, {
-    expiresIn: 60 * 60,
+    expiresIn: PRESIGNED_UPLOAD_TTL_SECONDS,
   });
 
   return {
@@ -378,22 +384,71 @@ router.post(
         return;
       }
 
-      await writeAuditLog({
-        actorType: 'anonymous',
-        action: 'photo_image_registered',
-        entityType: 'photo_session_image',
-        entityId: image.imageId,
-        entityLabel: `photo session ${session.sessionId}`,
-        outcome: 'success',
-        details: {
-          sessionId: session.sessionId,
-          fileType,
-          sizeCategory: getUploadSizeCategory(fileSizeKb),
-        },
-        ...auditContextFromRequest(req),
+      const storedObject = await r2.send(
+        new HeadObjectCommand({
+          Bucket: R2_BUCKET,
+          Key: image.imageUrl,
+        })
+      );
+      const actualSizeBytes = storedObject.ContentLength;
+      const actualContentType = storedObject.ContentType;
+      const uploadIsValid =
+        typeof actualSizeBytes === 'number' &&
+        actualSizeBytes > 0 &&
+        actualSizeBytes <= MAX_IMAGE_SIZE_BYTES &&
+        Math.ceil(actualSizeBytes / 1024) === image.fileSizeKb &&
+        actualContentType === `image/${image.fileType}`;
+
+      if (!uploadIsValid) {
+        await r2.send(
+          new DeleteObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: image.imageUrl,
+          })
+        );
+        await prisma.photoSessionImage.delete({
+          where: { imageId: image.imageId },
+        });
+        res.status(400).json({
+          code: 'INVALID_UPLOAD',
+          message: 'Uploaded image does not match the reserved upload.',
+        });
+        return;
+      }
+
+      const registeredImage = await prisma.$transaction(async (tx) => {
+        const registered = await tx.photoSessionImage.update({
+          where: { imageId: image.imageId },
+          data: { uploadedAt: new Date() },
+          select: {
+            imageId: true,
+            imageUrl: true,
+            fileType: true,
+            fileSizeKb: true,
+            createdAt: true,
+          },
+        });
+        await writeAuditLog(
+          {
+            actorType: 'anonymous',
+            action: 'photo_image_registered',
+            entityType: 'photo_session_image',
+            entityId: image.imageId,
+            entityLabel: `photo session ${session.sessionId}`,
+            outcome: 'success',
+            details: {
+              sessionId: session.sessionId,
+              fileType,
+              sizeCategory: getUploadSizeCategory(fileSizeKb),
+            },
+            ...auditContextFromRequest(req),
+          },
+          tx
+        );
+        return registered;
       });
 
-      res.status(201).json(image);
+      res.status(201).json(registeredImage);
     } catch (err) {
       next(err);
     }
@@ -424,6 +479,7 @@ router.get(
           createdBy: true,
           expiresAt: true,
           images: {
+            where: { uploadedAt: { not: null } },
             select: {
               imageId: true,
               imageUrl: true,
