@@ -146,8 +146,8 @@ variable "smtp_pass" {
 
 # --- Secrets: optional, backend already has a safe fallback for this one ---
 
-variable "openrouter_api_key" {
-  description = "Optional OpenRouter API key. Leave empty to fall back to local hash embeddings."
+variable "openai_api_key" {
+  description = "Optional OpenAI API key. Leave empty to fall back to local hash embeddings."
   type        = string
   sensitive   = true
   default     = ""

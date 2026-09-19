@@ -144,7 +144,7 @@ and run each block below with `sudo`:
    `pm2 restart foundit-backend`. None are required — each has a working
    default — but see the sections below for what changes when they are set:
    `TRUST_PROXY_HOPS`, `R2_PUBLIC_BASE_URL`, `R2_SIGNED_URL_TTL_SECONDS`,
-   `OPENROUTER_API_KEY`.
+   `OPENAI_API_KEY`.
 
 Verify with `pm2 status`, then push a trivial commit to `main` and watch the
 workflow's "Verify backend is live" step go green.
@@ -155,7 +155,7 @@ Match suggestions rank almost entirely on semantic similarity (0.8 of the
 hybrid score). Two things must be true in production or the feature looks
 alive while returning nonsense:
 
-1. **`OPENROUTER_API_KEY` must be set** in `/opt/foundit/backend/.env`. When it
+1. **`OPENAI_API_KEY` must be set** in `/opt/foundit/backend/.env`. When it
    is absent the backend falls back to a meaningless local hash embedding. It
    is no longer silent — the boot log carries a `warn` saying semantic matching
    is degraded — so after restarting, confirm that warning is **not** present:
