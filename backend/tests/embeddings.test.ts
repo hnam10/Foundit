@@ -14,18 +14,18 @@ async function loadEmbeddings(): Promise<EmbeddingsModule> {
   return import('../src/lib/matching/embeddings');
 }
 
-const originalApiKey = process.env.OPENROUTER_API_KEY;
+const originalApiKey = process.env.OPENAI_API_KEY;
 
 beforeEach(() => {
   warnSpy.mockClear();
-  delete process.env.OPENROUTER_API_KEY;
+  delete process.env.OPENAI_API_KEY;
 });
 
 afterEach(() => {
   if (originalApiKey === undefined) {
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENAI_API_KEY;
   } else {
-    process.env.OPENROUTER_API_KEY = originalApiKey;
+    process.env.OPENAI_API_KEY = originalApiKey;
   }
   vi.restoreAllMocks();
 });
@@ -38,15 +38,13 @@ describe('isSemanticMatchingDegraded', () => {
 
   test('reports degraded when the key is blank or whitespace', async () => {
     const { isSemanticMatchingDegraded } = await loadEmbeddings();
-    expect(isSemanticMatchingDegraded({ OPENROUTER_API_KEY: '' })).toBe(true);
-    expect(isSemanticMatchingDegraded({ OPENROUTER_API_KEY: '   ' })).toBe(
-      true
-    );
+    expect(isSemanticMatchingDegraded({ OPENAI_API_KEY: '' })).toBe(true);
+    expect(isSemanticMatchingDegraded({ OPENAI_API_KEY: '   ' })).toBe(true);
   });
 
   test('reports healthy when the key is set', async () => {
     const { isSemanticMatchingDegraded } = await loadEmbeddings();
-    expect(isSemanticMatchingDegraded({ OPENROUTER_API_KEY: 'sk-test' })).toBe(
+    expect(isSemanticMatchingDegraded({ OPENAI_API_KEY: 'sk-test' })).toBe(
       false
     );
   });
@@ -55,7 +53,7 @@ describe('isSemanticMatchingDegraded', () => {
     const { isSemanticMatchingDegraded } = await loadEmbeddings();
     expect(isSemanticMatchingDegraded()).toBe(true);
 
-    process.env.OPENROUTER_API_KEY = 'sk-test';
+    process.env.OPENAI_API_KEY = 'sk-test';
     expect(isSemanticMatchingDegraded()).toBe(false);
   });
 });
@@ -69,11 +67,11 @@ describe('warnIfSemanticMatchingDegraded', () => {
     warnIfSemanticMatchingDegraded();
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(String(warnSpy.mock.calls[0][0])).toContain('OPENROUTER_API_KEY');
+    expect(String(warnSpy.mock.calls[0][0])).toContain('OPENAI_API_KEY');
   });
 
   test('stays silent when the key is configured', async () => {
-    process.env.OPENROUTER_API_KEY = 'sk-test';
+    process.env.OPENAI_API_KEY = 'sk-test';
     const { warnIfSemanticMatchingDegraded } = await loadEmbeddings();
 
     warnIfSemanticMatchingDegraded();
@@ -99,5 +97,35 @@ describe('embedText fallback', () => {
       buildLocalEmbedding('category:bag | title:black backpack')
     );
     expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('embedText with OpenAI', () => {
+  test('calls the OpenAI embeddings endpoint with the configured key', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test';
+    const embedding = [0.6, 0.8];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ embedding }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const { embedText } = await loadEmbeddings();
+
+    await expect(embedText('black backpack')).resolves.toEqual(embedding);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/embeddings',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer sk-test',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'text-embedding-3-small',
+          input: 'black backpack',
+        }),
+      }
+    );
   });
 });

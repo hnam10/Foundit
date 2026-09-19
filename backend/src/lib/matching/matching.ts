@@ -1,6 +1,7 @@
 import { ClaimStatus, ItemStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../db';
 import { logger } from '../logger';
+import { MISSING_CAMPUS_ID } from '../../constants/campus';
 import { buildLocalEmbedding, isSemanticMatchingDegraded } from './embeddings';
 import { ingestClaimSearchIndex, ingestItemSearchIndex } from './ingest';
 import {
@@ -8,12 +9,18 @@ import {
   planInlineEmbeddingWork,
   resolveInlineEmbeddingLimits,
 } from './inlineEmbedding';
-import { buildItemSearchText, type ItemSearchInput } from './searchText';
+import {
+  buildClaimSearchText,
+  buildItemSearchText,
+  type ClaimSearchInput,
+  type ItemSearchInput,
+} from './searchText';
 import {
   buildMatchCriteria,
   combineHybridScore,
   cosineSimilarity,
   dateProximityScore,
+  locationProximityScore,
   retentionUrgencyScore,
 } from './scores';
 
@@ -46,6 +53,7 @@ function parseEmbedding(value: Prisma.JsonValue | null): number[] | null {
 
 interface MatchItemRow extends ItemSearchInput {
   itemId: string;
+  searchText: string | null;
   embedding: Prisma.JsonValue | null;
 }
 
@@ -70,7 +78,8 @@ async function resolveItemEmbeddings(
 
   for (const item of items) {
     const embedding = parseEmbedding(item.embedding);
-    if (embedding) {
+    const currentSearchText = buildItemSearchText(item);
+    if (embedding && item.searchText === currentSearchText) {
       resolved.set(item.itemId, embedding);
     } else {
       pending.push(item);
@@ -149,7 +158,14 @@ export async function generateMatchCandidates(claimId: string): Promise<{
     where: { claimId },
     select: {
       claimId: true,
+      campusId: true,
+      category: true,
       dateLost: true,
+      locationLost: true,
+      itemName: true,
+      description: true,
+      additionalInfo: true,
+      searchText: true,
       embedding: true,
     },
   });
@@ -158,9 +174,14 @@ export async function generateMatchCandidates(claimId: string): Promise<{
     return { candidates: [], candidateCount: 0 };
   }
 
-  let claimEmbedding = parseEmbedding(claim.embedding);
+  const claimSearchInput: ClaimSearchInput = claim;
+  const currentClaimSearchText = buildClaimSearchText(claimSearchInput);
+  let claimEmbedding =
+    claim.searchText === currentClaimSearchText
+      ? parseEmbedding(claim.embedding)
+      : null;
   if (!claimEmbedding) {
-    claimEmbedding = await ingestClaimSearchIndex(claimId);
+    claimEmbedding = await ingestClaimSearchIndex(claimId, claimSearchInput);
   }
 
   if (!claimEmbedding) {
@@ -170,11 +191,13 @@ export async function generateMatchCandidates(claimId: string): Promise<{
   const today = getTodayUtcDate();
   const items = await prisma.item.findMany({
     where: {
-      status: ItemStatus.stored,
-      OR: [
-        { retentionExpiryDate: null },
-        { retentionExpiryDate: { gt: today } },
-      ],
+      // Expired means the retention window ended, not that the physical item
+      // was disposed. Keep it matchable until security marks it disposed.
+      status: { in: [ItemStatus.stored, ItemStatus.expired] },
+      category: { equals: claim.category, mode: 'insensitive' },
+      ...(claim.campusId === MISSING_CAMPUS_ID
+        ? {}
+        : { campusId: claim.campusId }),
       claims: {
         none: { status: ClaimStatus.approved },
       },
@@ -190,6 +213,7 @@ export async function generateMatchCandidates(claimId: string): Promise<{
       descriptionInternal: true,
       brand: true,
       color: true,
+      searchText: true,
       embedding: true,
     },
   });
@@ -209,9 +233,15 @@ export async function generateMatchCandidates(claimId: string): Promise<{
       continue;
     }
 
+    const location = locationProximityScore(
+      claim.locationLost,
+      item.locationFound
+    );
     const hybridInput = {
       semanticSimilarity,
       dateProximity: date.score,
+      locationProximity: location.score,
+      locationEvidence: location.hasEvidence,
       retention: retentionUrgencyScore(item.retentionExpiryDate, today),
     };
 

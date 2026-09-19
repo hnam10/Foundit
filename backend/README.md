@@ -93,10 +93,10 @@ JWT_REFRESH_SECRET=another-different-random-string
 
 ### Semantic matching
 
-| Variable                     | Description                                                |
-| ---------------------------- | ---------------------------------------------------------- |
-| `OPENROUTER_API_KEY`         | OpenRouter API key for embedding-based match search        |
-| `OPENROUTER_EMBEDDING_MODEL` | Embedding model (default: `openai/text-embedding-3-small`) |
+| Variable                 | Description                                         |
+| ------------------------ | --------------------------------------------------- |
+| `OPENAI_API_KEY`         | OpenAI API key for embedding-based match search     |
+| `OPENAI_EMBEDDING_MODEL` | Embedding model (default: `text-embedding-3-small`) |
 
 If unset, a local hash fallback is used (dev only). After deploy, backfill existing rows:
 
@@ -284,7 +284,7 @@ Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed
 
 Allowed targets: `expired`, `disposed`. Transitions: `stored → expired|disposed`, `expired → disposed`. Blocked when item is `claimed` or `disposed`. Returns updated item detail; rejects active linked claims in the same transaction.
 
-A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Security should use `disposed` to record physical disposal after expiry.
+A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Expired items and their match suggestions remain available because the physical item may still be present; security should use `disposed` to record physical disposal.
 
 ### Notifications
 
@@ -298,9 +298,9 @@ A daily cron job (`expireRetainedItems`) also transitions `stored → expired` w
 Notifications are per-recipient rows, always scoped to the caller's JWT. They are
 created transactionally by: claim submission and cancellation (fan-out to active
 security/admin at the claim's campus), claim status changes and match approval
-(to the student), the retention cron (auto-reject notices + per-campus
-`item_expiring`), and found-item report submission (`report_confirmation` to the
-finder). The unread-count "stats" endpoint from the original plan was folded into
+(to the student), the retention cron (per-campus `item_expiring`), and found-item
+report submission (`report_confirmation` to the finder). The unread-count "stats"
+endpoint from the original plan was folded into
 `GET /api/notifications` as `unreadCount`. Student claim emails also send when
 both `emailNotificationOptIn` and claim `notificationPreference === 'email'` are set.
 

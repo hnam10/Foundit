@@ -11,8 +11,10 @@ import {
   chakra,
 } from '@chakra-ui/react';
 import { IoImageOutline } from 'react-icons/io5';
+import { ItemStatusBadge } from '@/components/items/ItemStatusProgress';
 import type { MatchSuggestion } from '@/types/claims';
 import { formatClaimDate } from '@/utils/claimDisplay';
+import { getStorageDurationLabel } from '@/utils/itemRetention';
 
 const RadioInput = chakra('input');
 
@@ -23,6 +25,21 @@ function formatItemId(itemId: string): string {
 function itemDetailLine(item: MatchSuggestion['item']): string | null {
   const parts = [item.brand, item.color].filter(Boolean);
   return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+const matchReasonLabels: Record<string, string> = {
+  semantic: 'Similar description',
+  category: 'Same category',
+  date: 'Close date',
+  location: 'Similar location',
+};
+
+function getMatchReasons(criteria: string | null): string[] {
+  if (!criteria) return [];
+  return criteria
+    .split(',')
+    .map((criterion) => matchReasonLabels[criterion])
+    .filter((label): label is string => Boolean(label));
 }
 
 interface ClaimMatchCardProps {
@@ -44,6 +61,8 @@ export function ClaimMatchCard({
   const scoreLabel = `${Math.round(match.matchScore)}% Match`;
   const detailLine = itemDetailLine(item);
   const description = item.descriptionPublic?.trim();
+  const storageDuration = getStorageDurationLabel(item.createdAt, item.status);
+  const matchReasons = getMatchReasons(match.matchCriteria);
 
   return (
     <Box
@@ -75,6 +94,9 @@ export function ClaimMatchCard({
             <Badge colorPalette="green" variant="subtle" fontSize="xs">
               Best Match
             </Badge>
+          ) : null}
+          {item.status === 'expired' ? (
+            <ItemStatusBadge status={item.status} />
           ) : null}
         </Flex>
         <Flex align="center" gap={2}>
@@ -140,6 +162,15 @@ export function ClaimMatchCard({
               {description}
             </Text>
           ) : null}
+          {matchReasons.length > 0 ? (
+            <Flex gap={1.5} wrap="wrap" aria-label="Why this matched">
+              {matchReasons.map((reason) => (
+                <Badge key={reason} colorPalette="blue" variant="subtle">
+                  {reason}
+                </Badge>
+              ))}
+            </Flex>
+          ) : null}
           <Text fontSize="xs" color="gray.600">
             Item ID: {formatItemId(item.itemId)}
           </Text>
@@ -147,6 +178,11 @@ export function ClaimMatchCard({
             Found: {formatClaimDate(item.dateFound)}
             {item.locationFound ? ` · ${item.locationFound}` : ''}
           </Text>
+          {storageDuration ? (
+            <Text fontSize="xs" color="gray.600">
+              {storageDuration}
+            </Text>
+          ) : null}
         </Stack>
       </Grid>
     </Box>
