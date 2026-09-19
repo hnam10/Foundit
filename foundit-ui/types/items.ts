@@ -34,6 +34,8 @@ export interface SecurityItemListItem {
   campusName: string;
   category: string;
   title: string;
+  descriptionPublic: string | null;
+  descriptionInternal: string | null;
   dateFound: string;
   createdAt: string;
   status: ItemStatus;

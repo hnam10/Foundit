@@ -20,6 +20,7 @@ import { fetchCategoryStats, fetchSecurityItems } from '@/lib/api/items';
 import type { SecurityClaimListItem } from '@/types/claims';
 import type { CategoryStat, SecurityItemListItem } from '@/types/items';
 import { formatClaimDate } from '@/utils/claimDisplay';
+import { matchesSecurityItemSearch } from '@/utils/itemSearch';
 
 const Select = chakra('select');
 const RadioInput = chakra('input');
@@ -225,17 +226,7 @@ export function ClaimManualSearchList({
   }, [categoryFilter]);
 
   const filteredItems = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return items;
-
-    return items.filter((item) => {
-      return (
-        item.title.toLowerCase().includes(query) ||
-        item.category.toLowerCase().includes(query) ||
-        item.itemId.toLowerCase().includes(query) ||
-        item.campusName.toLowerCase().includes(query)
-      );
-    });
+    return items.filter((item) => matchesSecurityItemSearch(item, searchQuery));
   }, [items, searchQuery]);
 
   async function handleLoadMore() {

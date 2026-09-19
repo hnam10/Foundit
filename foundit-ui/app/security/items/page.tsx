@@ -27,6 +27,7 @@ import {
 } from '@/lib/api/items';
 import type { Campus, ItemStatus, SecurityItemListItem } from '@/types/items';
 import { ITEM_STATUS_LABELS } from '@/types/items';
+import { matchesSecurityItemSearch } from '@/utils/itemSearch';
 
 const Select = chakra('select');
 const ITEMS_PER_PAGE = 10;
@@ -128,17 +129,7 @@ function StoredItemsPageContent() {
   }, [campusFilter, statusFilter]);
 
   const filteredItems = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return items;
-
-    return items.filter((item) => {
-      return (
-        item.title.toLowerCase().includes(query) ||
-        item.category.toLowerCase().includes(query) ||
-        item.itemId.toLowerCase().includes(query) ||
-        item.campusName.toLowerCase().includes(query)
-      );
-    });
+    return items.filter((item) => matchesSecurityItemSearch(item, searchQuery));
   }, [items, searchQuery]);
 
   const totalPages = Math.max(

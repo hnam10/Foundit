@@ -201,6 +201,8 @@ describe('items routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].itemId).toBe(itemId);
+    expect(res.body.data[0].descriptionPublic).toBe('Black iPhone');
+    expect(res.body.data[0].descriptionInternal).toBeNull();
     expect(res.body.data[0].title).toBe('iPhone');
     expect(res.body.nextCursor).toBe(null);
   });
