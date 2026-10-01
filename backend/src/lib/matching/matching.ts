@@ -23,6 +23,7 @@ import {
   locationProximityScore,
   retentionUrgencyScore,
 } from './scores';
+import { parseEmbedding } from './embeddingValue';
 
 const MIN_MATCH_SCORE = 55;
 const MAX_SUGGESTIONS = 10;
@@ -37,18 +38,6 @@ function getTodayUtcDate(): Date {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   return today;
-}
-
-function parseEmbedding(value: Prisma.JsonValue | null): number[] | null {
-  if (!value || !Array.isArray(value)) {
-    return null;
-  }
-
-  if (!value.every((entry) => typeof entry === 'number')) {
-    return null;
-  }
-
-  return value as number[];
 }
 
 interface MatchItemRow extends ItemSearchInput {

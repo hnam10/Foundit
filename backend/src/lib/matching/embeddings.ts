@@ -1,9 +1,7 @@
 import { logger } from '../logger';
+import { buildAiRequestHeaders, getAiProviderConfig } from '../aiProvider';
 
 const EMBEDDING_DIMENSIONS = 1536;
-const OPENAI_API_URL = 'https://api.openai.com/v1';
-const OPENAI_EMBEDDING_MODEL =
-  process.env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small';
 
 function tokenize(text: string): string[] {
   return text
@@ -23,7 +21,7 @@ function normalizeVector(vector: number[]): number[] {
   return vector.map((value) => value / magnitude);
 }
 
-/** Deterministic local fallback when OPENAI_API_KEY is not configured. */
+/** Deterministic local fallback when no remote AI provider is configured. */
 export function buildLocalEmbedding(text: string): number[] {
   const vector = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
   const tokens = tokenize(text);
@@ -40,26 +38,26 @@ export function buildLocalEmbedding(text: string): number[] {
   return normalizeVector(vector);
 }
 
-async function embedWithOpenAI(
-  text: string,
-  apiKey: string
-): Promise<number[]> {
-  const response = await fetch(`${OPENAI_API_URL}/embeddings`, {
+async function embedWithProvider(text: string): Promise<number[]> {
+  const config = getAiProviderConfig();
+  if (!config) {
+    throw new Error('No remote AI provider is configured.');
+  }
+
+  const response = await fetch(`${config.baseUrl}/embeddings`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: buildAiRequestHeaders(config),
     body: JSON.stringify({
-      model: OPENAI_EMBEDDING_MODEL,
+      model: config.embeddingModel,
       input: text,
+      dimensions: EMBEDDING_DIMENSIONS,
     }),
   });
 
   if (!response.ok) {
     const errorBody = await response.text();
     throw new Error(
-      `OpenAI embedding request failed (${response.status}): ${errorBody}`
+      `${config.name} embedding request failed (${response.status}): ${errorBody}`
     );
   }
 
@@ -69,14 +67,14 @@ async function embedWithOpenAI(
   const embedding = payload.data?.[0]?.embedding;
 
   if (!embedding || embedding.length === 0) {
-    throw new Error('OpenAI embedding response did not include a vector.');
+    throw new Error('Embedding response did not include a vector.');
   }
 
   return normalizeVector(embedding);
 }
 
 /**
- * True when no OPENAI_API_KEY is configured, which means embedText() hands
+ * True when no remote provider key is configured, which means embedText() hands
  * back a deterministic hash vector instead of a real semantic one. Matching
  * keeps "working" in that state, but the ranking carries no meaning — so this
  * predicate exists to make the degradation checkable instead of invisible.
@@ -84,7 +82,7 @@ async function embedWithOpenAI(
 export function isSemanticMatchingDegraded(
   env: NodeJS.ProcessEnv = process.env
 ): boolean {
-  return !env.OPENAI_API_KEY?.trim();
+  return getAiProviderConfig(env) === null;
 }
 
 let degradationWarned = false;
@@ -101,7 +99,7 @@ export function warnIfSemanticMatchingDegraded(): void {
 
   degradationWarned = true;
   logger.warn(
-    'OPENAI_API_KEY is not set: semantic matching is DEGRADED. Embeddings fall back to a local hash vector, so match suggestions are close to random. Set OPENAI_API_KEY and run `pnpm backfill:embeddings` to restore real semantic matching.'
+    'Neither OPENROUTER_API_KEY nor OPENAI_API_KEY is set: semantic matching is DEGRADED. Embeddings fall back to a local hash vector, so match suggestions are close to random. Configure a provider key and run `pnpm backfill:embeddings` to restore real semantic matching.'
   );
 }
 
@@ -111,9 +109,8 @@ export async function embedText(text: string): Promise<number[]> {
     return new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
   }
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (apiKey) {
-    return embedWithOpenAI(normalized, apiKey);
+  if (!isSemanticMatchingDegraded()) {
+    return embedWithProvider(normalized);
   }
 
   warnIfSemanticMatchingDegraded();

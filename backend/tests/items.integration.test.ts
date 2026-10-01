@@ -50,6 +50,11 @@ vi.mock('../src/lib/matching/suggestions', () => ({
   scheduleMatchRefreshForCampus: vi.fn(),
 }));
 
+vi.mock('../src/lib/itemImageAnalysis', () => ({
+  analyzeItemImage: vi.fn(),
+  isItemImageAnalysisConfigured: vi.fn(() => true),
+}));
+
 vi.mock('../src/db', () => ({
   prisma: {
     item: {
@@ -73,6 +78,10 @@ import {
   writeAuditLogs,
   writeAuditLogBestEffort,
 } from '../src/utils/auditLog';
+import {
+  analyzeItemImage,
+  isItemImageAnalysisConfigured,
+} from '../src/lib/itemImageAnalysis';
 
 function createTestApp() {
   const app = express();
@@ -207,6 +216,38 @@ describe('items routes', () => {
     expect(res.body.nextCursor).toBe(null);
   });
 
+  test('POST /api/items/analyze-image returns an AI form draft', async () => {
+    vi.mocked(analyzeItemImage).mockResolvedValueOnce({
+      title: 'Portable Charger',
+      category: 'Electronics',
+      color: 'Light pink',
+      brand: 'Belkin',
+      description: 'Light pink portable charger with an attached cable.',
+    });
+
+    const res = await request(createTestApp())
+      .post('/api/items/analyze-image')
+      .send({ imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe('Portable Charger');
+    expect(analyzeItemImage).toHaveBeenCalledWith(
+      'reports/550e8400-e29b-41d4-a716-446655440001.jpg'
+    );
+  });
+
+  test('POST /api/items/analyze-image remains optional when AI is unavailable', async () => {
+    vi.mocked(isItemImageAnalysisConfigured).mockReturnValueOnce(false);
+
+    const res = await request(createTestApp())
+      .post('/api/items/analyze-image')
+      .send({ imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg' });
+
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('IMAGE_ANALYSIS_UNAVAILABLE');
+    expect(analyzeItemImage).not.toHaveBeenCalled();
+  });
+
   test('GET /api/items/:itemId returns 404 if item does not exist', async () => {
     vi.mocked(prisma.item.findUnique).mockResolvedValueOnce(null);
 
@@ -252,6 +293,8 @@ describe('items routes', () => {
         campusId,
         title: 'iPhone',
         description: 'Black iPhone',
+        color: 'Black',
+        brand: 'Apple',
         category: 'Electronics',
         locationFound: 'Library',
         dateFound: '2026-07-01',
@@ -265,6 +308,11 @@ describe('items routes', () => {
       });
 
     expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(tx.item.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ color: 'Black', brand: 'Apple' }),
+      })
+    );
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'security-1',

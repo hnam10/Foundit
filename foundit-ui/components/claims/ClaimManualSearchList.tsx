@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Flex,
@@ -20,7 +20,7 @@ import { fetchCategoryStats, fetchSecurityItems } from '@/lib/api/items';
 import type { SecurityClaimListItem } from '@/types/claims';
 import type { CategoryStat, SecurityItemListItem } from '@/types/items';
 import { formatClaimDate } from '@/utils/claimDisplay';
-import { matchesSecurityItemSearch } from '@/utils/itemSearch';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 const Select = chakra('select');
 const RadioInput = chakra('input');
@@ -167,6 +167,7 @@ export function ClaimManualSearchList({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState(claim.category);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
@@ -201,6 +202,7 @@ export function ClaimManualSearchList({
         const result = await fetchSecurityItems({
           category: categoryFilter.trim() || undefined,
           status: 'stored',
+          q: debouncedSearchQuery.trim() || undefined,
           limit: 20,
         });
 
@@ -223,11 +225,9 @@ export function ClaimManualSearchList({
     return () => {
       active = false;
     };
-  }, [categoryFilter]);
+  }, [categoryFilter, debouncedSearchQuery]);
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => matchesSecurityItemSearch(item, searchQuery));
-  }, [items, searchQuery]);
+  const filteredItems = items;
 
   async function handleLoadMore() {
     if (!nextCursor || loadingMore) return;
@@ -239,6 +239,7 @@ export function ClaimManualSearchList({
       const result = await fetchSecurityItems({
         category: categoryFilter.trim() || undefined,
         status: 'stored',
+        q: debouncedSearchQuery.trim() || undefined,
         cursor: nextCursor,
         limit: 20,
       });

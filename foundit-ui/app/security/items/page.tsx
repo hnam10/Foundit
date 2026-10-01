@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -27,7 +27,7 @@ import {
 } from '@/lib/api/items';
 import type { Campus, ItemStatus, SecurityItemListItem } from '@/types/items';
 import { ITEM_STATUS_LABELS } from '@/types/items';
-import { matchesSecurityItemSearch } from '@/utils/itemSearch';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 const Select = chakra('select');
 const ITEMS_PER_PAGE = 10;
@@ -67,6 +67,7 @@ function StoredItemsPageContent() {
   const [searchQuery, setSearchQuery] = useState(
     () => searchParams.get('q') ?? ''
   );
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -105,6 +106,7 @@ function StoredItemsPageContent() {
         const data = await fetchAllSecurityItems({
           campusId: campusFilter || undefined,
           status: (statusFilter as ItemStatus) || undefined,
+          q: debouncedSearchQuery.trim() || undefined,
         });
 
         if (!active) return;
@@ -126,11 +128,9 @@ function StoredItemsPageContent() {
     return () => {
       active = false;
     };
-  }, [campusFilter, statusFilter]);
+  }, [campusFilter, statusFilter, debouncedSearchQuery]);
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => matchesSecurityItemSearch(item, searchQuery));
-  }, [items, searchQuery]);
+  const filteredItems = items;
 
   const totalPages = Math.max(
     1,

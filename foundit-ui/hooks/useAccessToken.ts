@@ -3,12 +3,12 @@
 import { useSyncExternalStore } from 'react';
 import { getAccessToken } from '@/utils/auth';
 
-const subscribe = () => () => {};
+import { subscribeAuth } from '@/utils/authEvents';
 
 /** Reads access token on the client after hydration; null on server/hydration. */
 export function useAccessToken() {
   return useSyncExternalStore(
-    subscribe,
+    subscribeAuth,
     () => getAccessToken(),
     () => null
   );

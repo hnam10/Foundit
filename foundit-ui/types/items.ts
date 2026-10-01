@@ -28,6 +28,15 @@ export interface PublicItem {
   status: ItemStatus;
 }
 
+/** AI draft for the found-item form — POST /api/items/analyze-image. */
+export interface ItemImageSuggestion {
+  title: string | null;
+  category: string | null;
+  color: string | null;
+  brand: string | null;
+  description: string | null;
+}
+
 export interface SecurityItemListItem {
   itemId: string;
   campusId: string;
@@ -36,6 +45,8 @@ export interface SecurityItemListItem {
   title: string;
   descriptionPublic: string | null;
   descriptionInternal: string | null;
+  color: string | null;
+  brand: string | null;
   dateFound: string;
   createdAt: string;
   status: ItemStatus;

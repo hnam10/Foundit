@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { ClaimStatus, ItemStatus, Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
@@ -14,8 +15,17 @@ import {
 } from '../utils/auditLog';
 import { scheduleItemSearchIndexIngest } from '../lib/matching/ingest';
 import { scheduleMatchRefreshForCampus } from '../lib/matching/suggestions';
+import { logger } from '../lib/logger';
+import { isSemanticMatchingDegraded } from '../lib/matching/embeddings';
+import { rankSecurityItemSearch } from '../lib/matching/itemSearch';
+import { getQueryEmbedding } from '../lib/matching/queryEmbeddingCache';
+import {
+  analyzeItemImage,
+  isItemImageAnalysisConfigured,
+} from '../lib/itemImageAnalysis';
 import {
   itemParamsSchema,
+  analyzeItemImageSchema,
   listSecurityItemsQuerySchema,
   publicItemsQuerySchema,
   expiredItemCountQuerySchema,
@@ -27,6 +37,7 @@ import {
   UpdateSecurityItemStatusInput,
   CreateSecurityItemInput,
   WalkInReleaseInput,
+  AnalyzeItemImageInput,
 } from '../validators/items';
 
 function computeRetentionExpiryDate(
@@ -40,6 +51,17 @@ function computeRetentionExpiryDate(
 
 const router = Router();
 const publicItemStatuses = [ItemStatus.stored] as const;
+const SECURITY_ITEM_SEARCH_CANDIDATE_LIMIT = 1000;
+const itemImageAnalysisRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    code: 'RATE_LIMITED',
+    message: 'Too many image analysis requests. Try again later.',
+  },
+});
 
 const validItemStatusTransitions: Record<ItemStatus, ItemStatus[]> = {
   [ItemStatus.pending_report]: [ItemStatus.expired, ItemStatus.disposed],
@@ -69,6 +91,8 @@ const securityItemListSelect = {
   title: true,
   descriptionPublic: true,
   descriptionInternal: true,
+  color: true,
+  brand: true,
   dateFound: true,
   createdAt: true,
   status: true,
@@ -87,6 +111,13 @@ const securityItemListSelect = {
       createdAt: 'asc' as const,
     },
   },
+} as const;
+
+const securityItemSearchSelect = {
+  ...securityItemListSelect,
+  locationFound: true,
+  searchText: true,
+  embedding: true,
 } as const;
 
 const securityItemDetailSelect = {
@@ -160,6 +191,10 @@ type SecurityItemListRow = Prisma.ItemGetPayload<{
   select: typeof securityItemListSelect;
 }>;
 
+type SecurityItemSearchRow = Prisma.ItemGetPayload<{
+  select: typeof securityItemSearchSelect;
+}>;
+
 type SecurityItemDetailRow = Prisma.ItemGetPayload<{
   select: typeof securityItemDetailSelect;
 }>;
@@ -223,6 +258,8 @@ async function toSecurityItemListDto(item: SecurityItemListRow) {
     title: item.title,
     descriptionPublic: item.descriptionPublic,
     descriptionInternal: item.descriptionInternal,
+    color: item.color,
+    brand: item.brand,
     dateFound: item.dateFound,
     createdAt: item.createdAt,
     status: item.status,
@@ -294,6 +331,12 @@ async function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
  *         schema:
  *           type: string
  *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *           maxLength: 200
+ *         description: Exact and semantic search across item details
+ *       - in: query
  *         name: campusId
  *         schema:
  *           type: string
@@ -320,6 +363,37 @@ router.get(
       res.status(200).json(items);
     } catch (err) {
       next(err);
+    }
+  }
+);
+
+router.post(
+  '/items/analyze-image',
+  authenticate,
+  requireRole('security', 'admin'),
+  itemImageAnalysisRateLimiter,
+  validate(analyzeItemImageSchema),
+  async (req, res) => {
+    if (!isItemImageAnalysisConfigured()) {
+      res.status(503).json({
+        code: 'IMAGE_ANALYSIS_UNAVAILABLE',
+        message: 'AI image suggestions are not configured.',
+      });
+      return;
+    }
+
+    try {
+      const { imageUrl } = req.body as AnalyzeItemImageInput;
+      const signedImageUrl = await resolveImageUrl(imageUrl);
+      const suggestion = await analyzeItemImage(signedImageUrl);
+      res.status(200).json(suggestion);
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to analyze item image');
+      res.status(502).json({
+        code: 'IMAGE_ANALYSIS_FAILED',
+        message:
+          'The photo could not be analyzed. Continue filling the form manually.',
+      });
     }
   }
 );
@@ -432,9 +506,56 @@ router.get(
         status?: ItemStatus;
         campusId?: string;
         category?: string;
+        q?: string;
         cursor?: string;
         limit: number;
       };
+
+      if (query.q) {
+        const candidates = await prisma.item.findMany({
+          where: buildSecurityItemListWhere(query),
+          orderBy: [
+            { dateFound: 'desc' },
+            { createdAt: 'desc' },
+            { itemId: 'desc' },
+          ],
+          take: SECURITY_ITEM_SEARCH_CANDIDATE_LIMIT,
+          select: securityItemSearchSelect,
+        });
+
+        let queryEmbedding: number[] | null = null;
+        if (!isSemanticMatchingDegraded()) {
+          try {
+            queryEmbedding = await getQueryEmbedding(query.q);
+          } catch (error) {
+            logger.warn(
+              { err: error },
+              'Semantic item search failed; returning exact matches only'
+            );
+          }
+        }
+
+        const ranked = rankSecurityItemSearch(
+          candidates as SecurityItemSearchRow[],
+          query.q,
+          queryEmbedding
+        );
+        const cursorIndex = query.cursor
+          ? ranked.findIndex(({ item }) => item.itemId === query.cursor)
+          : -1;
+        const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+        const page = ranked.slice(startIndex, startIndex + query.limit);
+        const hasMore = startIndex + page.length < ranked.length;
+        const nextCursor = hasMore
+          ? (page[page.length - 1]?.item.itemId ?? null)
+          : null;
+        const data = await Promise.all(
+          page.map(({ item }) => toSecurityItemListDto(item))
+        );
+
+        res.status(200).json({ data, nextCursor });
+        return;
+      }
 
       const items = await prisma.item.findMany({
         where: buildSecurityItemListWhere(query),
@@ -453,10 +574,13 @@ router.get(
         select: securityItemListSelect,
       });
 
+      const pageItems = items.slice(0, query.limit);
       const nextCursor =
-        items.length > query.limit ? items[query.limit].itemId : null;
+        items.length > query.limit
+          ? (pageItems[pageItems.length - 1]?.itemId ?? null)
+          : null;
       const data = await Promise.all(
-        items.slice(0, query.limit).map((item) => toSecurityItemListDto(item))
+        pageItems.map((item) => toSecurityItemListDto(item))
       );
 
       res.status(200).json({ data, nextCursor });
@@ -521,6 +645,8 @@ router.post(
         campusId,
         title,
         description,
+        color,
+        brand,
         category,
         locationFound,
         dateFound,
@@ -548,6 +674,8 @@ router.post(
             category,
             title,
             descriptionInternal: description.trim(),
+            color,
+            brand,
             locationFound,
             dateFound,
             status: ItemStatus.stored,

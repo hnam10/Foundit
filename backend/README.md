@@ -95,8 +95,9 @@ JWT_REFRESH_SECRET=another-different-random-string
 
 | Variable                 | Description                                         |
 | ------------------------ | --------------------------------------------------- |
-| `OPENAI_API_KEY`         | OpenAI API key for embedding-based match search     |
+| `OPENAI_API_KEY`         | OpenAI API key for matching and item photo analysis |
 | `OPENAI_EMBEDDING_MODEL` | Embedding model (default: `text-embedding-3-small`) |
+| `OPENAI_VISION_MODEL`    | Item photo analysis model (default: `gpt-5.6-luna`) |
 
 If unset, a local hash fallback is used (dev only). After deploy, backfill existing rows:
 

@@ -10,6 +10,8 @@ const item: SecurityItemListItem = {
   title: 'Portable Charger',
   descriptionPublic: null,
   descriptionInternal: 'Pink',
+  color: 'Pink',
+  brand: null,
   dateFound: '2026-08-11',
   createdAt: '2026-08-11T12:00:00.000Z',
   status: 'stored',

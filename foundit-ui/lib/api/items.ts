@@ -2,6 +2,7 @@ import { apiFetch } from '@/lib/api/client';
 import type {
   Campus,
   CategoryStat,
+  ItemImageSuggestion,
   ItemStatus,
   PublicItem,
   SecurityItemDetail,
@@ -61,6 +62,7 @@ export interface FetchSecurityItemsParams {
   status?: ItemStatus;
   campusId?: string;
   category?: string;
+  q?: string;
   cursor?: string;
   limit?: number;
 }
@@ -73,6 +75,7 @@ export async function fetchSecurityItems(
   if (params.status) search.set('status', params.status);
   if (params.campusId) search.set('campusId', params.campusId);
   if (params.category) search.set('category', params.category);
+  if (params.q) search.set('q', params.q);
   if (params.cursor) search.set('cursor', params.cursor);
   if (params.limit) search.set('limit', String(params.limit));
 
@@ -140,6 +143,8 @@ export interface CreateSecurityItemInput {
   campusId: string;
   title: string;
   description: string;
+  color?: string;
+  brand?: string;
   category: string;
   locationFound: string;
   dateFound: string;
@@ -148,6 +153,15 @@ export interface CreateSecurityItemInput {
     fileType: string;
     fileSizeKb: number;
   }[];
+}
+
+export async function analyzeItemImage(
+  imageUrl: string
+): Promise<ItemImageSuggestion> {
+  return apiFetch<ItemImageSuggestion>('/api/items/analyze-image', {
+    method: 'POST',
+    body: JSON.stringify({ imageUrl }),
+  });
 }
 
 export async function createSecurityItem(

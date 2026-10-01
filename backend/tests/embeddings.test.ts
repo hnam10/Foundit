@@ -15,10 +15,12 @@ async function loadEmbeddings(): Promise<EmbeddingsModule> {
 }
 
 const originalApiKey = process.env.OPENAI_API_KEY;
+const originalOpenRouterApiKey = process.env.OPENROUTER_API_KEY;
 
 beforeEach(() => {
   warnSpy.mockClear();
   delete process.env.OPENAI_API_KEY;
+  delete process.env.OPENROUTER_API_KEY;
 });
 
 afterEach(() => {
@@ -26,6 +28,11 @@ afterEach(() => {
     delete process.env.OPENAI_API_KEY;
   } else {
     process.env.OPENAI_API_KEY = originalApiKey;
+  }
+  if (originalOpenRouterApiKey === undefined) {
+    delete process.env.OPENROUTER_API_KEY;
+  } else {
+    process.env.OPENROUTER_API_KEY = originalOpenRouterApiKey;
   }
   vi.restoreAllMocks();
 });
@@ -47,6 +54,13 @@ describe('isSemanticMatchingDegraded', () => {
     expect(isSemanticMatchingDegraded({ OPENAI_API_KEY: 'sk-test' })).toBe(
       false
     );
+  });
+
+  test('reports healthy when an OpenRouter key is set', async () => {
+    const { isSemanticMatchingDegraded } = await loadEmbeddings();
+    expect(
+      isSemanticMatchingDegraded({ OPENROUTER_API_KEY: 'sk-or-test' })
+    ).toBe(false);
   });
 
   test('defaults to reading process.env', async () => {
@@ -124,8 +138,37 @@ describe('embedText with OpenAI', () => {
         body: JSON.stringify({
           model: 'text-embedding-3-small',
           input: 'black backpack',
+          dimensions: 1536,
         }),
       }
+    );
+  });
+
+  test('uses OpenRouter when it is the configured provider', async () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-test';
+    const embedding = [0.6, 0.8];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ embedding }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const { embedText } = await loadEmbeddings();
+
+    await expect(embedText('black backpack')).resolves.toEqual(embedding);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://openrouter.ai/api/v1/embeddings',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer sk-or-test',
+          'Content-Type': 'application/json',
+        },
+      })
+    );
+
+    const request = fetchSpy.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(request.body)).model).toBe(
+      'openai/text-embedding-3-small'
     );
   });
 });
