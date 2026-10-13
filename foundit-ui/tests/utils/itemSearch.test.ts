@@ -37,6 +37,11 @@ describe('matchesSecurityItemSearch', () => {
     expect(matchesSecurityItemSearch(item, 'newnham')).toBe(true);
   });
 
+  test('matches query words across different fields', () => {
+    expect(matchesSecurityItemSearch(item, 'pink charger')).toBe(true);
+    expect(matchesSecurityItemSearch(item, 'pink wallet')).toBe(false);
+  });
+
   test('matches every item for a blank query', () => {
     expect(matchesSecurityItemSearch(item, '   ')).toBe(true);
   });

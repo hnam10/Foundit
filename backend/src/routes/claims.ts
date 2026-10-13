@@ -210,7 +210,19 @@ function sendValidationError(res: Response, details: unknown) {
   });
 }
 
-async function toClaimListItemDto(claim: ClaimListRow) {
+// Students only see the linked item after pickup. Until then its photo and
+// attributes would give away the answers security uses to verify ownership.
+function canViewLinkedItem(
+  viewerRole: RequestUser['role'] | undefined,
+  status: ClaimStatus
+): boolean {
+  return viewerRole !== 'student' || status === ClaimStatus.picked_up;
+}
+
+async function toClaimListItemDto(
+  claim: ClaimListRow,
+  viewerRole?: RequestUser['role']
+) {
   const images = await Promise.all(
     claim.images.map(async (image) => ({
       imageId: image.imageId,
@@ -220,7 +232,10 @@ async function toClaimListItemDto(claim: ClaimListRow) {
     }))
   );
 
-  const matchedItemImageUrl = claim.item?.images[0]?.imageUrl ?? null;
+  const linkedItem = canViewLinkedItem(viewerRole, claim.status)
+    ? claim.item
+    : null;
+  const matchedItemImageUrl = linkedItem?.images[0]?.imageUrl ?? null;
 
   return {
     claimId: claim.claimId,
@@ -254,21 +269,21 @@ async function toClaimListItemDto(claim: ClaimListRow) {
           ? Number(claim.student.studentNumber)
           : null,
     },
-    item: claim.item
+    item: linkedItem
       ? {
-          itemId: claim.item.itemId,
-          campusId: claim.item.campusId,
+          itemId: linkedItem.itemId,
+          campusId: linkedItem.campusId,
           campus: {
-            campusId: claim.item.campus.campusId,
-            campusName: claim.item.campus.campusName,
+            campusId: linkedItem.campus.campusId,
+            campusName: linkedItem.campus.campusName,
           },
-          category: claim.item.category,
-          title: claim.item.title,
-          status: claim.item.status,
-          brand: claim.item.brand,
-          color: claim.item.color,
-          locationFound: claim.item.locationFound,
-          dateFound: claim.item.dateFound,
+          category: linkedItem.category,
+          title: linkedItem.title,
+          status: linkedItem.status,
+          brand: linkedItem.brand,
+          color: linkedItem.color,
+          locationFound: linkedItem.locationFound,
+          dateFound: linkedItem.dateFound,
           imageUrl: matchedItemImageUrl
             ? await resolveImageUrl(matchedItemImageUrl)
             : null,
@@ -278,8 +293,11 @@ async function toClaimListItemDto(claim: ClaimListRow) {
   };
 }
 
-async function toClaimDetailDto(claim: ClaimDetailRow) {
-  const base = await toClaimListItemDto(claim);
+async function toClaimDetailDto(
+  claim: ClaimDetailRow,
+  viewerRole?: RequestUser['role']
+) {
+  const base = await toClaimListItemDto(claim, viewerRole);
   return {
     ...base,
     reviewedBy: claim.reviewedBy,
@@ -856,7 +874,7 @@ router.post(
         locationLost: claim.locationLost,
       });
 
-      res.status(201).json(await toClaimDetailDto(claim));
+      res.status(201).json(await toClaimDetailDto(claim, actor.role));
     } catch (err) {
       next(err);
     }
@@ -949,7 +967,9 @@ router.get(
       const nextCursor =
         claims.length > query.limit ? claims[query.limit].claimId : null;
       const data = await Promise.all(
-        claims.slice(0, query.limit).map((claim) => toClaimListItemDto(claim))
+        claims
+          .slice(0, query.limit)
+          .map((claim) => toClaimListItemDto(claim, actor.role))
       );
 
       res.status(200).json({ data, nextCursor });
@@ -1018,7 +1038,7 @@ router.get('/:claimId', authenticate, async (req, res, next) => {
       return;
     }
 
-    res.status(200).json(await toClaimDetailDto(claim));
+    res.status(200).json(await toClaimDetailDto(claim, actor.role));
   } catch (err) {
     next(err);
   }

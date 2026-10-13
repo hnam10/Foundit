@@ -146,26 +146,6 @@ describe('items routes', () => {
     mocks.authUser = { user_id: 'security-1', role: 'security' };
   });
 
-  test('GET /api/public/items returns public stored items', async () => {
-    vi.mocked(prisma.item.findMany).mockResolvedValueOnce([itemListRow]);
-
-    const app = createTestApp();
-
-    const res = await request(app).get('/api/public/items');
-
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].title).toBe('iPhone');
-
-    expect(prisma.item.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          status: { in: [ItemStatus.stored] },
-        },
-      })
-    );
-  });
-
   test('GET /api/items/category-stats returns public category counts', async () => {
     vi.mocked(prisma.item.groupBy).mockResolvedValueOnce([
       {

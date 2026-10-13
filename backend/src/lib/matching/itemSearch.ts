@@ -30,11 +30,15 @@ export function resolveItemSearchThreshold(
     : DEFAULT_ITEM_SEARCH_THRESHOLD;
 }
 
+/**
+ * Every query word must appear in some field, but the words may land in
+ * different fields: "black bottle" matches color "Black" + title "Water Bottle".
+ */
 function hasExactMatch(
   item: SecurityItemSearchCandidate,
   normalizedQuery: string
 ): boolean {
-  return [
+  const fields = [
     item.itemId,
     item.title,
     item.category,
@@ -43,7 +47,13 @@ function hasExactMatch(
     item.color,
     item.descriptionPublic,
     item.descriptionInternal,
-  ].some((value) => value?.toLowerCase().includes(normalizedQuery));
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLowerCase());
+
+  return normalizedQuery
+    .split(/\s+/)
+    .every((word) => fields.some((field) => field.includes(word)));
 }
 
 export function rankSecurityItemSearch<T extends SecurityItemSearchCandidate>(

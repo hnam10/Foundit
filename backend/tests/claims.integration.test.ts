@@ -278,6 +278,65 @@ describe('claims routes', () => {
     expect(res.body.category).toBe('Electronics');
   });
 
+  describe('linked item visibility', () => {
+    const linkedItem = {
+      itemId: '550e8400-e29b-41d4-a716-446655440010',
+      campusId: claimRow.campusId,
+      campus: claimRow.campus,
+      category: 'Electronics',
+      title: 'iPhone',
+      status: 'stored',
+      brand: 'Apple',
+      color: 'Black',
+      locationFound: 'Library',
+      dateFound: new Date('2026-08-11'),
+      images: [],
+    };
+    const claimUrl = '/api/claims/550e8400-e29b-41d4-a716-446655440000';
+
+    function mockClaim(status: ClaimStatus) {
+      vi.mocked(prisma.claim.findUnique).mockResolvedValueOnce({
+        ...claimRow,
+        status,
+        itemId: linkedItem.itemId,
+        item: linkedItem,
+      } as never);
+    }
+
+    test.each([
+      ClaimStatus.submitted,
+      ClaimStatus.under_review,
+      ClaimStatus.approved,
+    ])('hides the item from the student while %s', async (status) => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(activeStudent);
+      mockClaim(status);
+
+      const res = await request(createTestApp()).get(claimUrl);
+
+      expect(res.status).toBe(200);
+      expect(res.body.item).toBeNull();
+    });
+
+    test('shows the item to the student after pickup', async () => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(activeStudent);
+      mockClaim(ClaimStatus.picked_up);
+
+      const res = await request(createTestApp()).get(claimUrl);
+
+      expect(res.body.item.title).toBe('iPhone');
+    });
+
+    test('always shows the item to security', async () => {
+      mocks.authUser = { user_id: 'security-1', role: 'security' };
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(activeSecurity);
+      mockClaim(ClaimStatus.under_review);
+
+      const res = await request(createTestApp()).get(claimUrl);
+
+      expect(res.body.item.color).toBe('Black');
+    });
+  });
+
   function createClaimTx(securityRecipients: { userId: string }[]) {
     const createdClaim = {
       ...claimRow,

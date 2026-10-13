@@ -16,7 +16,12 @@ export function matchesSecurityItemSearch(
   const query = searchQuery.trim().toLowerCase();
   if (!query) return true;
 
-  return searchableItemFields.some((field) =>
-    item[field]?.toLowerCase().includes(query)
-  );
+  // Every word must appear in some field; words may land in different fields.
+  return query
+    .split(/\s+/)
+    .every((word) =>
+      searchableItemFields.some((field) =>
+        item[field]?.toLowerCase().includes(word)
+      )
+    );
 }

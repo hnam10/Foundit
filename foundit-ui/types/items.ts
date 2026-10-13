@@ -15,19 +15,6 @@ export interface CategoryStat {
   count: number;
 }
 
-export interface PublicItem {
-  itemId: string;
-  campusId: string;
-  category: string;
-  title: string;
-  descriptionPublic: string | null;
-  color: string | null;
-  brand: string | null;
-  locationFound: string | null;
-  dateFound: string;
-  status: ItemStatus;
-}
-
 /** AI draft for the found-item form — POST /api/items/analyze-image. */
 export interface ItemImageSuggestion {
   title: string | null;

@@ -241,7 +241,6 @@ Report link tokens stay in the URL to match the current database model, but must
 
 | Method | Path                                 | Auth           | Status  | Description                                              |
 | ------ | ------------------------------------ | -------------- | ------- | -------------------------------------------------------- |
-| GET    | `/api/public/items`                  | —              | Done    | Browse public-safe stored items with optional filters    |
 | GET    | `/api/items/category-stats`          | —              | Done    | Public item counts per category                          |
 | GET    | `/api/items`                         | security/admin | Done    | List items with filters and cursor pagination            |
 | GET    | `/api/items/:itemId`                 | security/admin | Done    | Get item detail (internal fields, images, linked claims) |

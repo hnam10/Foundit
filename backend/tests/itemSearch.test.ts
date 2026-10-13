@@ -54,6 +54,30 @@ describe('rankSecurityItemSearch', () => {
     expect(result[1].matchType).toBe('semantic');
   });
 
+  test('matches query words across different fields', () => {
+    const item = candidate({
+      title: 'Water Bottle',
+      color: 'Black',
+      brand: 'Nike',
+      descriptionInternal: 'Matte finish with a screw lid',
+    });
+
+    expect(
+      rankSecurityItemSearch([item], 'black bottle', null)[0]?.matchType
+    ).toBe('exact');
+    expect(
+      rankSecurityItemSearch([item], '  Nike   BOTTLE ', null)
+    ).toHaveLength(1);
+  });
+
+  test('requires every query word to match', () => {
+    const item = candidate({ title: 'Water Bottle', color: 'Black' });
+
+    expect(rankSecurityItemSearch([item], 'black wallet', null)).toHaveLength(
+      0
+    );
+  });
+
   test('does not use a stale item embedding', () => {
     const item = candidate({ searchText: 'old text' });
 

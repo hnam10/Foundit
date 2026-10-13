@@ -71,19 +71,6 @@ const validItemStatusTransitions: Record<ItemStatus, ItemStatus[]> = {
   [ItemStatus.disposed]: [],
 };
 
-const publicItemSelect = {
-  itemId: true,
-  campusId: true,
-  category: true,
-  title: true,
-  descriptionPublic: true,
-  color: true,
-  brand: true,
-  locationFound: true,
-  dateFound: true,
-  status: true,
-} as const;
-
 const securityItemListSelect = {
   itemId: true,
   campusId: true,
@@ -207,22 +194,6 @@ function sendValidationError(res: Response, details: unknown) {
   });
 }
 
-function buildPublicItemWhere(query: { category?: string; campusId?: string }) {
-  const where: Prisma.ItemWhereInput = {
-    status: { in: [...publicItemStatuses] },
-  };
-
-  if (query.category) {
-    where.category = query.category;
-  }
-
-  if (query.campusId) {
-    where.campusId = query.campusId;
-  }
-
-  return where;
-}
-
 function buildSecurityItemListWhere(query: {
   status?: ItemStatus;
   campusId?: string;
@@ -318,54 +289,6 @@ async function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
       : null,
   };
 }
-
-/**
- * @openapi
- * /api/public/items:
- *   get:
- *     summary: Browse public-safe found items
- *     tags: [Public Items]
- *     parameters:
- *       - in: query
- *         name: category
- *         schema:
- *           type: string
- *       - in: query
- *         name: q
- *         schema:
- *           type: string
- *           maxLength: 200
- *         description: Exact and semantic search across item details
- *       - in: query
- *         name: campusId
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       '200':
- *         description: Public-safe item list
- *       '400':
- *         description: Invalid query parameters
- */
-router.get(
-  '/public/items',
-  validateQuery(publicItemsQuerySchema),
-  async (req, res, next) => {
-    try {
-      const query = req.query as { category?: string; campusId?: string };
-
-      const items = await prisma.item.findMany({
-        where: buildPublicItemWhere(query),
-        select: publicItemSelect,
-        orderBy: [{ dateFound: 'desc' }, { createdAt: 'desc' }],
-      });
-
-      res.status(200).json(items);
-    } catch (err) {
-      next(err);
-    }
-  }
-);
 
 router.post(
   '/items/analyze-image',
