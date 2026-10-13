@@ -77,7 +77,6 @@ function StoredItemsPageContent() {
   const [disposing, setDisposing] = useState(false);
   const [disposeError, setDisposeError] = useState('');
 
-
   useEffect(() => {
     let active = true;
 
