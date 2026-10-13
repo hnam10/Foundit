@@ -15,17 +15,13 @@ export interface CategoryStat {
   count: number;
 }
 
-export interface PublicItem {
-  itemId: string;
-  campusId: string;
-  category: string;
-  title: string;
-  descriptionPublic: string | null;
+/** AI draft for the found-item form — POST /api/items/analyze-image. */
+export interface ItemImageSuggestion {
+  title: string | null;
+  category: string | null;
   color: string | null;
   brand: string | null;
-  locationFound: string | null;
-  dateFound: string;
-  status: ItemStatus;
+  description: string | null;
 }
 
 export interface SecurityItemListItem {
@@ -34,7 +30,12 @@ export interface SecurityItemListItem {
   campusName: string;
   category: string;
   title: string;
+  descriptionPublic: string | null;
+  descriptionInternal: string | null;
+  color: string | null;
+  brand: string | null;
   dateFound: string;
+  createdAt: string;
   status: ItemStatus;
   retentionExpiryDate: string | null;
   imageUrl: string | null;
@@ -71,7 +72,6 @@ export interface SecurityItemDetail extends SecurityItemListItem {
   brand: string | null;
   locationFound: string | null;
   foundItemReportId: string | null;
-  createdAt: string;
   updatedAt: string;
   images: SecurityItemImage[];
   registeredBy: {

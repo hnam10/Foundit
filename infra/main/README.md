@@ -157,7 +157,7 @@ and run each block below with `sudo`:
    `pm2 restart foundit-backend`. None are required — each has a working
    default — but see the sections below for what changes when they are set:
    `TRUST_PROXY_HOPS`, `R2_PUBLIC_BASE_URL`, `R2_SIGNED_URL_TTL_SECONDS`,
-   `OPENROUTER_API_KEY`.
+   `OPENAI_API_KEY`.
 
 Verify with `pm2 status`, then push a trivial commit to `main` and watch the
 workflow's "Verify backend is live" step go green.
@@ -168,19 +168,20 @@ Match suggestions rank mainly on text semantic similarity, with optional image
 similarity when both the claim and stored item have photos. Two things must be
 true in production or the feature looks alive while returning nonsense:
 
-1. **`OPENROUTER_API_KEY` must be set** in `/opt/foundit/backend/.env`. When it
-   is absent the backend falls back to a meaningless local hash embedding for
-   **text** (image similarity is skipped). It is no longer silent — the boot
-   log carries a `warn` saying semantic matching is degraded — so after
-   restarting, confirm that warning is **not** present:
+1. **`OPENAI_API_KEY` must be set** in `/opt/foundit/backend/.env`. When it
+   is absent the backend falls back to a meaningless local hash embedding. It
+   is no longer silent — the boot log carries a `warn` saying semantic matching
+   is degraded — so after restarting, confirm that warning is **not** present:
 
    ```bash
    pm2 logs foundit-backend --lines 50 | grep -i degraded
    ```
 
-   Optionally set `OPENROUTER_IMAGE_EMBEDDING_MODEL` (default
-   `nvidia/llama-nemotron-embed-vl-1b-v2`). Do not use a `:free` image model for
-   claim/item photos — free endpoints may log prompts.
+   The same key powers the photo analysis that drafts the found-item form.
+   Image similarity is off by default: it needs `OPENROUTER_API_KEY`, which
+   this stack does not provision. If you enable it, do not use a `:free`
+   `OPENROUTER_IMAGE_EMBEDDING_MODEL` for claim/item photos — free endpoints
+   may log prompts.
 
 2. **Existing rows must be backfilled.** Items and claims created before the
    embedding column existed have none. A match request computes missing text
@@ -188,8 +189,8 @@ true in production or the feature looks alive while returning nonsense:
    per request; anything past the cap is scored with the fallback vector, which
    scores ~0 against a real embedding and therefore **cannot clear the match
    threshold at all** — those items silently never appear in suggestions. The
-   same script also fills `image_embedding` for rows that have photos. Prime
-   them once:
+   same script also fills `image_embedding` for rows that have photos when
+   OpenRouter is configured. Prime them once:
 
    ```bash
    cd /opt/foundit/backend && pnpm backfill:embeddings

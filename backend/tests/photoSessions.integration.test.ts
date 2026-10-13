@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     user_id: string;
     role: string;
   } | null,
+  r2Send: vi.fn(),
 }));
 
 vi.mock('../src/middleware/authenticate', () => ({
@@ -40,11 +41,23 @@ vi.mock('../src/middleware/requireRole', () => ({
 }));
 
 vi.mock('../src/lib/r2', () => ({
-  r2: {},
+  r2: { send: mocks.r2Send },
   R2_BUCKET: 'test-bucket',
 }));
 
 vi.mock('@aws-sdk/client-s3', () => ({
+  DeleteObjectCommand: vi.fn().mockImplementation(function (
+    this: { input: unknown },
+    input
+  ) {
+    this.input = input;
+  }),
+  HeadObjectCommand: vi.fn().mockImplementation(function (
+    this: { input: unknown },
+    input
+  ) {
+    this.input = input;
+  }),
   PutObjectCommand: vi.fn().mockImplementation(function (
     this: { input: unknown },
     input
@@ -85,14 +98,21 @@ vi.mock('../src/db', () => ({
       create: vi.fn(),
       delete: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
       deleteMany: vi.fn(),
     },
     $transaction: vi.fn(),
   },
 }));
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '../src/db';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { generateReportLinkToken } from '../src/utils/reportLinkToken';
 import { writeAuditLog, writeAuditLogBestEffort } from '../src/utils/auditLog';
@@ -122,6 +142,7 @@ const photoImage = {
   imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440000.png',
   fileType: 'png',
   fileSizeKb: 500,
+  uploadedAt: null,
   createdAt: new Date('2026-07-06T05:00:00Z'),
 };
 
@@ -132,6 +153,14 @@ describe('photoSessions routes', () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (callback) =>
       (callback as (tx: typeof prisma) => Promise<unknown>)(prisma)
     );
+    mocks.r2Send.mockResolvedValue({
+      ContentLength: 512000,
+      ContentType: 'image/png',
+    });
+    vi.mocked(prisma.photoSessionImage.update).mockResolvedValue({
+      ...photoImage,
+      uploadedAt: new Date('2026-07-06T05:01:00Z'),
+    });
   });
 
   test('POST /api/photo-sessions returns 401 if not authenticated', async () => {
@@ -230,7 +259,6 @@ describe('photoSessions routes', () => {
         fileName: 'test-image.png',
         contentType: 'image/png',
         fileSizeKb: 500,
-        fileSizeBytes: 512000,
       });
 
     expect(res.status).toBe(404);
@@ -266,7 +294,6 @@ describe('photoSessions routes', () => {
         fileName: 'test-image.png',
         contentType: 'image/png',
         fileSizeKb: 500,
-        fileSizeBytes: 512000,
       });
 
     expect(res.status).toBe(200);
@@ -312,6 +339,44 @@ describe('photoSessions routes', () => {
     );
   });
 
+  test('POST /api/photo-sessions/:token/images rejects and deletes an oversized upload', async () => {
+    vi.mocked(prisma.photoUploadSession.findUnique).mockResolvedValueOnce({
+      ...photoSession,
+      _count: { images: 1 },
+    });
+    vi.mocked(prisma.photoSessionImage.findFirst).mockResolvedValueOnce(
+      photoImage
+    );
+    mocks.r2Send
+      .mockResolvedValueOnce({
+        ContentLength: 5 * 1024 * 1024 + 1,
+        ContentType: 'image/png',
+      })
+      .mockResolvedValueOnce({});
+    vi.mocked(prisma.photoSessionImage.delete).mockResolvedValueOnce(
+      photoImage
+    );
+
+    const app = createTestApp();
+    const res = await request(app)
+      .post(`/api/photo-sessions/${token}/images`)
+      .send({
+        imageUrl: photoImage.imageUrl,
+        fileType: 'png',
+        fileSizeKb: 500,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_UPLOAD');
+    expect(DeleteObjectCommand).toHaveBeenCalledWith({
+      Bucket: 'test-bucket',
+      Key: photoImage.imageUrl,
+    });
+    expect(prisma.photoSessionImage.delete).toHaveBeenCalledWith({
+      where: { imageId: photoImage.imageId },
+    });
+  });
+
   test('POST /api/photo-sessions/:token/images returns 404 if pending image is missing', async () => {
     vi.mocked(prisma.photoUploadSession.findUnique).mockResolvedValueOnce({
       ...photoSession,
@@ -325,6 +390,66 @@ describe('photoSessions routes', () => {
     const app = createTestApp();
 
     const res = await request(app)
+      .post(`/api/photo-sessions/${token}/images`)
+      .send({
+        imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440000.png',
+        fileType: 'png',
+        fileSizeKb: 500,
+      });
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('PHOTO_SESSION_IMAGE_NOT_FOUND');
+  });
+
+  test('POST /api/photo-sessions/:token/images returns 409 and keeps the reservation when the object is not uploaded yet', async () => {
+    vi.mocked(prisma.photoUploadSession.findUnique).mockResolvedValueOnce({
+      ...photoSession,
+      _count: {
+        images: 1,
+      },
+    });
+    vi.mocked(prisma.photoSessionImage.findFirst).mockResolvedValueOnce(
+      photoImage
+    );
+    mocks.r2Send.mockRejectedValueOnce(
+      Object.assign(new Error('NotFound'), {
+        name: 'NotFound',
+        $metadata: { httpStatusCode: 404 },
+      })
+    );
+
+    const res = await request(createTestApp())
+      .post(`/api/photo-sessions/${token}/images`)
+      .send({
+        imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440000.png',
+        fileType: 'png',
+        fileSizeKb: 500,
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('UPLOAD_NOT_FOUND');
+    expect(prisma.photoSessionImage.delete).not.toHaveBeenCalled();
+    expect(prisma.photoSessionImage.update).not.toHaveBeenCalled();
+  });
+
+  test('POST /api/photo-sessions/:token/images returns 404 when cleanup removed the reservation mid-registration', async () => {
+    vi.mocked(prisma.photoUploadSession.findUnique).mockResolvedValueOnce({
+      ...photoSession,
+      _count: {
+        images: 1,
+      },
+    });
+    vi.mocked(prisma.photoSessionImage.findFirst).mockResolvedValueOnce(
+      photoImage
+    );
+    vi.mocked(prisma.photoSessionImage.update).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Record not found', {
+        code: 'P2025',
+        clientVersion: 'test',
+      })
+    );
+
+    const res = await request(createTestApp())
       .post(`/api/photo-sessions/${token}/images`)
       .send({
         imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440000.png',
@@ -363,6 +488,16 @@ describe('photoSessions routes', () => {
     expect(res.body.imageUrl).toBe(
       'reports/550e8400-e29b-41d4-a716-446655440000.png'
     );
+    expect(HeadObjectCommand).toHaveBeenCalledWith({
+      Bucket: 'test-bucket',
+      Key: photoImage.imageUrl,
+    });
+    expect(prisma.photoSessionImage.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { imageId: photoImage.imageId },
+        data: { uploadedAt: expect.any(Date) },
+      })
+    );
 
     // Anonymous walk-in registration: no actorRole, but the entity label names
     // the session (never the requester) and a summary is always generated.
@@ -372,7 +507,8 @@ describe('photoSessions routes', () => {
         action: 'photo_image_registered',
         entityId: 'image-1',
         entityLabel: `photo session ${sessionId}`,
-      })
+      }),
+      prisma
     );
     const [call] = vi.mocked(writeAuditLog).mock.calls[0];
     expect(call.actorRole).toBeUndefined();

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import itemsRouter from '../src/routes/items';
 import { ItemStatus } from '@prisma/client';
 import { auditSummaries } from '../src/utils/auditSummaries';
+import errorHandler from '../src/middleware/errorHandler';
 
 const mocks = vi.hoisted(() => ({
   authUser: { user_id: 'security-1', role: 'security' } as {
@@ -49,6 +50,15 @@ vi.mock('../src/lib/matching/suggestions', () => ({
   scheduleMatchRefreshForCampus: vi.fn(),
 }));
 
+vi.mock('../src/lib/matching/queryEmbeddingCache', () => ({
+  getQueryEmbedding: vi.fn().mockRejectedValue(new Error('no provider')),
+}));
+
+vi.mock('../src/lib/itemImageAnalysis', () => ({
+  analyzeItemImage: vi.fn(),
+  isItemImageAnalysisConfigured: vi.fn(() => true),
+}));
+
 vi.mock('../src/db', () => ({
   prisma: {
     item: {
@@ -78,11 +88,16 @@ import {
   writeAuditLogs,
   writeAuditLogBestEffort,
 } from '../src/utils/auditLog';
+import {
+  analyzeItemImage,
+  isItemImageAnalysisConfigured,
+} from '../src/lib/itemImageAnalysis';
 
 function createTestApp() {
   const app = express();
   app.use(express.json());
   app.use('/api', itemsRouter);
+  app.use(errorHandler);
   return app;
 }
 
@@ -143,26 +158,6 @@ describe('items routes', () => {
     vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
   });
 
-  test('GET /api/public/items returns public stored items', async () => {
-    vi.mocked(prisma.item.findMany).mockResolvedValueOnce([itemListRow]);
-
-    const app = createTestApp();
-
-    const res = await request(app).get('/api/public/items');
-
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].title).toBe('iPhone');
-
-    expect(prisma.item.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          status: { in: [ItemStatus.stored] },
-        },
-      })
-    );
-  });
-
   test('GET /api/items/category-stats returns public category counts', async () => {
     vi.mocked(prisma.item.groupBy).mockResolvedValueOnce([
       {
@@ -207,8 +202,89 @@ describe('items routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].itemId).toBe(itemId);
+    expect(res.body.data[0].descriptionPublic).toBe('Black iPhone');
+    expect(res.body.data[0].descriptionInternal).toBeNull();
     expect(res.body.data[0].title).toBe('iPhone');
     expect(res.body.nextCursor).toBe(null);
+  });
+
+  test('GET /api/items?q= finds a word match outside the newest candidates', async () => {
+    const olderItemId = '550e8400-e29b-41d4-a716-446655440077';
+    const searchRow = { ...itemListRow, searchText: null, embedding: null };
+    vi.mocked(prisma.item.findMany)
+      .mockResolvedValueOnce([
+        { ...searchRow, title: 'Umbrella', brand: null, color: 'Blue' },
+      ])
+      .mockResolvedValueOnce([
+        { ...searchRow, itemId: olderItemId, title: 'Water Bottle' },
+      ]);
+
+    const res = await request(createTestApp()).get(
+      '/api/items?q=black%20bottle'
+    );
+
+    expect(res.status).toBe(200);
+    expect(
+      res.body.data.map((item: { itemId: string }) => item.itemId)
+    ).toEqual([olderItemId]);
+    const wordMatchQuery = vi.mocked(prisma.item.findMany).mock.calls[1][0];
+    expect(wordMatchQuery?.where).toEqual({
+      AND: [
+        expect.any(Object),
+        {
+          AND: [
+            { OR: expect.arrayContaining([{ title: expect.any(Object) }]) },
+            { OR: expect.arrayContaining([{ color: expect.any(Object) }]) },
+          ],
+        },
+      ],
+    });
+  });
+
+  test('GET /api/items?q= ends the list when the cursor is no longer ranked', async () => {
+    const searchRow = { ...itemListRow, searchText: null, embedding: null };
+    vi.mocked(prisma.item.findMany)
+      .mockResolvedValueOnce([searchRow])
+      .mockResolvedValueOnce([searchRow]);
+
+    const res = await request(createTestApp()).get(
+      '/api/items?q=iphone&cursor=550e8400-e29b-41d4-a716-446655440099'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ data: [], nextCursor: null });
+  });
+
+  test('POST /api/items/analyze-image returns an AI form draft', async () => {
+    vi.mocked(analyzeItemImage).mockResolvedValueOnce({
+      title: 'Portable Charger',
+      category: 'Electronics',
+      color: 'Light pink',
+      brand: 'Belkin',
+      description: 'Light pink portable charger with an attached cable.',
+    });
+
+    const res = await request(createTestApp())
+      .post('/api/items/analyze-image')
+      .send({ imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe('Portable Charger');
+    expect(analyzeItemImage).toHaveBeenCalledWith(
+      'reports/550e8400-e29b-41d4-a716-446655440001.jpg'
+    );
+  });
+
+  test('POST /api/items/analyze-image remains optional when AI is unavailable', async () => {
+    vi.mocked(isItemImageAnalysisConfigured).mockReturnValueOnce(false);
+
+    const res = await request(createTestApp())
+      .post('/api/items/analyze-image')
+      .send({ imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg' });
+
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('IMAGE_ANALYSIS_UNAVAILABLE');
+    expect(analyzeItemImage).not.toHaveBeenCalled();
   });
 
   test('GET /api/items/:itemId returns 404 if item does not exist', async () => {
@@ -256,6 +332,8 @@ describe('items routes', () => {
         campusId,
         title: 'iPhone',
         description: 'Black iPhone',
+        color: 'Black',
+        brand: 'Apple',
         category: 'Electronics',
         locationFound: 'Library',
         dateFound: '2026-07-01',
@@ -268,7 +346,12 @@ describe('items routes', () => {
         ],
       });
 
-    expect(res.status).toBe(201);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(tx.item.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ color: 'Black', brand: 'Apple' }),
+      })
+    );
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'security-1',
@@ -313,7 +396,7 @@ describe('items routes', () => {
         descriptionInternal: 'Private description',
       });
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'item_updated',
@@ -438,6 +521,7 @@ describe('items routes', () => {
       .patch(`/api/items/${itemId}/status`)
       .send({ status: 'disposed' });
 
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.status).toBe(200);
     expect(tx.claim.updateMany).toHaveBeenCalled();
     expect(tx.matchSuggestion.updateMany).toHaveBeenCalled();
@@ -471,7 +555,7 @@ describe('items routes', () => {
       .patch(`/api/items/${itemId}/status`)
       .send({ status: 'disposed' });
 
-    expect(res.status).toBe(409);
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(writeAuditLogBestEffort).toHaveBeenCalledWith(
       expect.objectContaining({

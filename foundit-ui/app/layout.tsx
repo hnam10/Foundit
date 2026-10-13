@@ -1,4 +1,5 @@
 import { Provider } from '@/components/ui/provider';
+import { AuthGuard } from '@/components/AuthGuard';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
@@ -29,7 +30,9 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <Provider>{children}</Provider>
+        <Provider>
+          <AuthGuard>{children}</AuthGuard>
+        </Provider>
       </body>
     </html>
   );

@@ -35,21 +35,17 @@ export interface ItemSearchInput {
 
 export function buildClaimSearchText(claim: ClaimSearchInput): string {
   const parts: string[] = [];
-  append(parts, 'category', claim.category);
   append(parts, 'name', claim.itemName);
   append(parts, 'desc', claim.description);
   append(parts, 'info', claim.additionalInfo);
-  append(parts, 'location', claim.locationLost);
   return parts.join(' | ');
 }
 
 export function buildItemSearchText(item: ItemSearchInput): string {
   const parts: string[] = [];
-  append(parts, 'category', item.category);
   append(parts, 'title', item.title);
   append(parts, 'brand', item.brand);
   append(parts, 'color', item.color);
   append(parts, 'desc', item.descriptionPublic ?? item.descriptionInternal);
-  append(parts, 'location', item.locationFound);
   return parts.join(' | ');
 }

@@ -91,19 +91,31 @@ JWT_ACCESS_SECRET=some-long-random-string-here
 JWT_REFRESH_SECRET=another-different-random-string
 ```
 
-### Semantic matching
+### AI: semantic matching, item search, and photo analysis
 
-| Variable                           | Description                                                                        |
-| ---------------------------------- | ---------------------------------------------------------------------------------- |
-| `OPENROUTER_API_KEY`               | OpenRouter API key for embedding-based match search                                |
-| `OPENROUTER_EMBEDDING_MODEL`       | Text embedding model (default: `openai/text-embedding-3-small`)                    |
-| `OPENROUTER_IMAGE_EMBEDDING_MODEL` | Multimodal image embedding model (default: `nvidia/llama-nemotron-embed-vl-1b-v2`) |
+OpenAI is the primary provider. It serves text embeddings (claim matching and security item search) and the vision model that drafts the found-item form from a photo.
 
-If unset, a local hash fallback is used for **text** embeddings (dev only). Image embeddings have no hash fallback — when the key is missing or the image call fails, matching stays on the text-only hybrid weights.
+| Variable                         | Description                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`                 | OpenAI API key for text embeddings and photo analysis                           |
+| `OPENAI_EMBEDDING_MODEL`         | Text embedding model (default: `text-embedding-3-small`)                        |
+| `OPENAI_VISION_MODEL`            | Vision model for `POST /api/items/analyze-image`                                |
+| `ITEM_IMAGE_DETAIL`              | Image detail sent to the vision model: `low` (default, fewest tokens) or `high` |
+| `ITEM_SEARCH_SEMANTIC_THRESHOLD` | Minimum cosine similarity for a semantic item search hit, 0–1 (default: `0.35`) |
 
-Do **not** use a `:free` image embedding model for claim/item photos: free OpenRouter endpoints may log prompts. Prefer the non-free multimodal model above.
+If `OPENAI_API_KEY` is unset, a local hash fallback is used for **text** embeddings (dev only) and photo analysis responds with `503`.
 
-After deploy, backfill existing rows (text + image vectors for rows with photos):
+OpenRouter is optional:
+
+| Variable                           | Description                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| `OPENROUTER_API_KEY`               | Fallback provider when `OPENAI_API_KEY` is unset; also required for photo similarity |
+| `OPENROUTER_EMBEDDING_MODEL`       | Text embedding model on OpenRouter (default: `openai/text-embedding-3-small`)        |
+| `OPENROUTER_IMAGE_EMBEDDING_MODEL` | Multimodal image embedding model (default: `nvidia/llama-nemotron-embed-vl-1b-v2`)   |
+
+Photo similarity in match suggestions only runs when `OPENROUTER_API_KEY` is set, because the image embedding model is served by OpenRouter. Without it, matching stays on the text-only hybrid weights. Do **not** use a `:free` image embedding model for claim/item photos: free OpenRouter endpoints may log prompts.
+
+After deploy, backfill existing rows (text vectors, plus image vectors for rows with photos when OpenRouter is configured):
 
 ```bash
 pnpm run backfill:embeddings
@@ -216,7 +228,7 @@ Global API rules:
 | POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Run semantic match scoring and upsert suggestions        |
 | PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Done   | Confirm or dismiss a match suggestion                    |
 
-Match suggestions use precomputed `searchText` / `embedding` / `imageEmbedding` on claims and stored items (built on create/update). `POST` compares text embeddings with hybrid re-ranking (date, retention) and, when both sides have photos, blends in image similarity. Security still confirms matches manually.
+Match suggestions use precomputed `searchText` / `embedding` / `imageEmbedding` on claims and stored items (built on create/update). `POST` only considers stored or expired items in the claim's category and campus, compares text embeddings with hybrid re-ranking (date, location, retention) and, when both sides have image embeddings, blends in image similarity. Security still confirms matches manually.
 
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
 
@@ -244,18 +256,18 @@ Report link tokens stay in the URL to match the current database model, but must
 
 ### Items
 
-| Method | Path                                 | Auth           | Status  | Description                                              |
-| ------ | ------------------------------------ | -------------- | ------- | -------------------------------------------------------- |
-| GET    | `/api/public/items`                  | —              | Done    | Browse public-safe stored items with optional filters    |
-| GET    | `/api/items/category-stats`          | —              | Done    | Public item counts per category                          |
-| GET    | `/api/items`                         | security/admin | Done    | List items with filters and cursor pagination            |
-| GET    | `/api/items/:itemId`                 | security/admin | Done    | Get item detail (internal fields, images, linked claims) |
-| POST   | `/api/items/batch`                   | security/admin | Planned | Batch status update for items                            |
-| POST   | `/api/items`                         | security/admin | Done    | Register a found item into inventory                     |
-| PATCH  | `/api/items/:itemId`                 | security/admin | Done    | Update item fields; does not modify status               |
-| DELETE | `/api/items/:itemId`                 | admin          | Planned | Permanently delete only erroneous records with audit log |
-| PATCH  | `/api/items/:itemId/status`          | security/admin | Done    | Transition item lifecycle status                         |
-| POST   | `/api/items/:itemId/walk-in-release` | security/admin | Done    | Release item to student without a prior claim            |
+| Method | Path                                 | Auth           | Status  | Description                                                                       |
+| ------ | ------------------------------------ | -------------- | ------- | --------------------------------------------------------------------------------- |
+| GET    | `/api/items/category-stats`          | —              | Done    | Public item counts per category                                                   |
+| GET    | `/api/items`                         | security/admin | Done    | List items with filters and cursor pagination; `q` runs exact and semantic search |
+| POST   | `/api/items/analyze-image`           | security/admin | Done    | Draft title, category, color, brand, and description from an uploaded photo       |
+| GET    | `/api/items/:itemId`                 | security/admin | Done    | Get item detail (internal fields, images, linked claims)                          |
+| POST   | `/api/items/batch`                   | security/admin | Planned | Batch status update for items                                                     |
+| POST   | `/api/items`                         | security/admin | Done    | Register a found item into inventory                                              |
+| PATCH  | `/api/items/:itemId`                 | security/admin | Done    | Update item fields; does not modify status                                        |
+| DELETE | `/api/items/:itemId`                 | admin          | Planned | Permanently delete only erroneous records with audit log                          |
+| PATCH  | `/api/items/:itemId/status`          | security/admin | Done    | Transition item lifecycle status                                                  |
+| POST   | `/api/items/:itemId/walk-in-release` | security/admin | Done    | Release item to student without a prior claim                                     |
 
 **`GET /api/items` response:**
 
@@ -290,7 +302,7 @@ Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed
 
 Allowed targets: `expired`, `disposed`. Transitions: `stored → expired|disposed`, `expired → disposed`. Blocked when item is `claimed` or `disposed`. Returns updated item detail; rejects active linked claims in the same transaction.
 
-A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Security should use `disposed` to record physical disposal after expiry.
+A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Expired items and their match suggestions remain available because the physical item may still be present; security should use `disposed` to record physical disposal.
 
 A second daily cron (`expireOpenClaims`) auto-rejects `submitted` / `under_review` claims that are still open **35 days after submission** (`createdAt`). Suggested matches for those claims are dismissed, and the student gets a `claim_status_update` notice. Approved, picked-up, and already-rejected claims are left alone.
 

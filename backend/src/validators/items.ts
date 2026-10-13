@@ -54,11 +54,14 @@ export const listSecurityItemsQuerySchema = z.object({
   ),
   campusId: z.uuid().optional(),
   category: z.string().min(1).max(50).trim().optional(),
-  q: z.string().trim().max(200).optional(),
+  q: z.string().min(1).max(200).trim().optional(),
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
+export const analyzeItemImageSchema = z.object({
+  imageUrl: reportImageSchema.shape.imageUrl,
+});
 export type ListSecurityItemsQuery = z.infer<
   typeof listSecurityItemsQuerySchema
 >;
@@ -96,6 +99,18 @@ export const createSecurityItemSchema = z.object({
   campusId: z.uuid(),
   title: z.string().min(1).max(100).trim(),
   description: z.string().min(1).max(1000).trim(),
+  color: z
+    .string()
+    .max(30)
+    .trim()
+    .optional()
+    .transform((value) => value || null),
+  brand: z
+    .string()
+    .max(50)
+    .trim()
+    .optional()
+    .transform((value) => value || null),
   category: z.string().min(1).max(50).trim(),
   locationFound: z.string().min(1).max(100).trim(),
   dateFound: z.iso
@@ -108,6 +123,8 @@ export const createSecurityItemSchema = z.object({
 });
 
 export type CreateSecurityItemInput = z.infer<typeof createSecurityItemSchema>;
+
+export type AnalyzeItemImageInput = z.infer<typeof analyzeItemImageSchema>;
 
 export const walkInReleaseSchema = z.object({
   studentFullName: z.string().trim().min(1).max(200),

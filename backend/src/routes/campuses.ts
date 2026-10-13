@@ -1,10 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../db';
+import { MISSING_CAMPUS_ID } from '../constants/campus';
 
 const router = Router();
-
-/** Sentinel campus used when a student has no campus yet — not selectable in UI. */
-const MISSING_CAMPUS_ID = '00000000-0000-0000-0000-000000000000';
 
 /**
  * @openapi

@@ -3,6 +3,7 @@ import { prisma } from '../../db';
 import { generateMatchCandidates } from './matching';
 import { randomUUID } from 'node:crypto';
 import { writeAuditLog } from '../../utils/auditLog';
+import { MISSING_CAMPUS_ID } from '../../constants/campus';
 
 const pendingMatchStatuses = [
   ClaimStatus.submitted,
@@ -117,36 +118,37 @@ export async function refreshClaimMatchSuggestions(
   };
 }
 
-export function scheduleMatchRefreshForCampus(campusId: string) {
-  void (async () => {
-    const runId = randomUUID();
-    try {
-      const claims = await prisma.claim.findMany({
-        where: {
-          itemId: null,
-          status: { in: [...pendingMatchStatuses] },
-        },
-        select: { claimId: true },
-      });
+export async function refreshPendingClaimsForCampus(campusId: string) {
+  const runId = randomUUID();
+  const claims = await prisma.claim.findMany({
+    where: {
+      itemId: null,
+      status: { in: [...pendingMatchStatuses] },
+      campusId: { in: [campusId, MISSING_CAMPUS_ID] },
+    },
+    select: { claimId: true },
+  });
 
-      for (const claim of claims) {
-        try {
-          await refreshClaimMatchSuggestions(claim.claimId, {
-            actorType: 'system',
-            runId,
-          });
-        } catch (error) {
-          console.error('Failed to refresh claim match suggestions', {
-            claimId: claim.claimId,
-            error,
-          });
-        }
-      }
+  for (const claim of claims) {
+    try {
+      await refreshClaimMatchSuggestions(claim.claimId, {
+        actorType: 'system',
+        runId,
+      });
     } catch (error) {
-      console.error('Failed to schedule match refresh for pending claims', {
-        campusId,
+      console.error('Failed to refresh claim match suggestions', {
+        claimId: claim.claimId,
         error,
       });
     }
-  })();
+  }
+}
+
+export function scheduleMatchRefreshForCampus(campusId: string) {
+  void refreshPendingClaimsForCampus(campusId).catch((error) => {
+    console.error('Failed to schedule match refresh for pending claims', {
+      campusId,
+      error,
+    });
+  });
 }

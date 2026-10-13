@@ -5,6 +5,7 @@ import {
   combineHybridScore,
   cosineSimilarity,
   dateProximityScore,
+  locationProximityScore,
 } from '../src/lib/matching/scores';
 
 describe('matching scores', () => {
@@ -29,10 +30,28 @@ describe('matching scores', () => {
     expect(result).toEqual({ score: 0.1, valid: true });
   });
 
+  test('locationProximityScore uses deterministic token overlap', () => {
+    const result = locationProximityScore(
+      'Near the Newnham library',
+      'Newnham library second floor'
+    );
+    expect(result.score).toBeCloseTo(0.5, 5);
+    expect(result.hasEvidence).toBe(true);
+  });
+
+  test('locationProximityScore treats a missing location as neutral', () => {
+    expect(locationProximityScore(null, 'Newnham library')).toEqual({
+      score: 0.5,
+      hasEvidence: false,
+    });
+  });
+
   test('combineHybridScore returns a 0-100 score', () => {
     const score = combineHybridScore({
       semanticSimilarity: 0.9,
       dateProximity: 1,
+      locationProximity: 1,
+      locationEvidence: true,
       retention: 1,
     });
 
@@ -44,11 +63,15 @@ describe('matching scores', () => {
     const strongSemantic = combineHybridScore({
       semanticSimilarity: 0.85,
       dateProximity: 0.4,
+      locationProximity: 0.5,
+      locationEvidence: false,
       retention: 1,
     });
     const weakSemantic = combineHybridScore({
       semanticSimilarity: 0.4,
       dateProximity: 1,
+      locationProximity: 0.5,
+      locationEvidence: false,
       retention: 1,
     });
 
@@ -56,44 +79,66 @@ describe('matching scores', () => {
     expect(weakSemantic).toBeLessThan(55);
   });
 
+  test('buildMatchCriteria only reports location when evidence exists', () => {
+    expect(
+      buildMatchCriteria({
+        semanticSimilarity: 0.85,
+        dateProximity: 1,
+        locationProximity: 0.5,
+        locationEvidence: false,
+        retention: 1,
+      })
+    ).toBe('semantic,category,date');
+  });
+
   test('combineHybridScore without imageSimilarity keeps text-only weights', () => {
     const withoutImage = combineHybridScore({
       semanticSimilarity: 1,
       dateProximity: 0,
+      locationProximity: 0,
+      locationEvidence: false,
       retention: 0,
     });
     const withNullImage = combineHybridScore({
       semanticSimilarity: 1,
       dateProximity: 0,
+      locationProximity: 0,
+      locationEvidence: false,
       retention: 0,
       imageSimilarity: null,
     });
 
-    // 0.8 * 1 = 0.8 → 80
-    expect(withoutImage).toBe(80);
-    expect(withNullImage).toBe(80);
+    // 0.7 * 1 = 0.7 → 70
+    expect(withoutImage).toBe(70);
+    expect(withNullImage).toBe(70);
   });
 
   test('combineHybridScore blends imageSimilarity when present', () => {
     const withImage = combineHybridScore({
       semanticSimilarity: 1,
       dateProximity: 0,
+      locationProximity: 0,
+      locationEvidence: false,
       retention: 0,
       imageSimilarity: 1,
     });
 
-    // 0.6 * 1 + 0.2 * 1 = 0.8 → 80
-    expect(withImage).toBe(80);
+    // 0.55 * 1 + 0.15 * 1 = 0.7 → 70
+    expect(withImage).toBe(70);
 
     const weakTextStrongImage = combineHybridScore({
       semanticSimilarity: 0.4,
       dateProximity: 1,
+      locationProximity: 0,
+      locationEvidence: false,
       retention: 1,
       imageSimilarity: 1,
     });
     const weakTextNoImage = combineHybridScore({
       semanticSimilarity: 0.4,
       dateProximity: 1,
+      locationProximity: 0,
+      locationEvidence: false,
       retention: 1,
     });
 
@@ -105,19 +150,23 @@ describe('matching scores', () => {
       buildMatchCriteria({
         semanticSimilarity: 0.9,
         dateProximity: 0.4,
+        locationProximity: 0.5,
+        locationEvidence: false,
         retention: 1,
         imageSimilarity: 0.75,
       })
-    ).toBe('semantic,image');
+    ).toBe('semantic,category,image');
 
     expect(
       buildMatchCriteria({
         semanticSimilarity: 0.9,
         dateProximity: 0.4,
+        locationProximity: 0.5,
+        locationEvidence: false,
         retention: 1,
         imageSimilarity: 0.5,
       })
-    ).toBe('semantic');
+    ).toBe('semantic,category');
   });
 });
 

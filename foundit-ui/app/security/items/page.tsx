@@ -27,6 +27,7 @@ import {
 } from '@/lib/api/items';
 import type { Campus, ItemStatus, SecurityItemListItem } from '@/types/items';
 import { ITEM_STATUS_LABELS } from '@/types/items';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 const Select = chakra('select');
 const ITEMS_PER_PAGE = 10;
@@ -66,9 +67,7 @@ function StoredItemsPageContent() {
   const [searchQuery, setSearchQuery] = useState(
     () => searchParams.get('q') ?? ''
   );
-  const [debouncedQuery, setDebouncedQuery] = useState(
-    () => searchParams.get('q')?.trim() ?? ''
-  );
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -77,14 +76,6 @@ function StoredItemsPageContent() {
   const [disposeDialogOpen, setDisposeDialogOpen] = useState(false);
   const [disposing, setDisposing] = useState(false);
   const [disposeError, setDisposeError] = useState('');
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedQuery(searchQuery.trim());
-      setPage(1);
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [searchQuery]);
 
   useEffect(() => {
     let active = true;
@@ -115,7 +106,7 @@ function StoredItemsPageContent() {
         const data = await fetchAllSecurityItems({
           campusId: campusFilter || undefined,
           status: (statusFilter as ItemStatus) || undefined,
-          q: debouncedQuery || undefined,
+          q: debouncedSearchQuery.trim() || undefined,
         });
 
         if (!active) return;
@@ -137,7 +128,7 @@ function StoredItemsPageContent() {
     return () => {
       active = false;
     };
-  }, [campusFilter, statusFilter, debouncedQuery]);
+  }, [campusFilter, statusFilter, debouncedSearchQuery]);
 
   const filteredItems = items;
 

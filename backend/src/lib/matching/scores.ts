@@ -65,9 +65,63 @@ export function retentionUrgencyScore(
   return 1;
 }
 
+const LOCATION_STOP_WORDS = new Set([
+  'at',
+  'by',
+  'in',
+  'near',
+  'of',
+  'on',
+  'the',
+]);
+
+function locationTokens(value: string): Set<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter((token) => token.length > 1 && !LOCATION_STOP_WORDS.has(token))
+  );
+}
+
+export interface LocationProximityResult {
+  score: number;
+  hasEvidence: boolean;
+}
+
+/**
+ * Deterministic location similarity for the free-text location fields.
+ * Missing locations are neutral rather than a reason to reject a candidate.
+ */
+export function locationProximityScore(
+  locationLost: string | null,
+  locationFound: string | null
+): LocationProximityResult {
+  if (!locationLost?.trim() || !locationFound?.trim()) {
+    return { score: 0.5, hasEvidence: false };
+  }
+
+  const lostTokens = locationTokens(locationLost);
+  const foundTokens = locationTokens(locationFound);
+  if (lostTokens.size === 0 || foundTokens.size === 0) {
+    return { score: 0.5, hasEvidence: false };
+  }
+
+  const overlap = [...lostTokens].filter((token) => foundTokens.has(token));
+  const union = new Set([...lostTokens, ...foundTokens]);
+  return {
+    score: overlap.length / union.size,
+    hasEvidence: overlap.length > 0,
+  };
+}
+
 export interface HybridScoreInput {
   semanticSimilarity: number;
   dateProximity: number;
+  locationProximity: number;
+  locationEvidence: boolean;
   retention: number;
   /** Present only when both claim and item have image embeddings. */
   imageSimilarity?: number | null;
@@ -75,25 +129,28 @@ export interface HybridScoreInput {
 
 const IMAGE_CRITERIA_THRESHOLD = 0.7;
 
+/** Returns a 0–100 match score; image similarity is weighted in only when present. */
 export function combineHybridScore(input: HybridScoreInput): number {
   const hasImage =
     typeof input.imageSimilarity === 'number' &&
     Number.isFinite(input.imageSimilarity);
 
   const weighted = hasImage
-    ? 0.6 * input.semanticSimilarity +
-      0.2 * (input.imageSimilarity as number) +
+    ? 0.55 * input.semanticSimilarity +
+      0.15 * (input.imageSimilarity as number) +
       0.15 * input.dateProximity +
+      0.1 * input.locationProximity +
       0.05 * input.retention
-    : 0.8 * input.semanticSimilarity +
+    : 0.7 * input.semanticSimilarity +
       0.15 * input.dateProximity +
+      0.1 * input.locationProximity +
       0.05 * input.retention;
 
   return Math.round(Math.max(0, Math.min(1, weighted)) * 100);
 }
 
 export function buildMatchCriteria(input: HybridScoreInput): string {
-  const criteria: string[] = ['semantic'];
+  const criteria: string[] = ['semantic', 'category'];
 
   if (
     typeof input.imageSimilarity === 'number' &&
@@ -102,6 +159,7 @@ export function buildMatchCriteria(input: HybridScoreInput): string {
     criteria.push('image');
   }
   if (input.dateProximity >= 0.7) criteria.push('date');
+  if (input.locationEvidence) criteria.push('location');
   if (input.retention < 1) criteria.push('retention');
 
   return criteria.join(',');
