@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi, afterEach } from 'vitest';
+import { ItemStatus } from '@prisma/client';
 import {
   buildMatchCriteria,
   combineHybridScore,
@@ -77,7 +78,6 @@ describe('matching scores', () => {
     expect(strongSemantic).toBeGreaterThan(weakSemantic);
     expect(weakSemantic).toBeLessThan(55);
   });
-
   test('buildMatchCriteria only reports location when evidence exists', () => {
     expect(
       buildMatchCriteria({
@@ -88,5 +88,83 @@ describe('matching scores', () => {
         retention: 1,
       })
     ).toBe('semantic,category,date');
+  });
+
+  test('combineHybridScore without imageSimilarity keeps text-only weights', () => {
+    const withoutImage = combineHybridScore({
+      semanticSimilarity: 1,
+      dateProximity: 0,
+      locationProximity: 0,
+      locationEvidence: false,
+      retention: 0,
+    });
+    const withNullImage = combineHybridScore({
+      semanticSimilarity: 1,
+      dateProximity: 0,
+      locationProximity: 0,
+      locationEvidence: false,
+      retention: 0,
+      imageSimilarity: null,
+    });
+
+    // 0.7 * 1 = 0.7 → 70
+    expect(withoutImage).toBe(70);
+    expect(withNullImage).toBe(70);
+  });
+
+  test('combineHybridScore blends imageSimilarity when present', () => {
+    const withImage = combineHybridScore({
+      semanticSimilarity: 1,
+      dateProximity: 0,
+      locationProximity: 0,
+      locationEvidence: false,
+      retention: 0,
+      imageSimilarity: 1,
+    });
+
+    // 0.55 * 1 + 0.15 * 1 = 0.7 → 70
+    expect(withImage).toBe(70);
+
+    const weakTextStrongImage = combineHybridScore({
+      semanticSimilarity: 0.4,
+      dateProximity: 1,
+      locationProximity: 0,
+      locationEvidence: false,
+      retention: 1,
+      imageSimilarity: 1,
+    });
+    const weakTextNoImage = combineHybridScore({
+      semanticSimilarity: 0.4,
+      dateProximity: 1,
+      locationProximity: 0,
+      locationEvidence: false,
+      retention: 1,
+    });
+
+    expect(weakTextStrongImage).toBeGreaterThan(weakTextNoImage);
+  });
+
+  test('buildMatchCriteria includes image when similarity is high', () => {
+    expect(
+      buildMatchCriteria({
+        semanticSimilarity: 0.9,
+        dateProximity: 0.4,
+        locationProximity: 0.5,
+        locationEvidence: false,
+        retention: 1,
+        imageSimilarity: 0.75,
+      })
+    ).toBe('semantic,category,image');
+
+    expect(
+      buildMatchCriteria({
+        semanticSimilarity: 0.9,
+        dateProximity: 0.4,
+        locationProximity: 0.5,
+        locationEvidence: false,
+        retention: 1,
+        imageSimilarity: 0.5,
+      })
+    ).toBe('semantic,category');
   });
 });

@@ -68,6 +68,12 @@ vi.mock('../src/db', () => ({
     user: {
       findUnique: vi.fn(),
     },
+    claim: {
+      findFirst: vi.fn(),
+    },
+    auditLog: {
+      findFirst: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -144,6 +150,8 @@ describe('items routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.authUser = { user_id: 'security-1', role: 'security' };
+    vi.mocked(prisma.claim.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
   });
 
   test('GET /api/items/category-stats returns public category counts', async () => {
@@ -280,9 +288,9 @@ describe('items routes', () => {
         dateFound: '2026-07-01',
         images: [
           {
-            imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg',
-            fileType: 'jpg',
-            fileSizeKb: 128,
+            imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440099.jpg',
+            fileType: 'jpeg',
+            fileSizeKb: 120,
           },
         ],
       });
@@ -377,21 +385,21 @@ describe('items routes', () => {
     expect(summary).not.toContain('Private description');
   });
 
-  test('PATCH /api/items/:itemId/status audits item and affected claims together', async () => {
+  test('PATCH /api/items/:itemId/status to expired does not close open claims', async () => {
     vi.mocked(prisma.item.findUnique).mockResolvedValueOnce({
       itemId,
+      title: 'iPhone',
+      category: 'Electronics',
       status: ItemStatus.stored,
       retentionExpiryDate: new Date('2026-07-31'),
     });
     const tx = {
       claim: {
         findFirst: vi.fn().mockResolvedValue(null),
-        findMany: vi.fn().mockResolvedValue([
-          {
-            claimId: '550e8400-e29b-41d4-a716-446655440099',
-            status: 'submitted',
-          },
-        ]),
+        findMany: vi.fn(),
+        updateMany: vi.fn(),
+      },
+      matchSuggestion: {
         updateMany: vi.fn(),
       },
       item: {
@@ -409,7 +417,63 @@ describe('items routes', () => {
       .patch(`/api/items/${itemId}/status`)
       .send({ status: 'expired' });
 
+    expect(res.status).toBe(200);
+    expect(tx.claim.findMany).not.toHaveBeenCalled();
+    expect(tx.claim.updateMany).not.toHaveBeenCalled();
+    expect(tx.matchSuggestion.updateMany).not.toHaveBeenCalled();
+    expect(writeAuditLogs).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          action: 'item_status_updated',
+          entityId: itemId,
+          requestId: '11111111-1111-4111-8111-111111111111',
+        }),
+      ],
+      tx
+    );
+  });
+
+  test('PATCH /api/items/:itemId/status to disposed closes open claims and dismisses suggestions', async () => {
+    vi.mocked(prisma.item.findUnique).mockResolvedValueOnce({
+      itemId,
+      title: 'iPhone',
+      category: 'Electronics',
+      status: ItemStatus.stored,
+      retentionExpiryDate: new Date('2026-07-31'),
+    });
+    const tx = {
+      claim: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([
+          {
+            claimId: '550e8400-e29b-41d4-a716-446655440099',
+            status: 'submitted',
+          },
+        ]),
+        updateMany: vi.fn(),
+      },
+      matchSuggestion: {
+        updateMany: vi.fn(),
+      },
+      item: {
+        update: vi.fn().mockResolvedValue({
+          ...itemDetailRow,
+          status: ItemStatus.disposed,
+        }),
+      },
+    };
+    vi.mocked(prisma.$transaction).mockImplementationOnce(async (callback) =>
+      callback(tx as never)
+    );
+
+    const res = await request(createTestApp())
+      .patch(`/api/items/${itemId}/status`)
+      .send({ status: 'disposed' });
+
     expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.status).toBe(200);
+    expect(tx.claim.updateMany).toHaveBeenCalled();
+    expect(tx.matchSuggestion.updateMany).toHaveBeenCalled();
     expect(writeAuditLogs).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
@@ -430,6 +494,8 @@ describe('items routes', () => {
   test('PATCH /api/items/:itemId/status audits invalid transitions without mutation', async () => {
     vi.mocked(prisma.item.findUnique).mockResolvedValueOnce({
       itemId,
+      title: 'iPhone',
+      category: 'Electronics',
       status: ItemStatus.claimed,
       retentionExpiryDate: new Date('2026-07-31'),
     });

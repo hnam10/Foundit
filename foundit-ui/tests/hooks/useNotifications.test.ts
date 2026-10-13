@@ -51,6 +51,7 @@ beforeEach(() => {
   fetchNotificationsMock.mockResolvedValue({
     notifications: [unread, read],
     unreadCount: 1,
+    nextCursor: null,
   });
 });
 
@@ -63,7 +64,55 @@ describe('useNotifications', () => {
 
     expect(result.current.notifications).toHaveLength(2);
     expect(result.current.unreadCount).toBe(1);
+    expect(result.current.nextCursor).toBeNull();
     expect(result.current.error).toBeNull();
+    expect(fetchNotificationsMock).toHaveBeenCalledWith({
+      unreadOnly: false,
+      limit: 10,
+    });
+  });
+
+  it('passes unreadOnly when filtering', async () => {
+    const { result } = renderHook(() => useNotifications({ unreadOnly: true }));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(fetchNotificationsMock).toHaveBeenCalledWith({
+      unreadOnly: true,
+      limit: 10,
+    });
+  });
+
+  it('appends the next page via loadMore', async () => {
+    const page2: AppNotification = {
+      ...read,
+      notificationId: 'n-3',
+      title: 'Older notice',
+    };
+    fetchNotificationsMock
+      .mockResolvedValueOnce({
+        notifications: [unread, read],
+        unreadCount: 1,
+        nextCursor: 'n-2',
+      })
+      .mockResolvedValueOnce({
+        notifications: [page2],
+        unreadCount: 1,
+        nextCursor: null,
+      });
+
+    const { result } = renderHook(() => useNotifications());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.nextCursor).toBe('n-2');
+
+    await act(() => result.current.loadMore());
+
+    await waitFor(() => expect(result.current.nextCursor).toBeNull());
+    expect(result.current.notifications).toHaveLength(3);
+    expect(fetchNotificationsMock).toHaveBeenLastCalledWith({
+      unreadOnly: false,
+      cursor: 'n-2',
+      limit: 10,
+    });
   });
 
   it('exposes an error message when loading fails', async () => {
@@ -90,6 +139,26 @@ describe('useNotifications', () => {
     ).toBe(true);
     expect(result.current.unreadCount).toBe(0);
     expect(markNotificationReadMock).toHaveBeenCalledWith('n-1');
+  });
+
+  it('keeps read rows in the list when unreadOnly is true', async () => {
+    fetchNotificationsMock.mockResolvedValue({
+      notifications: [unread],
+      unreadCount: 1,
+      nextCursor: null,
+    });
+    markNotificationReadMock.mockResolvedValue({ ...unread, isRead: true });
+
+    const { result } = renderHook(() => useNotifications({ unreadOnly: true }));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(() => result.current.markRead('n-1'));
+
+    expect(result.current.notifications).toHaveLength(1);
+    expect(result.current.notifications[0]?.isRead).toBe(true);
+    expect(result.current.unreadCount).toBe(0);
+    // No client-side filter-out — only the initial unreadOnly fetch.
+    expect(fetchNotificationsMock).toHaveBeenCalledTimes(1);
   });
 
   it('skips the request for an already-read notification', async () => {
@@ -176,6 +245,7 @@ describe('useNotifications', () => {
     fetchNotificationsMock.mockResolvedValue({
       notifications: [read],
       unreadCount: 0,
+      nextCursor: null,
     });
 
     const { result } = renderHook(() => useNotifications());

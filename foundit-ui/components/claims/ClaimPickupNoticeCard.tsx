@@ -25,6 +25,10 @@ export function ClaimPickupNoticeCard({
 
   const badgePalette = isPickedUp ? 'green' : isApproved ? 'blue' : 'gray';
 
+  const releaserName = claim.verifier
+    ? `${claim.verifier.firstName} ${claim.verifier.lastName}`.trim()
+    : null;
+
   return (
     <ClaimCard>
       <Flex justify="space-between" align="start" mb={3} gap={2}>
@@ -37,14 +41,25 @@ export function ClaimPickupNoticeCard({
       </Flex>
       <Stack gap={3}>
         {isPickedUp ? (
-          <Text fontSize="sm" color="gray.600">
-            Item released on {formatClaimDateTime(claim.pickedUpAt)}.
-          </Text>
+          <Stack gap={1}>
+            <Text fontSize="sm" color="gray.600">
+              Item released on {formatClaimDateTime(claim.pickedUpAt)}.
+            </Text>
+            {releaserName ? (
+              <Text fontSize="sm" color="gray.700">
+                <Text as="span" fontWeight="semibold">
+                  Released by:
+                </Text>{' '}
+                {releaserName}
+              </Text>
+            ) : null}
+          </Stack>
         ) : isApproved ? (
           <>
             <Text fontSize="sm" color="gray.600">
               Student notified to pick up in person at the {campusName} campus
-              security office.
+              security office. Approved claims expire automatically after 35
+              days if the item is not collected.
             </Text>
             <Text fontSize="sm" color="gray.700">
               <Text as="span" fontWeight="semibold">

@@ -93,13 +93,17 @@ JWT_REFRESH_SECRET=another-different-random-string
 
 ### Semantic matching
 
-| Variable                 | Description                                         |
-| ------------------------ | --------------------------------------------------- |
-| `OPENAI_API_KEY`         | OpenAI API key for matching and item photo analysis |
-| `OPENAI_EMBEDDING_MODEL` | Embedding model (default: `text-embedding-3-small`) |
-| `OPENAI_VISION_MODEL`    | Item photo analysis model (default: `gpt-5.6-luna`) |
+| Variable                           | Description                                                                        |
+| ---------------------------------- | ---------------------------------------------------------------------------------- |
+| `OPENROUTER_API_KEY`               | OpenRouter API key for embedding-based match search                                |
+| `OPENROUTER_EMBEDDING_MODEL`       | Text embedding model (default: `openai/text-embedding-3-small`)                    |
+| `OPENROUTER_IMAGE_EMBEDDING_MODEL` | Multimodal image embedding model (default: `nvidia/llama-nemotron-embed-vl-1b-v2`) |
 
-If unset, a local hash fallback is used (dev only). After deploy, backfill existing rows:
+If unset, a local hash fallback is used for **text** embeddings (dev only). Image embeddings have no hash fallback — when the key is missing or the image call fails, matching stays on the text-only hybrid weights.
+
+Do **not** use a `:free` image embedding model for claim/item photos: free OpenRouter endpoints may log prompts. Prefer the non-free multimodal model above.
+
+After deploy, backfill existing rows (text + image vectors for rows with photos):
 
 ```bash
 pnpm run backfill:embeddings
@@ -133,7 +137,8 @@ src/
 │   └── username.ts             # Unique username generator
 ├── jobs/
 │   ├── cleanupUnverifiedUsers.ts  # Daily cron job to delete unverified accounts
-│   └── expireRetainedItems.ts     # Daily cron: stored → expired when retention ends
+│   ├── expireRetainedItems.ts     # Daily cron: stored → expired when retention ends
+│   └── expireOpenClaims.ts        # Daily cron: open claims → rejected after 35 days
 ├── routes/
 │   ├── health.ts               # GET /api/health
 │   ├── auth.ts                 # POST /api/auth/login|register (done) · refresh|logout (stub)
@@ -211,7 +216,7 @@ Global API rules:
 | POST   | `/api/claims/:claimId/match-suggestions`          | security/admin         | Done   | Run semantic match scoring and upsert suggestions        |
 | PATCH  | `/api/claims/:claimId/match-suggestions/:matchId` | security/admin         | Done   | Confirm or dismiss a match suggestion                    |
 
-Match suggestions use precomputed `searchText` / `embedding` on claims and stored items (built on create/update). `POST` compares embeddings with hybrid re-ranking (category, date, campus, location). Security still confirms matches manually.
+Match suggestions use precomputed `searchText` / `embedding` / `imageEmbedding` on claims and stored items (built on create/update). `POST` compares text embeddings with hybrid re-ranking (date, retention) and, when both sides have photos, blends in image similarity. Security still confirms matches manually.
 
 Claim cancellation uses `DELETE /api/claims/:claimId` because the original database `claim_status` enum does not include `withdrawn`.
 
@@ -286,6 +291,8 @@ Allowed targets: `expired`, `disposed`. Transitions: `stored → expired|dispose
 
 A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Expired items and their match suggestions remain available because the physical item may still be present; security should use `disposed` to record physical disposal.
 
+A second daily cron (`expireOpenClaims`) auto-rejects `submitted` / `under_review` claims that are still open **35 days after submission** (`createdAt`). Suggested matches for those claims are dismissed, and the student gets a `claim_status_update` notice. Approved, picked-up, and already-rejected claims are left alone.
+
 ### Notifications
 
 | Method | Path                                        | Auth | Status | Description                                                                             |
@@ -298,9 +305,10 @@ A daily cron job (`expireRetainedItems`) also transitions `stored → expired` w
 Notifications are per-recipient rows, always scoped to the caller's JWT. They are
 created transactionally by: claim submission and cancellation (fan-out to active
 security/admin at the claim's campus), claim status changes and match approval
-(to the student), the retention cron (per-campus `item_expiring`), and found-item
-report submission (`report_confirmation` to the finder). The unread-count "stats"
-endpoint from the original plan was folded into
+(to the student), the retention cron (auto-reject notices + per-campus
+`item_expiring`), the open-claim expiry cron (auto-reject after 35 days), and
+found-item report submission (`report_confirmation` to the finder). The
+unread-count "stats" endpoint from the original plan was folded into
 `GET /api/notifications` as `unreadCount`. Student claim emails also send when
 both `emailNotificationOptIn` and claim `notificationPreference === 'email'` are set.
 

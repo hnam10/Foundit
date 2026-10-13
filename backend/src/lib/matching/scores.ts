@@ -123,14 +123,27 @@ export interface HybridScoreInput {
   locationProximity: number;
   locationEvidence: boolean;
   retention: number;
+  /** Present only when both claim and item have image embeddings. */
+  imageSimilarity?: number | null;
 }
 
+const IMAGE_CRITERIA_THRESHOLD = 0.7;
+
 export function combineHybridScore(input: HybridScoreInput): number {
-  const weighted =
-    0.7 * input.semanticSimilarity +
-    0.15 * input.dateProximity +
-    0.1 * input.locationProximity +
-    0.05 * input.retention;
+  const hasImage =
+    typeof input.imageSimilarity === 'number' &&
+    Number.isFinite(input.imageSimilarity);
+
+  const weighted = hasImage
+    ? 0.55 * input.semanticSimilarity +
+      0.15 * (input.imageSimilarity as number) +
+      0.15 * input.dateProximity +
+      0.1 * input.locationProximity +
+      0.05 * input.retention
+    : 0.7 * input.semanticSimilarity +
+      0.15 * input.dateProximity +
+      0.1 * input.locationProximity +
+      0.05 * input.retention;
 
   return Math.round(Math.max(0, Math.min(1, weighted)) * 100);
 }
@@ -138,6 +151,12 @@ export function combineHybridScore(input: HybridScoreInput): number {
 export function buildMatchCriteria(input: HybridScoreInput): string {
   const criteria: string[] = ['semantic', 'category'];
 
+  if (
+    typeof input.imageSimilarity === 'number' &&
+    input.imageSimilarity >= IMAGE_CRITERIA_THRESHOLD
+  ) {
+    criteria.push('image');
+  }
   if (input.dateProximity >= 0.7) criteria.push('date');
   if (input.locationEvidence) criteria.push('location');
   if (input.retention < 1) criteria.push('retention');

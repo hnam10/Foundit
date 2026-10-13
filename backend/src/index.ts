@@ -16,6 +16,7 @@ import errorHandler from './middleware/errorHandler';
 import { startCleanupJob } from './jobs/cleanupUnverifiedUsers';
 import { startExpireRetainedItemsJob } from './jobs/expireRetainedItems';
 import { startPendingPhotoUploadCleanupJob } from './jobs/cleanupPendingPhotoUploads';
+import { startExpireOpenClaimsJob } from './jobs/expireOpenClaims';
 import uploadsRouter from './routes/uploads';
 import photoSessionsRouter from './routes/photoSessions';
 import requestContext from './middleware/requestContext';
@@ -75,4 +76,5 @@ app.listen(PORT, () => {
   startCleanupJob();
   startExpireRetainedItemsJob();
   startPendingPhotoUploadCleanupJob();
+  startExpireOpenClaimsJob();
 });

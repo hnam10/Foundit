@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 
 import { describe, expect, it, vi } from 'vitest';
 import NotificationCard from '@/components/NotificationCard';
@@ -11,8 +11,17 @@ const baseProps = {
 };
 
 describe('NotificationCard', () => {
-  it('renders the title and message', () => {
+  it('renders the title and message when unread', () => {
     renderWithProvider(<NotificationCard {...baseProps} isRead={false} />);
+
+    expect(screen.getByText('New Claim Submitted')).toBeDefined();
+    expect(
+      screen.getByText('A claim was submitted by a student.')
+    ).toBeDefined();
+  });
+
+  it('still shows the message when read', () => {
+    renderWithProvider(<NotificationCard {...baseProps} isRead />);
 
     expect(screen.getByText('New Claim Submitted')).toBeDefined();
     expect(
@@ -48,66 +57,52 @@ describe('NotificationCard', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it('circle toggle fires onToggleRead without firing the card onClick', () => {
+  it('marks unread via the mail icon without firing card onClick', () => {
     const onClick = vi.fn();
-    const onToggleRead = vi.fn();
+    const onMarkUnread = vi.fn();
     renderWithProvider(
       <NotificationCard
         {...baseProps}
         isRead
         onClick={onClick}
-        onToggleRead={onToggleRead}
+        onMarkUnread={onMarkUnread}
       />
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Mark as unread' }));
 
-    expect(onToggleRead).toHaveBeenCalledTimes(1);
+    expect(onMarkUnread).toHaveBeenCalledTimes(1);
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('labels the toggle "Mark as read" when the card is unread', () => {
+  it('marks read via the mail-open icon when unread', () => {
+    const onMarkRead = vi.fn();
     renderWithProvider(
-      <NotificationCard {...baseProps} isRead={false} onToggleRead={vi.fn()} />
+      <NotificationCard {...baseProps} isRead={false} onMarkRead={onMarkRead} />
     );
 
-    expect(screen.getByRole('button', { name: 'Mark as read' })).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as read' }));
+
+    expect(onMarkRead).toHaveBeenCalledTimes(1);
   });
 
-  it('changes selection without firing the card click', async () => {
+  it('dismiss fires onDismiss without firing the card onClick', () => {
     const onClick = vi.fn();
-    const onSelectedChange = vi.fn();
+    const onDismiss = vi.fn();
     renderWithProvider(
       <NotificationCard
         {...baseProps}
+        isRead={false}
         onClick={onClick}
-        onSelectedChange={onSelectedChange}
+        onDismiss={onDismiss}
       />
     );
 
     fireEvent.click(
-      screen.getByRole('checkbox', { name: 'Select New Claim Submitted' })
+      screen.getByRole('button', { name: 'Dismiss New Claim Submitted' })
     );
 
-    await waitFor(() => expect(onSelectedChange).toHaveBeenCalledWith(true));
-    expect(onClick).not.toHaveBeenCalled();
-  });
-
-  it('does not trigger the card action from checkbox keyboard events', () => {
-    const onClick = vi.fn();
-    renderWithProvider(
-      <NotificationCard
-        {...baseProps}
-        onClick={onClick}
-        onSelectedChange={vi.fn()}
-      />
-    );
-
-    fireEvent.keyDown(
-      screen.getByRole('checkbox', { name: 'Select New Claim Submitted' }),
-      { key: ' ' }
-    );
-
+    expect(onDismiss).toHaveBeenCalledTimes(1);
     expect(onClick).not.toHaveBeenCalled();
   });
 });

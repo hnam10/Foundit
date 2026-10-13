@@ -23,20 +23,6 @@ function createTx() {
         },
       ]),
     },
-    claim: {
-      findMany: vi.fn().mockResolvedValue([
-        {
-          claimId: '550e8400-e29b-41d4-a716-446655440000',
-          studentId: 'student-1',
-          itemName: 'iPhone 15',
-          itemId: 'item-1',
-        },
-      ]),
-      updateMany: vi.fn(),
-    },
-    matchSuggestion: {
-      updateMany: vi.fn(),
-    },
     notification: {
       createMany: vi.fn(),
     },
@@ -62,7 +48,7 @@ describe('expireDueItems notifications', () => {
     vi.clearAllMocks();
   });
 
-  test('keeps claims active and notifies campus security', async () => {
+  test('marks items expired and notifies campus security without closing claims', async () => {
     (prisma.item.findMany as Mock).mockResolvedValue([
       { itemId: 'item-1', retentionExpiryDate: new Date('2026-07-01') },
     ]);
@@ -74,10 +60,18 @@ describe('expireDueItems notifications', () => {
 
     const count = await expireDueItems();
 
-    expect(count).toBe(1);
-    expect(tx.claim.findMany).not.toHaveBeenCalled();
-    expect(tx.claim.updateMany).not.toHaveBeenCalled();
-    expect(tx.matchSuggestion.updateMany).not.toHaveBeenCalled();
+   expect(count).toBe(1);
+    expect(tx.notification.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          recipientId: 'security-1',
+          type: 'item_expiring',
+          title: 'Item retention expired',
+          message:
+            '1 stored item reached the end of retention and was marked expired.',
+        }),
+      ],
+    });
     const auditRows = tx.auditLog.createMany.mock.calls.flatMap(
       ([input]) => input.data
     );
@@ -93,6 +87,11 @@ describe('expireDueItems notifications', () => {
           }),
         }),
       ])
+    );
+    expect(auditRows).not.toContainEqual(
+      expect.objectContaining({
+        action: 'claim_status_updated',
+      })
     );
     expect(
       auditRows.every((row) => !('actorRole' in (row.details ?? {})))
@@ -111,19 +110,7 @@ describe('expireDueItems notifications', () => {
         }),
       }),
     });
-    expect(tx.notification.createMany).toHaveBeenCalledWith({
-      data: [
-        expect.objectContaining({
-          recipientId: 'security-1',
-          type: 'item_expiring',
-          title: 'Item retention expired',
-          message:
-            '1 stored item reached the end of retention and was marked expired.',
-        }),
-      ],
-    });
   });
-
   test('creates nothing when no items are due', async () => {
     (prisma.item.findMany as Mock).mockResolvedValue([]);
 
@@ -147,9 +134,6 @@ describe('expireDueItems notifications', () => {
     const count = await expireDueItems();
 
     expect(count).toBe(0);
-    expect(tx.claim.findMany).not.toHaveBeenCalled();
-    expect(tx.claim.updateMany).not.toHaveBeenCalled();
-    expect(tx.matchSuggestion.updateMany).not.toHaveBeenCalled();
     expect(tx.notification.createMany).not.toHaveBeenCalled();
     expect(tx.auditLog.create).not.toHaveBeenCalled();
     expect(tx.auditLog.createMany).not.toHaveBeenCalled();
@@ -188,8 +172,6 @@ describe('expireDueItems notifications', () => {
     const count = await expireDueItems();
 
     expect(count).toBe(1);
-    expect(tx.claim.findMany).not.toHaveBeenCalled();
-    expect(tx.matchSuggestion.updateMany).not.toHaveBeenCalled();
     expect(tx.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ campusId: 'campus-current' }),

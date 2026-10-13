@@ -95,8 +95,8 @@ export async function expireDueItems(): Promise<number> {
       return 0;
     }
 
-    // Expired items remain physically available until security disposes them,
-    // so existing claims and match suggestions stay active.
+    // Expired items remain physically retained and claimable until disposed.
+    // Do not dismiss match suggestions or auto-reject open claims here.
 
     // Notify security at each affected campus, batched per campus.
     const expiredCountByCampus = new Map<string, number>();

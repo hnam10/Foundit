@@ -529,9 +529,18 @@ async function reserveItemForClaim(
     return item.status;
   }
 
-  const conflictError = new Error('LINKED_ITEM_NOT_STORED');
-  conflictError.name = 'LINKED_ITEM_NOT_STORED';
-  throw conflictError;
+  if (item.status !== ItemStatus.stored && item.status !== ItemStatus.expired) {
+    const conflictError = new Error('LINKED_ITEM_NOT_STORED');
+    conflictError.name = 'LINKED_ITEM_NOT_STORED';
+    throw conflictError;
+  }
+
+  await tx.item.update({
+    where: { itemId },
+    data: { status: ItemStatus.claimed },
+  });
+
+  return item.status;
 }
 
 async function applyMatchConfirmation(
@@ -564,14 +573,6 @@ async function applyMatchConfirmation(
 
   const matchNotification = await tx.notification.create({
     data: createMatchFoundNotificationInput(updatedClaim),
-    select: studentNotificationEmailSelect,
-  });
-
-  const statusNotification = await tx.notification.create({
-    data: createClaimStatusNotificationInput(
-      updatedClaim,
-      ClaimStatus.approved
-    ),
     select: studentNotificationEmailSelect,
   });
 
@@ -632,26 +633,24 @@ async function applyMatchConfirmation(
       },
       tx
     ),
-    ...[matchNotification, statusNotification].map((notification) =>
-      writeAuditLog(
-        {
-          actorId,
-          actorType: 'user',
-          actorRole: role,
-          action: 'notification_created',
-          entityType: 'notification',
-          entityId: notification.notificationId,
-          entityLabel: itemLabel,
-          outcome: 'success',
-          details: { claimId: claim.claimId },
-          ...context,
-        },
-        tx
-      )
+    writeAuditLog(
+      {
+        actorId,
+        actorType: 'user',
+        actorRole: role,
+        action: 'notification_created',
+        entityType: 'notification',
+        entityId: matchNotification.notificationId,
+        entityLabel: itemLabel,
+        outcome: 'success',
+        details: { claimId: claim.claimId },
+        ...context,
+      },
+      tx
     ),
   ]);
 
-  return { claim: updatedClaim, matchNotification, statusNotification };
+  return { claim: updatedClaim, matchNotification };
 }
 
 function createClaimStatusNotificationInput(
@@ -1304,7 +1303,7 @@ router.patch(
           entityId: claim.claimId,
           entityLabel: `${item.title} (${item.category})`,
           outcome: 'denied',
-          reasonCode: 'item_not_stored',
+          reasonCode: 'item_not_claimable',
           details: { itemId: item.itemId, itemStatus: item.status },
           ...context,
         });
@@ -1316,38 +1315,26 @@ router.patch(
       }
 
       const linkContext = auditContextFromRequest(req);
-      const {
-        claim: updated,
-        matchNotification,
-        statusNotification,
-      } = await prisma.$transaction(async (tx) =>
-        applyMatchConfirmation(
-          tx,
-          claim,
-          item.itemId,
-          actor.userId,
-          actor.role,
-          linkContext,
-          claim.itemName ?? undefined
-        )
+      const { claim: updated, matchNotification } = await prisma.$transaction(
+        async (tx) =>
+          applyMatchConfirmation(
+            tx,
+            claim,
+            item.itemId,
+            actor.userId,
+            actor.role,
+            linkContext,
+            claim.itemName ?? undefined
+          )
       );
 
-      await Promise.all([
-        deliverStudentClaimEmail(matchNotification, updated, {
-          actorId: actor.userId,
-          role: actor.role,
-          ipAddress: req.ip,
-          requestId: linkContext.requestId,
-          event: 'match_confirmed',
-        }),
-        deliverStudentClaimEmail(statusNotification, updated, {
-          actorId: actor.userId,
-          role: actor.role,
-          ipAddress: req.ip,
-          requestId: linkContext.requestId,
-          event: 'claim_status_approved',
-        }),
-      ]);
+      await deliverStudentClaimEmail(matchNotification, updated, {
+        actorId: actor.userId,
+        role: actor.role,
+        ipAddress: req.ip,
+        requestId: linkContext.requestId,
+        event: 'match_confirmed',
+      });
 
       res.status(200).json(await toClaimDetailDto(updated));
     } catch (err) {
@@ -1519,7 +1506,10 @@ router.patch(
               throw new Error('LINKED_ITEM_NOT_FOUND');
             }
 
-            if (item.status === ItemStatus.stored) {
+            if (
+              item.status === ItemStatus.stored ||
+              item.status === ItemStatus.expired
+            ) {
               await tx.item.update({
                 where: { itemId: item.itemId },
                 data: { status: ItemStatus.claimed },
@@ -1547,7 +1537,10 @@ router.patch(
           });
 
           const notification = await tx.notification.create({
-            data: createClaimStatusNotificationInput(nextClaim, status),
+            data:
+              status === ClaimStatus.approved
+                ? createMatchFoundNotificationInput(nextClaim)
+                : createClaimStatusNotificationInput(nextClaim, status),
             select: studentNotificationEmailSelect,
           });
 
@@ -1626,7 +1619,10 @@ router.patch(
         role: actor.role,
         ipAddress: req.ip,
         requestId: statusContext.requestId,
-        event: `claim_status_${status}`,
+        event:
+          status === ClaimStatus.approved
+            ? 'match_confirmed'
+            : `claim_status_${status}`,
       });
 
       res.status(200).json(await toClaimDetailDto(updated));
@@ -1635,7 +1631,7 @@ router.patch(
         res.status(409).json({
           code: 'LINKED_ITEM_NOT_STORED',
           message:
-            'The linked item must still be stored or expired before approval.',
+            'The linked item must still be stored or expired (in retention) before approval.',
         });
         return;
       }
@@ -1905,7 +1901,6 @@ router.patch(
           let matchEmail: {
             claim: ClaimDetailRow;
             matchNotification: StudentNotificationEmailRow;
-            statusNotification: StudentNotificationEmailRow;
           } | null = null;
 
           if (status === MatchStatus.confirmed) {
@@ -1989,30 +1984,17 @@ router.patch(
       );
 
       if (confirmedMatchEmail) {
-        await Promise.all([
-          deliverStudentClaimEmail(
-            confirmedMatchEmail.matchNotification,
-            confirmedMatchEmail.claim,
-            {
-              actorId: actor.userId,
-              role: actor.role,
-              ipAddress: req.ip,
-              requestId: matchContext.requestId,
-              event: 'match_confirmed',
-            }
-          ),
-          deliverStudentClaimEmail(
-            confirmedMatchEmail.statusNotification,
-            confirmedMatchEmail.claim,
-            {
-              actorId: actor.userId,
-              role: actor.role,
-              ipAddress: req.ip,
-              requestId: matchContext.requestId,
-              event: 'claim_status_approved',
-            }
-          ),
-        ]);
+        await deliverStudentClaimEmail(
+          confirmedMatchEmail.matchNotification,
+          confirmedMatchEmail.claim,
+          {
+            actorId: actor.userId,
+            role: actor.role,
+            ipAddress: req.ip,
+            requestId: matchContext.requestId,
+            event: 'match_confirmed',
+          }
+        );
       }
 
       res.status(200).json(await toMatchSuggestionDto(updated));

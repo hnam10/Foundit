@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
+  Badge,
   Box,
   Flex,
   Grid,
@@ -18,15 +19,37 @@ import NextLink from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { fetchCategoryStats, fetchSecurityItems } from '@/lib/api/items';
 import type { SecurityClaimListItem } from '@/types/claims';
-import type { CategoryStat, SecurityItemListItem } from '@/types/items';
+import type {
+  CategoryStat,
+  ItemStatus,
+  SecurityItemListItem,
+} from '@/types/items';
+import { ITEM_STATUS_LABELS } from '@/types/items';
 import { formatClaimDate } from '@/utils/claimDisplay';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 const Select = chakra('select');
 const RadioInput = chakra('input');
 
+const CLAIMABLE_STATUSES: ItemStatus[] = ['stored', 'expired'];
+
 function formatItemId(itemId: string): string {
   return itemId.slice(0, 8).toUpperCase();
+}
+
+function sortClaimableItems(
+  items: SecurityItemListItem[]
+): SecurityItemListItem[] {
+  return [...items].sort((left, right) => {
+    const leftExpired = left.status === 'expired' ? 1 : 0;
+    const rightExpired = right.status === 'expired' ? 1 : 0;
+    if (leftExpired !== rightExpired) {
+      return leftExpired - rightExpired;
+    }
+    return (
+      new Date(right.dateFound).getTime() - new Date(left.dateFound).getTime()
+    );
+  });
 }
 
 interface ClaimManualSearchListProps {
@@ -59,9 +82,12 @@ function ManualSearchRow({ item, selected, onSelect }: ManualSearchRowProps) {
           type="radio"
           name="manual-item-search"
           checked={selected}
-          onChange={onSelect}
+          readOnly
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
           accentColor="var(--chakra-colors-blue-500)"
-          onClick={(e) => e.stopPropagation()}
         />
         <Flex
           w="48px"
@@ -90,14 +116,26 @@ function ManualSearchRow({ item, selected, onSelect }: ManualSearchRowProps) {
           )}
         </Flex>
         <Stack gap={0} minW={0}>
-          <Text
-            fontSize="sm"
-            fontWeight="semibold"
-            color="gray.900"
-            lineClamp={1}
-          >
-            {item.title}
-          </Text>
+          <Flex align="center" gap={2} minW={0}>
+            <Text
+              fontSize="sm"
+              fontWeight="semibold"
+              color="gray.900"
+              lineClamp={1}
+            >
+              {item.title}
+            </Text>
+            {item.status === 'expired' ? (
+              <Badge
+                colorPalette="gray"
+                variant="subtle"
+                fontSize="2xs"
+                flexShrink={0}
+              >
+                {ITEM_STATUS_LABELS.expired}
+              </Badge>
+            ) : null}
+          </Flex>
           <Flex
             align="center"
             gap={2}
@@ -163,6 +201,7 @@ export function ClaimManualSearchList({
   onSelectItem,
 }: ClaimManualSearchListProps) {
   const [categories, setCategories] = useState<CategoryStat[]>([]);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [items, setItems] = useState<SecurityItemListItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState(claim.category);
@@ -171,6 +210,13 @@ export function ClaimManualSearchList({
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(searchQuery.trim());
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     let active = true;
@@ -182,6 +228,8 @@ export function ClaimManualSearchList({
         setCategories(data);
       } catch {
         if (active) setCategories([]);
+      } finally {
+        if (active) setCategoriesLoaded(true);
       }
     }
 
@@ -191,7 +239,23 @@ export function ClaimManualSearchList({
     };
   }, []);
 
+  // Category options only include categories that already have stored items.
+  // If the claim category is missing from that list, treat the filter as
+  // "All categories" so the select value and API query stay in sync.
+  const resolvedCategoryFilter = useMemo(() => {
+    if (!categoriesLoaded) return categoryFilter;
+    if (
+      categoryFilter &&
+      !categories.some((category) => category.category === categoryFilter)
+    ) {
+      return '';
+    }
+    return categoryFilter;
+  }, [categories, categoriesLoaded, categoryFilter]);
+
   useEffect(() => {
+    if (!categoriesLoaded) return;
+
     let active = true;
 
     async function loadItems() {
@@ -200,19 +264,19 @@ export function ClaimManualSearchList({
 
       try {
         const result = await fetchSecurityItems({
-          category: categoryFilter.trim() || undefined,
-          status: 'stored',
+          category: resolvedCategoryFilter.trim() || undefined,
+          status: CLAIMABLE_STATUSES,
           q: debouncedSearchQuery.trim() || undefined,
-          limit: 20,
+          limit: 5,
         });
 
         if (!active) return;
-        setItems(result.data);
+        setItems(sortClaimableItems(result.data));
         setNextCursor(result.nextCursor);
       } catch (err) {
         if (!active) return;
         setError(
-          err instanceof Error ? err.message : 'Failed to load stored items.'
+          err instanceof Error ? err.message : 'Failed to load claimable items.'
         );
         setItems([]);
         setNextCursor(null);
@@ -225,9 +289,7 @@ export function ClaimManualSearchList({
     return () => {
       active = false;
     };
-  }, [categoryFilter, debouncedSearchQuery]);
-
-  const filteredItems = items;
+  }, [resolvedCategoryFilter, categoriesLoaded, debouncedQuery]);
 
   async function handleLoadMore() {
     if (!nextCursor || loadingMore) return;
@@ -237,14 +299,14 @@ export function ClaimManualSearchList({
 
     try {
       const result = await fetchSecurityItems({
-        category: categoryFilter.trim() || undefined,
-        status: 'stored',
+        category: resolvedCategoryFilter.trim() || undefined,
+        status: CLAIMABLE_STATUSES,
         q: debouncedSearchQuery.trim() || undefined,
         cursor: nextCursor,
-        limit: 20,
+        limit: 5,
       });
 
-      setItems((current) => [...current, ...result.data]);
+      setItems((current) => sortClaimableItems([...current, ...result.data]));
       setNextCursor(result.nextCursor);
     } catch (err) {
       setError(
@@ -277,14 +339,14 @@ export function ClaimManualSearchList({
             pl={9}
             h={10}
             fontSize="sm"
-            placeholder="Search items..."
+            placeholder="Search title, brand, color, location..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </Box>
 
         <Select
-          value={categoryFilter}
+          value={resolvedCategoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
           h={10}
           px={3}
@@ -311,13 +373,13 @@ export function ClaimManualSearchList({
         <Text fontSize="sm" color="red.500" textAlign="center" py={4}>
           {error}
         </Text>
-      ) : filteredItems.length === 0 ? (
+      ) : items.length === 0 ? (
         <Text fontSize="sm" color="gray.500" textAlign="center" py={8}>
-          No stored items match your filters.
+          No claimable items match your filters.
         </Text>
       ) : (
         <Stack gap={2}>
-          {filteredItems.map((item) => (
+          {items.map((item) => (
             <ManualSearchRow
               key={item.itemId}
               item={item}

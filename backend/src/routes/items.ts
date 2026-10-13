@@ -1,6 +1,5 @@
 import { Router, Response } from 'express';
-import rateLimit from 'express-rate-limit';
-import { ClaimStatus, ItemStatus, Prisma } from '@prisma/client';
+import { ClaimStatus, ItemStatus, MatchStatus, Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
@@ -195,14 +194,17 @@ function sendValidationError(res: Response, details: unknown) {
 }
 
 function buildSecurityItemListWhere(query: {
-  status?: ItemStatus;
+  status?: ItemStatus | ItemStatus[];
   campusId?: string;
   category?: string;
+  q?: string;
 }) {
   const where: Prisma.ItemWhereInput = {};
 
   if (query.status) {
-    where.status = query.status;
+    where.status = Array.isArray(query.status)
+      ? { in: query.status }
+      : query.status;
   } else {
     // Default list: inventory still in workflow (excludes released and discarded).
     where.status = { notIn: [ItemStatus.claimed, ItemStatus.disposed] };
@@ -216,7 +218,88 @@ function buildSecurityItemListWhere(query: {
     where.category = query.category;
   }
 
+  const q = query.q?.trim();
+  if (q) {
+    const textFilters: Prisma.ItemWhereInput[] = [
+      { title: { contains: q, mode: 'insensitive' } },
+      { category: { contains: q, mode: 'insensitive' } },
+      { brand: { contains: q, mode: 'insensitive' } },
+      { color: { contains: q, mode: 'insensitive' } },
+      { locationFound: { contains: q, mode: 'insensitive' } },
+      { descriptionPublic: { contains: q, mode: 'insensitive' } },
+      { descriptionInternal: { contains: q, mode: 'insensitive' } },
+    ];
+
+    const uuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidPattern.test(q)) {
+      textFilters.push({ itemId: q });
+    } else if (q.length >= 4) {
+      // Allow short ID prefix search via startsWith on the string form is not
+      // available for UUIDs in Prisma; match campus name instead via relation.
+    }
+
+    textFilters.push({
+      campus: { campusName: { contains: q, mode: 'insensitive' } },
+    });
+
+    where.OR = textFilters;
+  }
+
   return where;
+}
+
+async function resolveReleasedBy(itemId: string, status: ItemStatus) {
+  if (status !== ItemStatus.claimed) {
+    return null;
+  }
+
+  const pickedUpClaim = await prisma.claim.findFirst({
+    where: {
+      itemId,
+      status: ClaimStatus.picked_up,
+      verifiedBy: { not: null },
+    },
+    orderBy: { pickedUpAt: 'desc' },
+    select: {
+      verifier: {
+        select: {
+          userId: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+  });
+
+  if (pickedUpClaim?.verifier) {
+    return pickedUpClaim.verifier;
+  }
+
+  const walkInAudit = await prisma.auditLog.findFirst({
+    where: {
+      action: 'item_walk_in_released',
+      entityType: 'item',
+      entityId: itemId,
+      outcome: 'success',
+      actorId: { not: null },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { actorId: true },
+  });
+
+  if (!walkInAudit?.actorId) {
+    return null;
+  }
+
+  return prisma.user.findUnique({
+    where: { userId: walkInAudit.actorId },
+    select: {
+      userId: true,
+      firstName: true,
+      lastName: true,
+    },
+  });
 }
 
 async function toSecurityItemListDto(item: SecurityItemListRow) {
@@ -247,6 +330,7 @@ async function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
       imageUrl: await resolveImageUrl(image.imageUrl),
     }))
   );
+  const releasedBy = await resolveReleasedBy(item.itemId, item.status);
 
   return {
     itemId: item.itemId,
@@ -272,6 +356,13 @@ async function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
       firstName: item.registrar.firstName,
       lastName: item.registrar.lastName,
     },
+    releasedBy: releasedBy
+      ? {
+          userId: releasedBy.userId,
+          firstName: releasedBy.firstName,
+          lastName: releasedBy.lastName,
+        }
+      : null,
     claims: item.claims.map((claim) => ({
       claimId: claim.claimId,
       status: claim.status,
@@ -426,7 +517,7 @@ router.get(
   async (req, res, next) => {
     try {
       const query = req.query as unknown as {
-        status?: ItemStatus;
+        status?: ItemStatus | ItemStatus[];
         campusId?: string;
         category?: string;
         q?: string;
@@ -479,14 +570,34 @@ router.get(
         res.status(200).json({ data, nextCursor });
         return;
       }
+      
+      res.status(200).json({ data, nextCursor });
+        return;
+      }
+    
+      const statuses = query.status
+        ? Array.isArray(query.status)
+          ? query.status
+          : [query.status]
+        : null;
+      const claimableOnly =
+        statuses !== null &&
+        statuses.length > 0 &&
+        statuses.every(
+          (status) =>
+            status === ItemStatus.stored || status === ItemStatus.expired
+        );
 
       const items = await prisma.item.findMany({
         where: buildSecurityItemListWhere(query),
-        orderBy: [
-          { dateFound: 'desc' },
-          { createdAt: 'desc' },
-          { itemId: 'desc' },
-        ],
+        orderBy: claimableOnly
+          ? [
+              { status: 'asc' },
+              { dateFound: 'desc' },
+              { createdAt: 'desc' },
+              { itemId: 'desc' },
+            ]
+          : [{ dateFound: 'desc' }, { createdAt: 'desc' }, { itemId: 'desc' }],
         take: query.limit + 1,
         ...(query.cursor
           ? {
@@ -919,34 +1030,48 @@ router.patch(
           return { blocked: true as const };
         }
 
-        const affectedClaims = await tx.claim.findMany({
-          where: {
-            itemId: existing.itemId,
-            status: {
-              in: [ClaimStatus.submitted, ClaimStatus.under_review],
-            },
-          },
-          select: { claimId: true, status: true },
-        });
+        const shouldCloseOpenClaims = targetStatus === ItemStatus.disposed;
 
-        await tx.claim.updateMany({
-          where: {
-            itemId: existing.itemId,
-            status: {
-              in: [
-                ClaimStatus.submitted,
-                ClaimStatus.under_review,
-                ClaimStatus.approved,
-              ],
+        const affectedClaims = shouldCloseOpenClaims
+          ? await tx.claim.findMany({
+              where: {
+                itemId: existing.itemId,
+                status: {
+                  in: [ClaimStatus.submitted, ClaimStatus.under_review],
+                },
+              },
+              select: { claimId: true, status: true },
+            })
+          : [];
+
+        if (shouldCloseOpenClaims) {
+          await tx.claim.updateMany({
+            where: {
+              itemId: existing.itemId,
+              status: {
+                in: [
+                  ClaimStatus.submitted,
+                  ClaimStatus.under_review,
+                  ClaimStatus.approved,
+                ],
+              },
             },
-          },
-          data: {
-            status: ClaimStatus.rejected,
-            rejectionReason,
-            reviewedBy: req.user!.user_id,
-            reviewedAt: new Date(),
-          },
-        });
+            data: {
+              status: ClaimStatus.rejected,
+              rejectionReason,
+              reviewedBy: req.user!.user_id,
+              reviewedAt: new Date(),
+            },
+          });
+
+          await tx.matchSuggestion.updateMany({
+            where: {
+              itemId: existing.itemId,
+              status: MatchStatus.suggested,
+            },
+            data: { status: MatchStatus.dismissed },
+          });
+        }
 
         const item = await tx.item.update({
           where: { itemId: existing.itemId },
@@ -1293,7 +1418,7 @@ router.post(
         const updateResult = await tx.item.updateMany({
           where: {
             itemId: existing.itemId,
-            status: ItemStatus.stored,
+            status: { in: [ItemStatus.stored, ItemStatus.expired] },
           },
           data: { status: ItemStatus.claimed },
         });
@@ -1336,7 +1461,8 @@ router.post(
       if (!result.released) {
         res.status(409).json({
           code: 'ITEM_NOT_STORED',
-          message: 'Only items in storage can be released.',
+          message:
+            'Only stored or expired items still in retention can be released.',
         });
         return;
       }

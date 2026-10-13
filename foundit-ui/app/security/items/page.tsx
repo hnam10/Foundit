@@ -77,6 +77,7 @@ function StoredItemsPageContent() {
   const [disposing, setDisposing] = useState(false);
   const [disposeError, setDisposeError] = useState('');
 
+
   useEffect(() => {
     let active = true;
 
@@ -344,7 +345,7 @@ function StoredItemsPageContent() {
               setSearchQuery(e.target.value);
               setPage(1);
             }}
-            placeholder="Search items"
+            placeholder="Search title, brand, color, location..."
             h={10}
             pr={10}
             bg="white"

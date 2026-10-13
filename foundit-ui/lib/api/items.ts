@@ -36,7 +36,7 @@ export async function fetchExpiredItemCount(
 }
 
 export interface FetchSecurityItemsParams {
-  status?: ItemStatus;
+  status?: ItemStatus | ItemStatus[];
   campusId?: string;
   category?: string;
   q?: string;
@@ -49,10 +49,15 @@ export async function fetchSecurityItems(
 ): Promise<SecurityItemListResponse> {
   const search = new URLSearchParams();
 
-  if (params.status) search.set('status', params.status);
+  if (params.status) {
+    const statuses = Array.isArray(params.status)
+      ? params.status
+      : [params.status];
+    search.set('status', statuses.join(','));
+  }
   if (params.campusId) search.set('campusId', params.campusId);
   if (params.category) search.set('category', params.category);
-  if (params.q) search.set('q', params.q);
+  if (params.q?.trim()) search.set('q', params.q.trim());
   if (params.cursor) search.set('cursor', params.cursor);
   if (params.limit) search.set('limit', String(params.limit));
 
