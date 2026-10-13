@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { ClaimStatus, ItemStatus, MatchStatus, Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
@@ -16,7 +17,10 @@ import { scheduleItemSearchIndexIngest } from '../lib/matching/ingest';
 import { scheduleMatchRefreshForCampus } from '../lib/matching/suggestions';
 import { logger } from '../lib/logger';
 import { isSemanticMatchingDegraded } from '../lib/matching/embeddings';
-import { rankSecurityItemSearch } from '../lib/matching/itemSearch';
+import {
+  rankSecurityItemSearch,
+  shouldEmbedItemSearchQuery,
+} from '../lib/matching/itemSearch';
 import { getQueryEmbedding } from '../lib/matching/queryEmbeddingCache';
 import {
   analyzeItemImage,
@@ -193,11 +197,12 @@ function sendValidationError(res: Response, details: unknown) {
   });
 }
 
+// Text search is not filtered here: `q` is ranked in memory by
+// rankSecurityItemSearch so word-by-word and semantic matches are not dropped.
 function buildSecurityItemListWhere(query: {
   status?: ItemStatus | ItemStatus[];
   campusId?: string;
   category?: string;
-  q?: string;
 }) {
   const where: Prisma.ItemWhereInput = {};
 
@@ -216,34 +221,6 @@ function buildSecurityItemListWhere(query: {
 
   if (query.category) {
     where.category = query.category;
-  }
-
-  const q = query.q?.trim();
-  if (q) {
-    const textFilters: Prisma.ItemWhereInput[] = [
-      { title: { contains: q, mode: 'insensitive' } },
-      { category: { contains: q, mode: 'insensitive' } },
-      { brand: { contains: q, mode: 'insensitive' } },
-      { color: { contains: q, mode: 'insensitive' } },
-      { locationFound: { contains: q, mode: 'insensitive' } },
-      { descriptionPublic: { contains: q, mode: 'insensitive' } },
-      { descriptionInternal: { contains: q, mode: 'insensitive' } },
-    ];
-
-    const uuidPattern =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (uuidPattern.test(q)) {
-      textFilters.push({ itemId: q });
-    } else if (q.length >= 4) {
-      // Allow short ID prefix search via startsWith on the string form is not
-      // available for UUIDs in Prisma; match campus name instead via relation.
-    }
-
-    textFilters.push({
-      campus: { campusName: { contains: q, mode: 'insensitive' } },
-    });
-
-    where.OR = textFilters;
   }
 
   return where;
@@ -538,7 +515,10 @@ router.get(
         });
 
         let queryEmbedding: number[] | null = null;
-        if (!isSemanticMatchingDegraded()) {
+        if (
+          !isSemanticMatchingDegraded() &&
+          shouldEmbedItemSearchQuery(query.q)
+        ) {
           try {
             queryEmbedding = await getQueryEmbedding(query.q);
           } catch (error) {
@@ -570,11 +550,7 @@ router.get(
         res.status(200).json({ data, nextCursor });
         return;
       }
-      
-      res.status(200).json({ data, nextCursor });
-        return;
-      }
-    
+
       const statuses = query.status
         ? Array.isArray(query.status)
           ? query.status

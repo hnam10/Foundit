@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -37,8 +37,12 @@ function formatItemId(itemId: string): string {
   return itemId.slice(0, 8).toUpperCase();
 }
 
+// Stored first, then expired. Search results arrive ranked by relevance, so
+// within each group they keep the server order instead of being re-sorted by
+// date.
 function sortClaimableItems(
-  items: SecurityItemListItem[]
+  items: SecurityItemListItem[],
+  keepServerOrder: boolean
 ): SecurityItemListItem[] {
   return [...items].sort((left, right) => {
     const leftExpired = left.status === 'expired' ? 1 : 0;
@@ -46,6 +50,7 @@ function sortClaimableItems(
     if (leftExpired !== rightExpired) {
       return leftExpired - rightExpired;
     }
+    if (keepServerOrder) return 0;
     return (
       new Date(right.dateFound).getTime() - new Date(left.dateFound).getTime()
     );
@@ -207,16 +212,10 @@ export function ClaimManualSearchList({
   const [categoryFilter, setCategoryFilter] = useState(claim.category);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
+  const isSearching = debouncedSearchQuery.trim().length > 0;
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedQuery(searchQuery.trim());
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [searchQuery]);
 
   useEffect(() => {
     let active = true;
@@ -271,7 +270,7 @@ export function ClaimManualSearchList({
         });
 
         if (!active) return;
-        setItems(sortClaimableItems(result.data));
+        setItems(sortClaimableItems(result.data, isSearching));
         setNextCursor(result.nextCursor);
       } catch (err) {
         if (!active) return;
@@ -289,7 +288,12 @@ export function ClaimManualSearchList({
     return () => {
       active = false;
     };
-  }, [resolvedCategoryFilter, categoriesLoaded, debouncedQuery]);
+  }, [
+    resolvedCategoryFilter,
+    categoriesLoaded,
+    debouncedSearchQuery,
+    isSearching,
+  ]);
 
   async function handleLoadMore() {
     if (!nextCursor || loadingMore) return;
@@ -306,7 +310,9 @@ export function ClaimManualSearchList({
         limit: 5,
       });
 
-      setItems((current) => sortClaimableItems([...current, ...result.data]));
+      setItems((current) =>
+        sortClaimableItems([...current, ...result.data], isSearching)
+      );
       setNextCursor(result.nextCursor);
     } catch (err) {
       setError(

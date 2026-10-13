@@ -4,6 +4,15 @@ import { cosineSimilarity } from './scores';
 import { parseEmbedding } from './embeddingValue';
 
 export const DEFAULT_ITEM_SEARCH_THRESHOLD = 0.35;
+const MIN_SEMANTIC_QUERY_LENGTH = 3;
+
+/**
+ * Queries typed one letter at a time would each pay for an embedding that
+ * carries no meaning yet; below this length only exact matching runs.
+ */
+export function shouldEmbedItemSearchQuery(query: string): boolean {
+  return query.trim().length >= MIN_SEMANTIC_QUERY_LENGTH;
+}
 
 export interface SecurityItemSearchCandidate extends ItemSearchInput {
   itemId: string;

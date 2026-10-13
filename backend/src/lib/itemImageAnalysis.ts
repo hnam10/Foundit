@@ -43,6 +43,19 @@ function extractOutputText(payload: OpenAIResponsesPayload): string | null {
   return null;
 }
 
+/**
+ * Image tokens dominate the cost of an analysis. `low` sends one downscaled
+ * view, which is enough for item type and colour; set ITEM_IMAGE_DETAIL=high
+ * when small logos or printed text need to be read.
+ */
+export function resolveImageDetail(
+  env: NodeJS.ProcessEnv = process.env
+): 'low' | 'high' {
+  return env.ITEM_IMAGE_DETAIL?.trim().toLowerCase() === 'high'
+    ? 'high'
+    : 'low';
+}
+
 export function isItemImageAnalysisConfigured(
   env: NodeJS.ProcessEnv = process.env
 ): boolean {
@@ -78,7 +91,11 @@ export async function analyzeItemImage(
                 'Describe visible attributes only. Do not invent ownership details or hidden damage.',
               ].join(' '),
             },
-            { type: 'input_image', image_url: imageUrl, detail: 'high' },
+            {
+              type: 'input_image',
+              image_url: imageUrl,
+              detail: resolveImageDetail(),
+            },
           ],
         },
       ],

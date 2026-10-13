@@ -107,7 +107,7 @@ async function resolveItemEmbeddings(
 
     const embedding = parseEmbedding(item.embedding);
     const currentSearchText = buildItemSearchText(item);
-   if (embedding && item.searchText === currentSearchText) {
+    if (embedding && item.searchText === currentSearchText) {
       textEmbeddings.set(item.itemId, embedding);
     } else {
       pending.push(item);
@@ -246,7 +246,7 @@ export async function generateMatchCandidates(claimId: string): Promise<{
   const today = getTodayUtcDate();
   const items = await prisma.item.findMany({
     where: {
-            // Expired means the retention window ended, not that the physical item
+      // Expired means the retention window ended, not that the physical item
       // was disposed. Keep it matchable until security marks it disposed.
       status: { in: [...CLAIMABLE_ITEM_STATUSES] },
       category: { equals: claim.category, mode: 'insensitive' },

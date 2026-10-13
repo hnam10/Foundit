@@ -60,7 +60,7 @@ describe('expireDueItems notifications', () => {
 
     const count = await expireDueItems();
 
-   expect(count).toBe(1);
+    expect(count).toBe(1);
     expect(tx.notification.createMany).toHaveBeenCalledWith({
       data: [
         expect.objectContaining({

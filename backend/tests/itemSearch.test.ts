@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   rankSecurityItemSearch,
   resolveItemSearchThreshold,
+  shouldEmbedItemSearchQuery,
   type SecurityItemSearchCandidate,
 } from '../src/lib/matching/itemSearch';
 import { buildItemSearchText } from '../src/lib/matching/searchText';
@@ -91,6 +92,14 @@ describe('rankSecurityItemSearch', () => {
 
     expect(rankSecurityItemSearch([item], 'pink', null)).toHaveLength(1);
     expect(rankSecurityItemSearch([item], 'light red', null)).toHaveLength(0);
+  });
+});
+
+describe('shouldEmbedItemSearchQuery', () => {
+  test('skips the embedding call for queries shorter than three characters', () => {
+    expect(shouldEmbedItemSearchQuery('bl')).toBe(false);
+    expect(shouldEmbedItemSearchQuery('  b  ')).toBe(false);
+    expect(shouldEmbedItemSearchQuery('bla')).toBe(true);
   });
 });
 

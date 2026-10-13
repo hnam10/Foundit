@@ -529,18 +529,10 @@ async function reserveItemForClaim(
     return item.status;
   }
 
-  if (item.status !== ItemStatus.stored && item.status !== ItemStatus.expired) {
-    const conflictError = new Error('LINKED_ITEM_NOT_STORED');
-    conflictError.name = 'LINKED_ITEM_NOT_STORED';
-    throw conflictError;
-  }
-
-  await tx.item.update({
-    where: { itemId },
-    data: { status: ItemStatus.claimed },
-  });
-
-  return item.status;
+  // Another request changed the item between the read and the update.
+  const conflictError = new Error('LINKED_ITEM_NOT_STORED');
+  conflictError.name = 'LINKED_ITEM_NOT_STORED';
+  throw conflictError;
 }
 
 async function applyMatchConfirmation(

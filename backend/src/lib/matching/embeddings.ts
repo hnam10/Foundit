@@ -4,8 +4,6 @@ import { buildAiRequestHeaders, getAiProviderConfig } from '../aiProvider';
 const EMBEDDING_DIMENSIONS = 1536;
 const OPENROUTER_API_URL =
   process.env.OPENROUTER_API_URL ?? 'https://openrouter.ai/api/v1';
-const OPENROUTER_EMBEDDING_MODEL =
-  process.env.OPENROUTER_EMBEDDING_MODEL ?? 'openai/text-embedding-3-small';
 const OPENROUTER_IMAGE_EMBEDDING_MODEL =
   process.env.OPENROUTER_IMAGE_EMBEDDING_MODEL ??
   'nvidia/llama-nemotron-embed-vl-1b-v2';
@@ -56,7 +54,7 @@ function parseEmbeddingPayload(payload: unknown): number[] {
   return normalizeVector(embedding);
 }
 
-/** Deterministic local fallback when OPENROUTER_API_KEY is not configured. */
+/** Deterministic local fallback when no remote AI provider is configured. */
 export function buildLocalEmbedding(text: string): number[] {
   const vector = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
   const tokens = tokenize(text);

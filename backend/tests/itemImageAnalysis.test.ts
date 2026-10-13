@@ -61,9 +61,17 @@ describe('item image analysis', () => {
     expect(body.input[0].content[1]).toEqual({
       type: 'input_image',
       image_url: 'https://example.test/item.jpg',
-      detail: 'high',
+      detail: 'low',
     });
     expect(body.text.format.type).toBe('json_schema');
+  });
+
+  test('uses high image detail only when ITEM_IMAGE_DETAIL asks for it', async () => {
+    const { resolveImageDetail } = await import('../src/lib/itemImageAnalysis');
+
+    expect(resolveImageDetail({})).toBe('low');
+    expect(resolveImageDetail({ ITEM_IMAGE_DETAIL: ' HIGH ' })).toBe('high');
+    expect(resolveImageDetail({ ITEM_IMAGE_DETAIL: 'auto' })).toBe('low');
   });
 
   test('rejects a category outside the supported list', async () => {
