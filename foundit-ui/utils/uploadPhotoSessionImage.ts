@@ -12,7 +12,6 @@ export async function uploadPhotoToSession(token: string, file: File) {
       fileName: compressedFile.name,
       contentType: compressedFile.type,
       fileSizeKb: Math.ceil(compressedFile.size / 1024),
-      fileSizeBytes: compressedFile.size,
     });
 
   const uploadResponse = await fetch(uploadUrl, {

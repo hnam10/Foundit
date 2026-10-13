@@ -96,8 +96,21 @@ describe('expireDueItems notifications', () => {
     expect(
       auditRows.every((row) => !('actorRole' in (row.details ?? {})))
     ).toBe(true);
+    expect(new Set(auditRows.map((row) => row.runId))).toHaveProperty(
+      'size',
+      1
+    );
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'notification_fanout_created',
+        actorType: 'system',
+        runId: auditRows[0].runId,
+        details: expect.objectContaining({
+          notificationType: 'item_expiring',
+        }),
+      }),
+    });
   });
-
   test('creates nothing when no items are due', async () => {
     (prisma.item.findMany as Mock).mockResolvedValue([]);
 

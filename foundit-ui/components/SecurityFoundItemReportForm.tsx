@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Box, HStack, Spinner, Stack, Text } from '@chakra-ui/react';
+import { Box, Grid, HStack, Spinner, Stack, Text } from '@chakra-ui/react';
 import FormTextInput from '@/components/FormTextInput';
 import FoundItemFormShell from '@/components/FoundItemFormShell';
 import SelectInput from '@/components/SelectInput';
@@ -82,6 +82,31 @@ export default function SecurityFoundItemReportForm({
           }}
         />
 
+        <Grid templateColumns={{ base: '1fr', sm: '1fr 1fr' }} gap={4}>
+          <Box flex={1}>
+            <FormTextInput
+              id="color"
+              label="Color"
+              stacked
+              placeholder="e.g., Light pink"
+              maxLength={30}
+              value={form.color}
+              onChange={(e) => form.setColor(e.target.value)}
+            />
+          </Box>
+          <Box flex={1}>
+            <FormTextInput
+              id="brand"
+              label="Brand"
+              stacked
+              placeholder="e.g., Belkin"
+              maxLength={50}
+              value={form.brand}
+              onChange={(e) => form.setBrand(e.target.value)}
+            />
+          </Box>
+        </Grid>
+
         <FormTextInput
           id="date"
           label="Date found"
@@ -156,6 +181,27 @@ export default function SecurityFoundItemReportForm({
               <ImageUploadGallery
                 onChange={(images) => form.setImageFiles(images)}
               />
+              {(form.analysisStatus === 'uploading' ||
+                form.analysisStatus === 'analyzing') && (
+                <HStack gap={2} color="blue.700">
+                  <Spinner size="xs" />
+                  <Text fontSize="xs" fontWeight="medium">
+                    {form.analysisStatus === 'uploading'
+                      ? 'Preparing photo...'
+                      : 'Analyzing photo...'}
+                  </Text>
+                </HStack>
+              )}
+              {form.analysisMessage && (
+                <Text
+                  fontSize="xs"
+                  color={
+                    form.analysisStatus === 'applied' ? 'green.700' : 'gray.600'
+                  }
+                >
+                  {form.analysisMessage}
+                </Text>
+              )}
             </Stack>
           </Box>
         )}

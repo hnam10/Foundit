@@ -7,7 +7,7 @@ on:
 
 jobs:
   backend:
-    name: Backend (TypeScript Check + Build)
+    name: Backend (Lint + Typecheck + Test + Build)
     runs-on: ubuntu-latest
 
     steps:
@@ -34,6 +34,10 @@ jobs:
       - name: Type check
         working-directory: backend
         run: pnpm typecheck
+
+      - name: Test with coverage
+        working-directory: backend
+        run: pnpm coverage
 
       - name: Build
         working-directory: backend
@@ -68,9 +72,9 @@ jobs:
         working-directory: foundit-ui
         run: pnpm typecheck
 
-      - name: Test
+      - name: Test with coverage
         working-directory: foundit-ui
-        run: pnpm test
+        run: pnpm coverage
 
       - name: Build
         working-directory: foundit-ui

@@ -35,7 +35,7 @@ resource "aws_lightsail_instance" "app" {
     smtp_port                 = var.smtp_port
     smtp_user                 = var.smtp_user
     smtp_pass                 = var.smtp_pass
-    openrouter_api_key        = var.openrouter_api_key
+    openai_api_key            = var.openai_api_key
     cd_ssh_public_key         = var.cd_ssh_public_key
   })
 }

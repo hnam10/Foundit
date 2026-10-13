@@ -246,7 +246,6 @@ Report link tokens stay in the URL to match the current database model, but must
 
 | Method | Path                                 | Auth           | Status  | Description                                              |
 | ------ | ------------------------------------ | -------------- | ------- | -------------------------------------------------------- |
-| GET    | `/api/public/items`                  | —              | Done    | Browse public-safe stored items with optional filters    |
 | GET    | `/api/items/category-stats`          | —              | Done    | Public item counts per category                          |
 | GET    | `/api/items`                         | security/admin | Done    | List items with filters and cursor pagination            |
 | GET    | `/api/items/:itemId`                 | security/admin | Done    | Get item detail (internal fields, images, linked claims) |
@@ -290,7 +289,7 @@ Normal item disposal should use `PATCH /api/items/:itemId/status` with `disposed
 
 Allowed targets: `expired`, `disposed`. Transitions: `stored → expired|disposed`, `expired → disposed`. Blocked when item is `claimed` or `disposed`. Returns updated item detail; rejects active linked claims in the same transaction.
 
-A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Security should use `disposed` to record physical disposal after expiry.
+A daily cron job (`expireRetainedItems`) also transitions `stored → expired` when `retentionExpiryDate` has passed, with a defensive skip for stored items that already have an approved claim. Expired items and their match suggestions remain available because the physical item may still be present; security should use `disposed` to record physical disposal.
 
 A second daily cron (`expireOpenClaims`) auto-rejects `submitted` / `under_review` claims that are still open **35 days after submission** (`createdAt`). Suggested matches for those claims are dismissed, and the student gets a `claim_status_update` notice. Approved, picked-up, and already-rejected claims are left alone.
 

@@ -95,7 +95,6 @@ export async function requestPhotoSessionPresignedUrl(
     fileName: string;
     contentType: string;
     fileSizeKb: number;
-    fileSizeBytes: number;
   }
 ) {
   const res = await fetch(

@@ -19,5 +19,9 @@
   "type": "module",
   "devDependencies": {
     "prettier": "^3.8.3"
+  },
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.13.0",
+    "react-redux": "^9.3.0"
   }
 }

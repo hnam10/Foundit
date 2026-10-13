@@ -1,10 +1,9 @@
 import { logger } from '../logger';
+import { buildAiRequestHeaders, getAiProviderConfig } from '../aiProvider';
 
 const EMBEDDING_DIMENSIONS = 1536;
 const OPENROUTER_API_URL =
   process.env.OPENROUTER_API_URL ?? 'https://openrouter.ai/api/v1';
-const OPENROUTER_EMBEDDING_MODEL =
-  process.env.OPENROUTER_EMBEDDING_MODEL ?? 'openai/text-embedding-3-small';
 const OPENROUTER_IMAGE_EMBEDDING_MODEL =
   process.env.OPENROUTER_IMAGE_EMBEDDING_MODEL ??
   'nvidia/llama-nemotron-embed-vl-1b-v2';
@@ -49,13 +48,13 @@ function parseEmbeddingPayload(payload: unknown): number[] {
   )?.data?.[0]?.embedding;
 
   if (!embedding || embedding.length === 0) {
-    throw new Error('OpenRouter embedding response did not include a vector.');
+    throw new Error('Embedding response did not include a vector.');
   }
 
   return normalizeVector(embedding);
 }
 
-/** Deterministic local fallback when OPENROUTER_API_KEY is not configured. */
+/** Deterministic local fallback when no remote AI provider is configured. */
 export function buildLocalEmbedding(text: string): number[] {
   const vector = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
   const tokens = tokenize(text);
@@ -72,23 +71,26 @@ export function buildLocalEmbedding(text: string): number[] {
   return normalizeVector(vector);
 }
 
-async function embedTextWithOpenRouter(
-  text: string,
-  apiKey: string
-): Promise<number[]> {
-  const response = await fetch(`${OPENROUTER_API_URL}/embeddings`, {
+async function embedWithProvider(text: string): Promise<number[]> {
+  const config = getAiProviderConfig();
+  if (!config) {
+    throw new Error('No remote AI provider is configured.');
+  }
+
+  const response = await fetch(`${config.baseUrl}/embeddings`, {
     method: 'POST',
-    headers: openRouterHeaders(apiKey),
+    headers: buildAiRequestHeaders(config),
     body: JSON.stringify({
-      model: OPENROUTER_EMBEDDING_MODEL,
+      model: config.embeddingModel,
       input: text,
+      dimensions: EMBEDDING_DIMENSIONS,
     }),
   });
 
   if (!response.ok) {
     const errorBody = await response.text();
     throw new Error(
-      `OpenRouter embedding request failed (${response.status}): ${errorBody}`
+      `${config.name} embedding request failed (${response.status}): ${errorBody}`
     );
   }
 
@@ -138,7 +140,7 @@ async function embedImageWithOpenRouter(
 }
 
 /**
- * True when no OPENROUTER_API_KEY is configured, which means embedText() hands
+ * True when no remote provider key is configured, which means embedText() hands
  * back a deterministic hash vector instead of a real semantic one. Matching
  * keeps "working" in that state, but the ranking carries no meaning — so this
  * predicate exists to make the degradation checkable instead of invisible.
@@ -146,7 +148,7 @@ async function embedImageWithOpenRouter(
 export function isSemanticMatchingDegraded(
   env: NodeJS.ProcessEnv = process.env
 ): boolean {
-  return !env.OPENROUTER_API_KEY?.trim();
+  return getAiProviderConfig(env) === null;
 }
 
 let degradationWarned = false;
@@ -163,7 +165,7 @@ export function warnIfSemanticMatchingDegraded(): void {
 
   degradationWarned = true;
   logger.warn(
-    'OPENROUTER_API_KEY is not set: semantic matching is DEGRADED. Embeddings fall back to a local hash vector, so match suggestions are close to random. Set OPENROUTER_API_KEY and run `pnpm backfill:embeddings` to restore real semantic matching.'
+    'Neither OPENROUTER_API_KEY nor OPENAI_API_KEY is set: semantic matching is DEGRADED. Embeddings fall back to a local hash vector, so match suggestions are close to random. Configure a provider key and run `pnpm backfill:embeddings` to restore real semantic matching.'
   );
 }
 
@@ -173,9 +175,8 @@ export async function embedText(text: string): Promise<number[]> {
     return new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (apiKey) {
-    return embedTextWithOpenRouter(normalized, apiKey);
+  if (!isSemanticMatchingDegraded()) {
+    return embedWithProvider(normalized);
   }
 
   warnIfSemanticMatchingDegraded();

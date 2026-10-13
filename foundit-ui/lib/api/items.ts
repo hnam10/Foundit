@@ -2,8 +2,8 @@ import { apiFetch } from '@/lib/api/client';
 import type {
   Campus,
   CategoryStat,
+  ItemImageSuggestion,
   ItemStatus,
-  PublicItem,
   SecurityItemDetail,
   SecurityItemListResponse,
 } from '@/types/items';
@@ -33,28 +33,6 @@ export async function fetchExpiredItemCount(
     `/api/items/expired-count${query}`
   );
   return result.count;
-}
-
-export interface FetchPublicItemsParams {
-  category?: string;
-  campusId?: string;
-}
-
-export async function fetchPublicItems(
-  params: FetchPublicItemsParams = {}
-): Promise<PublicItem[]> {
-  const search = new URLSearchParams();
-
-  if (params.category) search.set('category', params.category);
-  if (params.campusId) search.set('campusId', params.campusId);
-
-  const query = search.toString();
-  return apiFetch<PublicItem[]>(
-    `/api/public/items${query ? `?${query}` : ''}`,
-    {
-      auth: false,
-    }
-  );
 }
 
 export interface FetchSecurityItemsParams {
@@ -147,6 +125,8 @@ export interface CreateSecurityItemInput {
   campusId: string;
   title: string;
   description: string;
+  color?: string;
+  brand?: string;
   category: string;
   locationFound: string;
   dateFound: string;
@@ -155,6 +135,15 @@ export interface CreateSecurityItemInput {
     fileType: string;
     fileSizeKb: number;
   }[];
+}
+
+export async function analyzeItemImage(
+  imageUrl: string
+): Promise<ItemImageSuggestion> {
+  return apiFetch<ItemImageSuggestion>('/api/items/analyze-image', {
+    method: 'POST',
+    body: JSON.stringify({ imageUrl }),
+  });
 }
 
 export async function createSecurityItem(

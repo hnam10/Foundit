@@ -1,5 +1,6 @@
 import { parseRole, ROLE_HOME, type UserRole } from './routes';
 import { clearProfilePhoto } from './profilePhotoStore';
+import { notifyAuthChanged } from './authEvents';
 
 export type { UserRole };
 export { ROLE_HOME };
@@ -8,10 +9,12 @@ const ROLE_COOKIE = 'foundit_role';
 
 export function setSessionRole(role: UserRole) {
   document.cookie = `${ROLE_COOKIE}=${role}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+  notifyAuthChanged();
 }
 
 export function clearSessionRole() {
   document.cookie = `${ROLE_COOKIE}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+  notifyAuthChanged();
 }
 
 /** Clears client-side auth state (role cookie + stored tokens). */
@@ -22,13 +25,14 @@ export function clearAuthSession() {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
     localStorage.removeItem('refreshToken');
+    notifyAuthChanged();
   }
 }
 
 /** Signs out and navigates to login so middleware sees cleared cookies. */
 export function signOut() {
   clearAuthSession();
-  window.location.href = '/login';
+  window.location.replace('/login');
 }
 
 export function getSessionRole(): UserRole | null {
@@ -101,6 +105,7 @@ export function getRefreshToken(): string | null {
 export function setTokens(accessToken: string, refreshToken: string) {
   localStorage.setItem('accessToken', accessToken);
   localStorage.setItem('refreshToken', refreshToken);
+  notifyAuthChanged();
 }
 
 export function getLoggedInDisplayName(): string | null {

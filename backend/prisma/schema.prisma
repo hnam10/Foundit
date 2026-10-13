@@ -151,16 +151,18 @@ model PhotoUploadSession {
 }
 
 model PhotoSessionImage {
-  imageId    String   @id @default(uuid()) @map("image_id") @db.Uuid
-  sessionId  String   @map("session_id") @db.Uuid
-  imageUrl   String   @map("image_url") @db.VarChar(500)
-  fileType   String   @map("file_type") @db.VarChar(10)
-  fileSizeKb Int      @map("file_size_kb")
-  createdAt  DateTime @default(now()) @map("created_at")
+  imageId    String    @id @default(uuid()) @map("image_id") @db.Uuid
+  sessionId  String    @map("session_id") @db.Uuid
+  imageUrl   String    @map("image_url") @db.VarChar(500)
+  fileType   String    @map("file_type") @db.VarChar(10)
+  fileSizeKb Int       @map("file_size_kb")
+  uploadedAt DateTime? @map("uploaded_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
   session PhotoUploadSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
 
   @@index([sessionId])
+  @@index([uploadedAt, createdAt])
   @@map("photo_session_image")
 }
 

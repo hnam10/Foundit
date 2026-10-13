@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { ClaimStatus, ItemStatus, MatchStatus, Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import authenticate from '../middleware/authenticate';
@@ -14,8 +15,20 @@ import {
 } from '../utils/auditLog';
 import { scheduleItemSearchIndexIngest } from '../lib/matching/ingest';
 import { scheduleMatchRefreshForCampus } from '../lib/matching/suggestions';
+import { logger } from '../lib/logger';
+import { isSemanticMatchingDegraded } from '../lib/matching/embeddings';
+import {
+  rankSecurityItemSearch,
+  shouldEmbedItemSearchQuery,
+} from '../lib/matching/itemSearch';
+import { getQueryEmbedding } from '../lib/matching/queryEmbeddingCache';
+import {
+  analyzeItemImage,
+  isItemImageAnalysisConfigured,
+} from '../lib/itemImageAnalysis';
 import {
   itemParamsSchema,
+  analyzeItemImageSchema,
   listSecurityItemsQuerySchema,
   publicItemsQuerySchema,
   expiredItemCountQuerySchema,
@@ -27,6 +40,7 @@ import {
   UpdateSecurityItemStatusInput,
   CreateSecurityItemInput,
   WalkInReleaseInput,
+  AnalyzeItemImageInput,
 } from '../validators/items';
 
 function computeRetentionExpiryDate(
@@ -40,6 +54,17 @@ function computeRetentionExpiryDate(
 
 const router = Router();
 const publicItemStatuses = [ItemStatus.stored] as const;
+const SECURITY_ITEM_SEARCH_CANDIDATE_LIMIT = 1000;
+const itemImageAnalysisRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    code: 'RATE_LIMITED',
+    message: 'Too many image analysis requests. Try again later.',
+  },
+});
 
 const validItemStatusTransitions: Record<ItemStatus, ItemStatus[]> = {
   [ItemStatus.pending_report]: [ItemStatus.expired, ItemStatus.disposed],
@@ -49,25 +74,17 @@ const validItemStatusTransitions: Record<ItemStatus, ItemStatus[]> = {
   [ItemStatus.disposed]: [],
 };
 
-const publicItemSelect = {
-  itemId: true,
-  campusId: true,
-  category: true,
-  title: true,
-  descriptionPublic: true,
-  color: true,
-  brand: true,
-  locationFound: true,
-  dateFound: true,
-  status: true,
-} as const;
-
 const securityItemListSelect = {
   itemId: true,
   campusId: true,
   category: true,
   title: true,
+  descriptionPublic: true,
+  descriptionInternal: true,
+  color: true,
+  brand: true,
   dateFound: true,
+  createdAt: true,
   status: true,
   retentionExpiryDate: true,
   campus: {
@@ -84,6 +101,13 @@ const securityItemListSelect = {
       createdAt: 'asc' as const,
     },
   },
+} as const;
+
+const securityItemSearchSelect = {
+  ...securityItemListSelect,
+  locationFound: true,
+  searchText: true,
+  embedding: true,
 } as const;
 
 const securityItemDetailSelect = {
@@ -157,6 +181,10 @@ type SecurityItemListRow = Prisma.ItemGetPayload<{
   select: typeof securityItemListSelect;
 }>;
 
+type SecurityItemSearchRow = Prisma.ItemGetPayload<{
+  select: typeof securityItemSearchSelect;
+}>;
+
 type SecurityItemDetailRow = Prisma.ItemGetPayload<{
   select: typeof securityItemDetailSelect;
 }>;
@@ -169,27 +197,12 @@ function sendValidationError(res: Response, details: unknown) {
   });
 }
 
-function buildPublicItemWhere(query: { category?: string; campusId?: string }) {
-  const where: Prisma.ItemWhereInput = {
-    status: { in: [...publicItemStatuses] },
-  };
-
-  if (query.category) {
-    where.category = query.category;
-  }
-
-  if (query.campusId) {
-    where.campusId = query.campusId;
-  }
-
-  return where;
-}
-
+// Text search is not filtered here: `q` is ranked in memory by
+// rankSecurityItemSearch so word-by-word and semantic matches are not dropped.
 function buildSecurityItemListWhere(query: {
   status?: ItemStatus | ItemStatus[];
   campusId?: string;
   category?: string;
-  q?: string;
 }) {
   const where: Prisma.ItemWhereInput = {};
 
@@ -208,34 +221,6 @@ function buildSecurityItemListWhere(query: {
 
   if (query.category) {
     where.category = query.category;
-  }
-
-  const q = query.q?.trim();
-  if (q) {
-    const textFilters: Prisma.ItemWhereInput[] = [
-      { title: { contains: q, mode: 'insensitive' } },
-      { category: { contains: q, mode: 'insensitive' } },
-      { brand: { contains: q, mode: 'insensitive' } },
-      { color: { contains: q, mode: 'insensitive' } },
-      { locationFound: { contains: q, mode: 'insensitive' } },
-      { descriptionPublic: { contains: q, mode: 'insensitive' } },
-      { descriptionInternal: { contains: q, mode: 'insensitive' } },
-    ];
-
-    const uuidPattern =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (uuidPattern.test(q)) {
-      textFilters.push({ itemId: q });
-    } else if (q.length >= 4) {
-      // Allow short ID prefix search via startsWith on the string form is not
-      // available for UUIDs in Prisma; match campus name instead via relation.
-    }
-
-    textFilters.push({
-      campus: { campusName: { contains: q, mode: 'insensitive' } },
-    });
-
-    where.OR = textFilters;
   }
 
   return where;
@@ -302,7 +287,12 @@ async function toSecurityItemListDto(item: SecurityItemListRow) {
     campusName: item.campus.campusName,
     category: item.category,
     title: item.title,
+    descriptionPublic: item.descriptionPublic,
+    descriptionInternal: item.descriptionInternal,
+    color: item.color,
+    brand: item.brand,
     dateFound: item.dateFound,
+    createdAt: item.createdAt,
     status: item.status,
     retentionExpiryDate: item.retentionExpiryDate,
     imageUrl: storedImageUrl ? await resolveImageUrl(storedImageUrl) : null,
@@ -368,44 +358,33 @@ async function toSecurityItemDetailDto(item: SecurityItemDetailRow) {
   };
 }
 
-/**
- * @openapi
- * /api/public/items:
- *   get:
- *     summary: Browse public-safe found items
- *     tags: [Public Items]
- *     parameters:
- *       - in: query
- *         name: category
- *         schema:
- *           type: string
- *       - in: query
- *         name: campusId
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       '200':
- *         description: Public-safe item list
- *       '400':
- *         description: Invalid query parameters
- */
-router.get(
-  '/public/items',
-  validateQuery(publicItemsQuerySchema),
-  async (req, res, next) => {
-    try {
-      const query = req.query as { category?: string; campusId?: string };
-
-      const items = await prisma.item.findMany({
-        where: buildPublicItemWhere(query),
-        select: publicItemSelect,
-        orderBy: [{ dateFound: 'desc' }, { createdAt: 'desc' }],
+router.post(
+  '/items/analyze-image',
+  authenticate,
+  requireRole('security', 'admin'),
+  itemImageAnalysisRateLimiter,
+  validate(analyzeItemImageSchema),
+  async (req, res) => {
+    if (!isItemImageAnalysisConfigured()) {
+      res.status(503).json({
+        code: 'IMAGE_ANALYSIS_UNAVAILABLE',
+        message: 'AI image suggestions are not configured.',
       });
+      return;
+    }
 
-      res.status(200).json(items);
-    } catch (err) {
-      next(err);
+    try {
+      const { imageUrl } = req.body as AnalyzeItemImageInput;
+      const signedImageUrl = await resolveImageUrl(imageUrl);
+      const suggestion = await analyzeItemImage(signedImageUrl);
+      res.status(200).json(suggestion);
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to analyze item image');
+      res.status(502).json({
+        code: 'IMAGE_ANALYSIS_FAILED',
+        message:
+          'The photo could not be analyzed. Continue filling the form manually.',
+      });
     }
   }
 );
@@ -523,6 +502,55 @@ router.get(
         limit: number;
       };
 
+      if (query.q) {
+        const candidates = await prisma.item.findMany({
+          where: buildSecurityItemListWhere(query),
+          orderBy: [
+            { dateFound: 'desc' },
+            { createdAt: 'desc' },
+            { itemId: 'desc' },
+          ],
+          take: SECURITY_ITEM_SEARCH_CANDIDATE_LIMIT,
+          select: securityItemSearchSelect,
+        });
+
+        let queryEmbedding: number[] | null = null;
+        if (
+          !isSemanticMatchingDegraded() &&
+          shouldEmbedItemSearchQuery(query.q)
+        ) {
+          try {
+            queryEmbedding = await getQueryEmbedding(query.q);
+          } catch (error) {
+            logger.warn(
+              { err: error },
+              'Semantic item search failed; returning exact matches only'
+            );
+          }
+        }
+
+        const ranked = rankSecurityItemSearch(
+          candidates as SecurityItemSearchRow[],
+          query.q,
+          queryEmbedding
+        );
+        const cursorIndex = query.cursor
+          ? ranked.findIndex(({ item }) => item.itemId === query.cursor)
+          : -1;
+        const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+        const page = ranked.slice(startIndex, startIndex + query.limit);
+        const hasMore = startIndex + page.length < ranked.length;
+        const nextCursor = hasMore
+          ? (page[page.length - 1]?.item.itemId ?? null)
+          : null;
+        const data = await Promise.all(
+          page.map(({ item }) => toSecurityItemListDto(item))
+        );
+
+        res.status(200).json({ data, nextCursor });
+        return;
+      }
+
       const statuses = query.status
         ? Array.isArray(query.status)
           ? query.status
@@ -556,10 +584,13 @@ router.get(
         select: securityItemListSelect,
       });
 
+      const pageItems = items.slice(0, query.limit);
       const nextCursor =
-        items.length > query.limit ? items[query.limit].itemId : null;
+        items.length > query.limit
+          ? (pageItems[pageItems.length - 1]?.itemId ?? null)
+          : null;
       const data = await Promise.all(
-        items.slice(0, query.limit).map((item) => toSecurityItemListDto(item))
+        pageItems.map((item) => toSecurityItemListDto(item))
       );
 
       res.status(200).json({ data, nextCursor });
@@ -624,6 +655,8 @@ router.post(
         campusId,
         title,
         description,
+        color,
+        brand,
         category,
         locationFound,
         dateFound,
@@ -651,6 +684,8 @@ router.post(
             category,
             title,
             descriptionInternal: description.trim(),
+            color,
+            brand,
             locationFound,
             dateFound,
             status: ItemStatus.stored,
