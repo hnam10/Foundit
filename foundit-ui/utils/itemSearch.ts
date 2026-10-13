@@ -5,6 +5,8 @@ const searchableItemFields = [
   'category',
   'itemId',
   'campusName',
+  'brand',
+  'color',
   'descriptionPublic',
   'descriptionInternal',
 ] as const satisfies ReadonlyArray<keyof SecurityItemListItem>;

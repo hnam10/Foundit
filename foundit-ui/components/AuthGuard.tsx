@@ -7,9 +7,15 @@ import { subscribeAuth } from '@/utils/authEvents';
 import { ROLE_HOME, parseRole } from '@/utils/routes';
 
 function getSessionSnapshot() {
-  const role = getSessionRole();
-  const userRole = parseRole(getLoggedInUser()?.role);
-  return getAccessToken() && role && userRole === role ? role : '';
+  try {
+    const role = getSessionRole();
+    const userRole = parseRole(getLoggedInUser()?.role);
+    return getAccessToken() && role && userRole === role ? role : '';
+  } catch {
+    // Storage can be blocked by the browser; treat that as signed out so
+    // public pages still render.
+    return '';
+  }
 }
 
 function isRoute(pathname: string, base: string) {

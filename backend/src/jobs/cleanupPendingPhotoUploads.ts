@@ -20,16 +20,25 @@ export async function cleanupPendingPhotoUploads(): Promise<number> {
   let deletedCount = 0;
   for (const image of pendingImages) {
     try {
-      await r2.send(
-        new DeleteObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: image.imageUrl,
-        })
-      );
-      const deleted = await prisma.photoSessionImage.deleteMany({
-        where: { imageId: image.imageId, uploadedAt: null },
+      // Claim the row before touching storage. Registration's uploadedAt
+      // update waits on this row and then finds it gone, so it cannot mark an
+      // image as uploaded after its object was removed. If the storage delete
+      // throws, the transaction rolls back and the reservation is kept.
+      const claimed = await prisma.$transaction(async (tx) => {
+        const deleted = await tx.photoSessionImage.deleteMany({
+          where: { imageId: image.imageId, uploadedAt: null },
+        });
+        if (deleted.count === 0) return 0;
+
+        await r2.send(
+          new DeleteObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: image.imageUrl,
+          })
+        );
+        return deleted.count;
       });
-      deletedCount += deleted.count;
+      deletedCount += claimed;
     } catch (error) {
       // Keep the reservation so a later run can retry storage cleanup.
       console.error(`Failed to clean up pending photo ${image.imageId}`, error);

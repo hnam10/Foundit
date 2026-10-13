@@ -106,6 +106,7 @@ vi.mock('../src/db', () => ({
   },
 }));
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '../src/db';
 import {
   DeleteObjectCommand,
@@ -389,6 +390,35 @@ describe('photoSessions routes', () => {
     const app = createTestApp();
 
     const res = await request(app)
+      .post(`/api/photo-sessions/${token}/images`)
+      .send({
+        imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440000.png',
+        fileType: 'png',
+        fileSizeKb: 500,
+      });
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('PHOTO_SESSION_IMAGE_NOT_FOUND');
+  });
+
+  test('POST /api/photo-sessions/:token/images returns 404 when cleanup removed the reservation mid-registration', async () => {
+    vi.mocked(prisma.photoUploadSession.findUnique).mockResolvedValueOnce({
+      ...photoSession,
+      _count: {
+        images: 1,
+      },
+    });
+    vi.mocked(prisma.photoSessionImage.findFirst).mockResolvedValueOnce(
+      photoImage
+    );
+    vi.mocked(prisma.photoSessionImage.update).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Record not found', {
+        code: 'P2025',
+        clientVersion: 'test',
+      })
+    );
+
+    const res = await request(createTestApp())
       .post(`/api/photo-sessions/${token}/images`)
       .send({
         imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440000.png',

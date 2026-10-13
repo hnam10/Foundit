@@ -197,6 +197,34 @@ function sendValidationError(res: Response, details: unknown) {
   });
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Database counterpart of the in-memory exact match: every query word must
+ * appear in some text field. Item ids only match as a full UUID here.
+ */
+function buildItemWordMatchWhere(q: string): Prisma.ItemWhereInput {
+  const words = q.trim().split(/\s+/).filter(Boolean);
+  return {
+    AND: words.map((word) => {
+      const contains = { contains: word, mode: 'insensitive' as const };
+      return {
+        OR: [
+          { title: contains },
+          { category: contains },
+          { brand: contains },
+          { color: contains },
+          { descriptionPublic: contains },
+          { descriptionInternal: contains },
+          { campus: { campusName: contains } },
+          ...(UUID_PATTERN.test(word) ? [{ itemId: word }] : []),
+        ],
+      };
+    }),
+  };
+}
+
 // Text search is not filtered here: `q` is ranked in memory by
 // rankSecurityItemSearch so word-by-word and semantic matches are not dropped.
 function buildSecurityItemListWhere(query: {
@@ -503,16 +531,34 @@ router.get(
       };
 
       if (query.q) {
-        const candidates = await prisma.item.findMany({
-          where: buildSecurityItemListWhere(query),
-          orderBy: [
-            { dateFound: 'desc' },
-            { createdAt: 'desc' },
-            { itemId: 'desc' },
-          ],
-          take: SECURITY_ITEM_SEARCH_CANDIDATE_LIMIT,
-          select: securityItemSearchSelect,
-        });
+        const baseWhere = buildSecurityItemListWhere(query);
+        const searchOrderBy = [
+          { dateFound: 'desc' },
+          { createdAt: 'desc' },
+          { itemId: 'desc' },
+        ] as const;
+        // Semantic ranking only sees the newest rows, so word matches are also
+        // fetched from the whole table; otherwise an older item could never be
+        // found by its title.
+        const [recent, wordMatches] = await Promise.all([
+          prisma.item.findMany({
+            where: baseWhere,
+            orderBy: [...searchOrderBy],
+            take: SECURITY_ITEM_SEARCH_CANDIDATE_LIMIT,
+            select: securityItemSearchSelect,
+          }),
+          prisma.item.findMany({
+            where: { AND: [baseWhere, buildItemWordMatchWhere(query.q)] },
+            orderBy: [...searchOrderBy],
+            take: SECURITY_ITEM_SEARCH_CANDIDATE_LIMIT,
+            select: securityItemSearchSelect,
+          }),
+        ]);
+        const seenItemIds = new Set(recent.map((item) => item.itemId));
+        const candidates = [
+          ...recent,
+          ...wordMatches.filter((item) => !seenItemIds.has(item.itemId)),
+        ];
 
         let queryEmbedding: number[] | null = null;
         if (
@@ -537,7 +583,13 @@ router.get(
         const cursorIndex = query.cursor
           ? ranked.findIndex(({ item }) => item.itemId === query.cursor)
           : -1;
-        const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+        if (query.cursor && cursorIndex < 0) {
+          // The ranking changed and the cursor item dropped out. Ending the
+          // list is safer than restarting it, which would repeat items.
+          res.status(200).json({ data: [], nextCursor: null });
+          return;
+        }
+        const startIndex = cursorIndex + 1;
         const page = ranked.slice(startIndex, startIndex + query.limit);
         const hasMore = startIndex + page.length < ranked.length;
         const nextCursor = hasMore

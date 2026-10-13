@@ -92,9 +92,6 @@ describe('items validators', () => {
       dateFound: '2026-07-01',
       images: [
         {
-          imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg',
-          fileType: 'jpg',
-          fileSizeKb: 128,
           imageUrl: 'reports/11111111-1111-1111-1111-111111111111.jpg',
           fileType: 'jpg',
           fileSizeKb: 120,

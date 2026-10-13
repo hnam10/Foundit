@@ -7,6 +7,7 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Prisma } from '@prisma/client';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { prisma } from '../db';
@@ -450,6 +451,18 @@ router.post(
 
       res.status(201).json(registeredImage);
     } catch (err) {
+      // The cleanup job removed this reservation while it was being registered.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2025'
+      ) {
+        res.status(404).json({
+          code: 'PHOTO_SESSION_IMAGE_NOT_FOUND',
+          message:
+            'No pending upload found for this image. Request a new upload URL.',
+        });
+        return;
+      }
       next(err);
     }
   }

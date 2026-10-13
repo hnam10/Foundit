@@ -50,6 +50,10 @@ vi.mock('../src/lib/matching/suggestions', () => ({
   scheduleMatchRefreshForCampus: vi.fn(),
 }));
 
+vi.mock('../src/lib/matching/queryEmbeddingCache', () => ({
+  getQueryEmbedding: vi.fn().mockRejectedValue(new Error('no provider')),
+}));
+
 vi.mock('../src/lib/itemImageAnalysis', () => ({
   analyzeItemImage: vi.fn(),
   isItemImageAnalysisConfigured: vi.fn(() => true),
@@ -202,6 +206,53 @@ describe('items routes', () => {
     expect(res.body.data[0].descriptionInternal).toBeNull();
     expect(res.body.data[0].title).toBe('iPhone');
     expect(res.body.nextCursor).toBe(null);
+  });
+
+  test('GET /api/items?q= finds a word match outside the newest candidates', async () => {
+    const olderItemId = '550e8400-e29b-41d4-a716-446655440077';
+    const searchRow = { ...itemListRow, searchText: null, embedding: null };
+    vi.mocked(prisma.item.findMany)
+      .mockResolvedValueOnce([
+        { ...searchRow, title: 'Umbrella', brand: null, color: 'Blue' },
+      ])
+      .mockResolvedValueOnce([
+        { ...searchRow, itemId: olderItemId, title: 'Water Bottle' },
+      ]);
+
+    const res = await request(createTestApp()).get(
+      '/api/items?q=black%20bottle'
+    );
+
+    expect(res.status).toBe(200);
+    expect(
+      res.body.data.map((item: { itemId: string }) => item.itemId)
+    ).toEqual([olderItemId]);
+    const wordMatchQuery = vi.mocked(prisma.item.findMany).mock.calls[1][0];
+    expect(wordMatchQuery?.where).toEqual({
+      AND: [
+        expect.any(Object),
+        {
+          AND: [
+            { OR: expect.arrayContaining([{ title: expect.any(Object) }]) },
+            { OR: expect.arrayContaining([{ color: expect.any(Object) }]) },
+          ],
+        },
+      ],
+    });
+  });
+
+  test('GET /api/items?q= ends the list when the cursor is no longer ranked', async () => {
+    const searchRow = { ...itemListRow, searchText: null, embedding: null };
+    vi.mocked(prisma.item.findMany)
+      .mockResolvedValueOnce([searchRow])
+      .mockResolvedValueOnce([searchRow]);
+
+    const res = await request(createTestApp()).get(
+      '/api/items?q=iphone&cursor=550e8400-e29b-41d4-a716-446655440099'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ data: [], nextCursor: null });
   });
 
   test('POST /api/items/analyze-image returns an AI form draft', async () => {

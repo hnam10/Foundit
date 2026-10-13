@@ -159,7 +159,7 @@ async function main(): Promise<void> {
 
   if (isSemanticMatchingDegraded() && !options.allowHashFallback) {
     logger.error(
-      'OPENAI_API_KEY is not set, so this would store meaningless hash vectors and permanently mark the rows as indexed. Set the key, or pass --allow-hash-fallback if this is a local development database.'
+      'Neither OPENAI_API_KEY nor OPENROUTER_API_KEY is set, so this would store meaningless hash vectors and permanently mark the rows as indexed. Set a provider key, or pass --allow-hash-fallback if this is a local development database.'
     );
     process.exitCode = 1;
     return;
