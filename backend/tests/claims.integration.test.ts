@@ -5,6 +5,14 @@ import claimsRouter from '../src/routes/claims';
 import { UserRole, ClaimStatus, ItemStatus } from '@prisma/client';
 import errorHandler from '../src/middleware/errorHandler';
 
+// The email mock below keeps the real module's helpers, and that module reads
+// SMTP settings at import time.
+vi.hoisted(() => {
+  process.env.SMTP_USER = 'smtp-user';
+  process.env.SMTP_PASS = 'smtp-pass';
+  process.env.APP_URL = 'https://foundit.example';
+});
+
 const mocks = vi.hoisted(() => ({
   authUser: { user_id: 'student-1' } as {
     user_id: string;
@@ -57,6 +65,10 @@ vi.mock('../src/lib/matching/ingest', () => ({
 
 vi.mock('../src/lib/matching/suggestions', () => ({
   refreshClaimMatchSuggestions: vi.fn(),
+}));
+
+vi.mock('../src/utils/imageUrl', () => ({
+  resolveImageUrl: vi.fn(async (url: string) => url),
 }));
 
 vi.mock('../src/lib/email', async (importOriginal) => {
