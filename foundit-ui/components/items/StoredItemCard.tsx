@@ -4,7 +4,10 @@ import { Badge, Box, Flex, HStack, Image, Stack, Text } from '@chakra-ui/react';
 import { IoCalendarOutline, IoImageOutline } from 'react-icons/io5';
 import type { SecurityItemListItem } from '@/types/items';
 import { ITEM_STATUS_LABELS } from '@/types/items';
-import { getRetentionLabel } from '@/utils/itemRetention';
+import {
+  getRetentionLabel,
+  getStorageDurationLabel,
+} from '@/utils/itemRetention';
 import { ItemStatusBadge } from './ItemStatusProgress';
 
 interface StoredItemCardProps {
@@ -21,6 +24,7 @@ function shortItemId(itemId: string): string {
 
 export function StoredItemCard({ item }: StoredItemCardProps) {
   const retention = getRetentionLabel(item.retentionExpiryDate, item.status);
+  const storageDuration = getStorageDurationLabel(item.createdAt, item.status);
 
   return (
     <Flex
@@ -104,6 +108,14 @@ export function StoredItemCard({ item }: StoredItemCardProps) {
               </Box>
               <Text>Found {formatDate(item.dateFound)}</Text>
             </HStack>
+            {storageDuration ? (
+              <>
+                <Text color="gray.300" aria-hidden>
+                  ·
+                </Text>
+                <Text>{storageDuration}</Text>
+              </>
+            ) : null}
           </HStack>
           {retention && (
             <Text fontSize="xs" fontWeight="medium" color={retention.color}>

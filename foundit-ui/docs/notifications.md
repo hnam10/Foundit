@@ -26,16 +26,15 @@ Routes/components:
 
 ## 2. Who gets notified of what
 
-| Event                                              | Recipient                                                          | Type                                      |
-| -------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
-| Claim status changes (rejected / picked up)        | The claim's student                                                | `claim_status_update`                     |
-| Match / approval for a claim                       | The claim's student                                                | `match_found`                             |
-| New claim submitted                                | Active security/admin at the claim's campus                        | `claim_status_update`                     |
-| Student cancels a claim                            | Active security/admin at the claim's campus                        | `claim_status_update` ("Claim Cancelled") |
-| Retention job expires items                        | Active security/admin at each affected campus (batched per campus) | `item_expiring`                           |
-| Retention job auto-rejects claims on expired items | Each affected student                                              | `claim_status_update`                     |
-| Open-claim expiry (35 days, unmatched)             | Student                                                            | `claim_status_update`                     |
-| Found-item report submitted                        | The finder                                                         | `report_confirmation`                     |
+| Event                                       | Recipient                                                          | Type                                      |
+| ------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
+| Claim status changes (rejected / picked up) | The claim's student                                                | `claim_status_update`                     |
+| Match / approval for a claim                | The claim's student                                                | `match_found`                             |
+| New claim submitted                         | Active security/admin at the claim's campus                        | `claim_status_update`                     |
+| Student cancels a claim                     | Active security/admin at the claim's campus                        | `claim_status_update` ("Claim Cancelled") |
+| Retention job expires items                 | Active security/admin at each affected campus (batched per campus) | `item_expiring`                           |
+| Open-claim expiry (35 days, unmatched)      | Student                                                            | `claim_status_update`                     |
+| Found-item report submitted                 | The finder                                                         | `report_confirmation`                     |
 
 Copy rule: messages name the item (`Your claim for "X" …`) and fall back to a
 short `#REF` — raw UUIDs never appear. Emissions run inside the triggering

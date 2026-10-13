@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import { getLoggedInUser, type LoggedInUser } from '@/utils/auth';
 
-const subscribe = () => () => {};
+import { subscribeAuth } from '@/utils/authEvents';
 
 // getLoggedInUser() re-parses localStorage into a new object every call;
 // useSyncExternalStore requires a referentially stable snapshot when nothing
@@ -24,5 +24,5 @@ function getSnapshot(): LoggedInUser | null {
 
 /** Reads the stored user on the client after hydration; null on server/hydration. */
 export function useLoggedInUser(): LoggedInUser | null {
-  return useSyncExternalStore(subscribe, getSnapshot, () => null);
+  return useSyncExternalStore(subscribeAuth, getSnapshot, () => null);
 }

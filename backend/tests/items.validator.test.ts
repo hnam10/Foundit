@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  analyzeItemImageSchema,
   createSecurityItemSchema,
   itemParamsSchema,
   listSecurityItemsQuerySchema,
@@ -32,6 +33,7 @@ describe('items validators', () => {
   test('accepts valid security item list query', () => {
     const result = listSecurityItemsQuerySchema.safeParse({
       status: 'stored',
+      q: 'light red',
       limit: '10',
     });
 
@@ -39,6 +41,7 @@ describe('items validators', () => {
 
     if (result.success) {
       expect(result.data.limit).toBe(10);
+      expect(result.data.q).toBe('light red');
     }
   });
 
@@ -56,6 +59,19 @@ describe('items validators', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  test('accepts only report upload keys for image analysis', () => {
+    expect(
+      analyzeItemImageSchema.safeParse({
+        imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg',
+      }).success
+    ).toBe(true);
+    expect(
+      analyzeItemImageSchema.safeParse({
+        imageUrl: 'https://example.test/private.jpg',
+      }).success
+    ).toBe(false);
   });
 
   test('rejects invalid item params', () => {
@@ -76,6 +92,9 @@ describe('items validators', () => {
       dateFound: '2026-07-01',
       images: [
         {
+          imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440001.jpg',
+          fileType: 'jpg',
+          fileSizeKb: 128,
           imageUrl: 'reports/11111111-1111-1111-1111-111111111111.jpg',
           fileType: 'jpg',
           fileSizeKb: 120,

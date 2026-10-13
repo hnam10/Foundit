@@ -1,3 +1,5 @@
+import type { ItemStatus } from '@/types/items';
+
 export type ApiClaimStatus =
   | 'submitted'
   | 'approved'
@@ -52,7 +54,7 @@ export interface SecurityClaimListItem {
     };
     category: string;
     title: string;
-    status: string;
+    status: ItemStatus;
     brand: string | null;
     color: string | null;
     locationFound: string | null;
@@ -105,11 +107,12 @@ export interface MatchSuggestion {
     campusId: string;
     category: string;
     title: string;
-    status: string;
+    status: ItemStatus;
     brand: string | null;
     color: string | null;
     locationFound: string | null;
     dateFound: string;
+    createdAt: string;
     descriptionPublic: string | null;
     imageUrl: string | null;
   };

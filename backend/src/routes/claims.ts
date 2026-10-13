@@ -28,6 +28,7 @@ import {
 import { scheduleClaimSearchIndexIngest } from '../lib/matching/ingest';
 import { refreshClaimMatchSuggestions } from '../lib/matching/suggestions';
 import { resolveImageUrl } from '../utils/imageUrl';
+import { MISSING_CAMPUS_ID } from '../constants/campus';
 import {
   claimAndMatchParamsSchema,
   claimParamsSchema,
@@ -41,7 +42,6 @@ import {
 import { validate, validateQuery } from '../validators/shared';
 
 const router = Router();
-const MISSING_CAMPUS_ID = '00000000-0000-0000-0000-000000000000';
 
 const claimListSelect = {
   claimId: true,
@@ -161,6 +161,7 @@ const matchSuggestionSelect = {
       color: true,
       locationFound: true,
       dateFound: true,
+      createdAt: true,
       descriptionPublic: true,
       images: {
         select: {
@@ -209,7 +210,19 @@ function sendValidationError(res: Response, details: unknown) {
   });
 }
 
-async function toClaimListItemDto(claim: ClaimListRow) {
+// Students only see the linked item after pickup. Until then its photo and
+// attributes would give away the answers security uses to verify ownership.
+function canViewLinkedItem(
+  viewerRole: RequestUser['role'] | undefined,
+  status: ClaimStatus
+): boolean {
+  return viewerRole !== 'student' || status === ClaimStatus.picked_up;
+}
+
+async function toClaimListItemDto(
+  claim: ClaimListRow,
+  viewerRole?: RequestUser['role']
+) {
   const images = await Promise.all(
     claim.images.map(async (image) => ({
       imageId: image.imageId,
@@ -219,7 +232,10 @@ async function toClaimListItemDto(claim: ClaimListRow) {
     }))
   );
 
-  const matchedItemImageUrl = claim.item?.images[0]?.imageUrl ?? null;
+  const linkedItem = canViewLinkedItem(viewerRole, claim.status)
+    ? claim.item
+    : null;
+  const matchedItemImageUrl = linkedItem?.images[0]?.imageUrl ?? null;
 
   return {
     claimId: claim.claimId,
@@ -253,21 +269,21 @@ async function toClaimListItemDto(claim: ClaimListRow) {
           ? Number(claim.student.studentNumber)
           : null,
     },
-    item: claim.item
+    item: linkedItem
       ? {
-          itemId: claim.item.itemId,
-          campusId: claim.item.campusId,
+          itemId: linkedItem.itemId,
+          campusId: linkedItem.campusId,
           campus: {
-            campusId: claim.item.campus.campusId,
-            campusName: claim.item.campus.campusName,
+            campusId: linkedItem.campus.campusId,
+            campusName: linkedItem.campus.campusName,
           },
-          category: claim.item.category,
-          title: claim.item.title,
-          status: claim.item.status,
-          brand: claim.item.brand,
-          color: claim.item.color,
-          locationFound: claim.item.locationFound,
-          dateFound: claim.item.dateFound,
+          category: linkedItem.category,
+          title: linkedItem.title,
+          status: linkedItem.status,
+          brand: linkedItem.brand,
+          color: linkedItem.color,
+          locationFound: linkedItem.locationFound,
+          dateFound: linkedItem.dateFound,
           imageUrl: matchedItemImageUrl
             ? await resolveImageUrl(matchedItemImageUrl)
             : null,
@@ -277,8 +293,11 @@ async function toClaimListItemDto(claim: ClaimListRow) {
   };
 }
 
-async function toClaimDetailDto(claim: ClaimDetailRow) {
-  const base = await toClaimListItemDto(claim);
+async function toClaimDetailDto(
+  claim: ClaimDetailRow,
+  viewerRole?: RequestUser['role']
+) {
+  const base = await toClaimListItemDto(claim, viewerRole);
   return {
     ...base,
     reviewedBy: claim.reviewedBy,
@@ -325,6 +344,7 @@ async function toMatchSuggestionDto(match: MatchSuggestionRow) {
       color: match.item.color,
       locationFound: match.item.locationFound,
       dateFound: match.item.dateFound,
+      createdAt: match.item.createdAt,
       descriptionPublic: match.item.descriptionPublic,
       imageUrl: storedImageUrl ? await resolveImageUrl(storedImageUrl) : null,
     },
@@ -497,12 +517,22 @@ async function reserveItemForClaim(
     throw conflictError;
   }
 
-  await tx.item.update({
-    where: { itemId },
+  const updateResult = await tx.item.updateMany({
+    where: {
+      itemId,
+      status: item.status,
+    },
     data: { status: ItemStatus.claimed },
   });
 
-  return item.status;
+  if (updateResult.count > 0) {
+    return item.status;
+  }
+
+  // Another request changed the item between the read and the update.
+  const conflictError = new Error('LINKED_ITEM_NOT_STORED');
+  conflictError.name = 'LINKED_ITEM_NOT_STORED';
+  throw conflictError;
 }
 
 async function applyMatchConfirmation(
@@ -835,7 +865,7 @@ router.post(
         locationLost: claim.locationLost,
       });
 
-      res.status(201).json(await toClaimDetailDto(claim));
+      res.status(201).json(await toClaimDetailDto(claim, actor.role));
     } catch (err) {
       next(err);
     }
@@ -928,7 +958,9 @@ router.get(
       const nextCursor =
         claims.length > query.limit ? claims[query.limit].claimId : null;
       const data = await Promise.all(
-        claims.slice(0, query.limit).map((claim) => toClaimListItemDto(claim))
+        claims
+          .slice(0, query.limit)
+          .map((claim) => toClaimListItemDto(claim, actor.role))
       );
 
       res.status(200).json({ data, nextCursor });
@@ -997,7 +1029,7 @@ router.get('/:claimId', authenticate, async (req, res, next) => {
       return;
     }
 
-    res.status(200).json(await toClaimDetailDto(claim));
+    res.status(200).json(await toClaimDetailDto(claim, actor.role));
   } catch (err) {
     next(err);
   }
@@ -1269,8 +1301,7 @@ router.patch(
         });
         res.status(409).json({
           code: 'ITEM_NOT_STORED',
-          message:
-            'Only stored or expired items still in retention can be linked to a claim.',
+          message: 'Only stored or expired items can be linked to a claim.',
         });
         return;
       }
@@ -1433,7 +1464,7 @@ router.patch(
           let nextItemStatus: ItemStatus = ItemStatus.claimed;
 
           if (status === ClaimStatus.approved && claim.itemId) {
-            await reserveItemForClaim(tx, claim.itemId);
+            previousItemStatus = await reserveItemForClaim(tx, claim.itemId);
             itemTransitioned = true;
           }
 
@@ -1963,8 +1994,7 @@ router.patch(
       if (err instanceof Error && err.name === 'MATCH_ITEM_NOT_STORED') {
         res.status(409).json({
           code: 'MATCH_ITEM_NOT_STORED',
-          message:
-            'Only stored or expired items still in retention can be confirmed as a match.',
+          message: 'Only stored or expired items can be confirmed as a match.',
         });
         return;
       }
