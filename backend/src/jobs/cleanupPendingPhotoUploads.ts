@@ -7,6 +7,7 @@ import { r2, R2_BUCKET } from '../lib/r2';
 // finished near expiry to complete registration before cleanup begins.
 const PENDING_UPLOAD_RETENTION_MS = 2 * 60 * 60 * 1000;
 
+/** Deletes never-completed uploads from R2 and the database; returns the count removed. */
 export async function cleanupPendingPhotoUploads(): Promise<number> {
   const pendingImages = await prisma.photoSessionImage.findMany({
     where: {

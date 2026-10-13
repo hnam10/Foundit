@@ -65,6 +65,7 @@ function hasExactMatch(
     .every((word) => fields.some((field) => field.includes(word)));
 }
 
+/** Ranks exact matches first, then semantic matches at or above the threshold. */
 export function rankSecurityItemSearch<T extends SecurityItemSearchCandidate>(
   items: readonly T[],
   query: string,

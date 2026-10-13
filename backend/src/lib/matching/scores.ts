@@ -129,6 +129,7 @@ export interface HybridScoreInput {
 
 const IMAGE_CRITERIA_THRESHOLD = 0.7;
 
+/** Returns a 0–100 match score; image similarity is weighted in only when present. */
 export function combineHybridScore(input: HybridScoreInput): number {
   const hasImage =
     typeof input.imageSimilarity === 'number' &&

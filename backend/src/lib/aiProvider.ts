@@ -8,6 +8,7 @@ export interface AiProviderConfig {
   visionModel: string;
 }
 
+/** Prefers OpenAI, falls back to OpenRouter, and returns null when neither key is set. */
 export function getAiProviderConfig(
   env: NodeJS.ProcessEnv = process.env
 ): AiProviderConfig | null {
