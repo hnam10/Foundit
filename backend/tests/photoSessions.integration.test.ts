@@ -401,6 +401,37 @@ describe('photoSessions routes', () => {
     expect(res.body.code).toBe('PHOTO_SESSION_IMAGE_NOT_FOUND');
   });
 
+  test('POST /api/photo-sessions/:token/images returns 409 and keeps the reservation when the object is not uploaded yet', async () => {
+    vi.mocked(prisma.photoUploadSession.findUnique).mockResolvedValueOnce({
+      ...photoSession,
+      _count: {
+        images: 1,
+      },
+    });
+    vi.mocked(prisma.photoSessionImage.findFirst).mockResolvedValueOnce(
+      photoImage
+    );
+    mocks.r2Send.mockRejectedValueOnce(
+      Object.assign(new Error('NotFound'), {
+        name: 'NotFound',
+        $metadata: { httpStatusCode: 404 },
+      })
+    );
+
+    const res = await request(createTestApp())
+      .post(`/api/photo-sessions/${token}/images`)
+      .send({
+        imageUrl: 'reports/550e8400-e29b-41d4-a716-446655440000.png',
+        fileType: 'png',
+        fileSizeKb: 500,
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('UPLOAD_NOT_FOUND');
+    expect(prisma.photoSessionImage.delete).not.toHaveBeenCalled();
+    expect(prisma.photoSessionImage.update).not.toHaveBeenCalled();
+  });
+
   test('POST /api/photo-sessions/:token/images returns 404 when cleanup removed the reservation mid-registration', async () => {
     vi.mocked(prisma.photoUploadSession.findUnique).mockResolvedValueOnce({
       ...photoSession,

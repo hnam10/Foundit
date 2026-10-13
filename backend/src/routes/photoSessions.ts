@@ -385,12 +385,29 @@ router.post(
         return;
       }
 
-      const storedObject = await r2.send(
-        new HeadObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: image.imageUrl,
-        })
-      );
+      let storedObject;
+      try {
+        storedObject = await r2.send(
+          new HeadObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: image.imageUrl,
+          })
+        );
+      } catch (headErr) {
+        const notFound =
+          (headErr as Error).name === 'NotFound' ||
+          (headErr as { $metadata?: { httpStatusCode?: number } }).$metadata
+            ?.httpStatusCode === 404;
+        if (!notFound) throw headErr;
+
+        // The PUT has not landed yet. Keep the reservation so the client can
+        // register again once the upload finishes.
+        res.status(409).json({
+          code: 'UPLOAD_NOT_FOUND',
+          message: 'Image has not been uploaded yet.',
+        });
+        return;
+      }
       const actualSizeBytes = storedObject.ContentLength;
       const actualContentType = storedObject.ContentType;
       const uploadIsValid =
