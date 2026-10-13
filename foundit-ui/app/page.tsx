@@ -41,7 +41,7 @@ export default function Home() {
               </Heading>
 
               <Text color="fg.muted" fontSize="14px" fontWeight="normal">
-                Please proceed login with your school account
+                Please login with your school account
               </Text>
 
               <Stack gap={2} alignItems="center">
