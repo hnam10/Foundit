@@ -55,29 +55,34 @@ A web-based platform that provides:
 
 ### Core
 
-- **Item Posting** — Report lost or found items with detailed descriptions
-- **Search & Filter** — Find items quickly with advanced search
-- **Item Status Tracking** — Real-time updates on item status
-- **User Authentication** — Secure login for students, security staff, and admins
-- **Database Management** — Robust backend for storing item and claim data
+- **Item Posting** — Security staff register found items with photos, category, and location
+- **Lost Item Claims** — Students file claims describing what they lost, with optional photos
+- **Search & Filter** — Security searches items by keyword or meaning (semantic search), plus category, status, and campus filters
+- **Item Status Tracking** — Items move through `stored → claimed / expired → disposed`, with daily retention jobs
+- **User Authentication** — JWT login with email verification for students, security staff, and admins
+- **Notifications** — In-app notifications plus optional email updates on claim status
 
 ### Advanced
 
-- **Semi-Automated Matching** — Suggestions to link lost claims with found items
-- **Gratitude Wall** — Share success stories and express thanks
-- **Content Moderation** — Report inappropriate content
-- **Performance Optimization** — Fast, reliable system behavior
+- **Semi-Automated Matching** — Text embeddings score claims against stored items in the same category and campus, re-ranked by date, location, and photo similarity; security confirms matches manually
+- **AI-Assisted Item Registration** — A vision model drafts the found-item form (title, category, color, brand, description) from an uploaded photo
+- **QR Report Links** — Security generates one-time QR links so anyone who finds an item can report it
+- **Photo Uploads** — Item, claim, and profile photos stored in Cloudflare R2
+- **Audit Logging** — Append-only audit trail for mutations and authentication events
 - **Responsive Design** — Mobile-friendly interface
 
 ## Tech Stack
 
-| Layer    | Technologies                          |
-| -------- | ------------------------------------- |
-| Frontend | Next.js, React, Chakra UI, TypeScript |
-| Backend  | Express, TypeScript, Prisma           |
-| Database | PostgreSQL (Docker)                   |
-| Auth     | JWT (access + refresh tokens)         |
-| Email    | Nodemailer (SMTP)                     |
+| Layer    | Technologies                                                                         |
+| -------- | ------------------------------------------------------------------------------------ |
+| Frontend | Next.js 16, React 19, Chakra UI 3, Tailwind CSS 4, TypeScript                        |
+| Backend  | Express 4, TypeScript, Prisma 5                                                      |
+| Database | PostgreSQL (Docker for local dev)                                                    |
+| Auth     | JWT (access + refresh tokens), email verification                                    |
+| Storage  | Cloudflare R2 (S3-compatible)                                                        |
+| AI       | OpenAI embeddings + vision model; OpenRouter (optional) for image-embedding matching |
+| Email    | Nodemailer (SMTP)                                                                    |
+| Infra    | AWS Lightsail, Nginx, PM2, Terraform, Cloudflare DNS                                 |
 
 ## Project Structure
 
@@ -86,13 +91,17 @@ Foundit/
 ├── foundit-ui/     # Next.js frontend
 ├── backend/        # Express API + Prisma
 ├── database/       # Docker Compose for PostgreSQL + pgAdmin
+├── infra/          # Terraform (Lightsail) and deploy scripts
+├── testcase/       # Manual test case spreadsheet
 └── README.md
 ```
 
 For deeper documentation, see:
 
+- [Frontend setup & architecture](./foundit-ui/README.md)
 - [Backend setup & API](./backend/README.md)
 - [Database setup & schema](./database/README.md)
+- [Production infrastructure](./infra/main/README.md)
 
 ## Getting Started
 
@@ -124,7 +133,7 @@ pnpm install
 cp .env.example .env
 ```
 
-Edit `.env` with your database URL, JWT secrets, and SMTP settings. See [backend/README.md](./backend/README.md) for details.
+Edit `.env` with your database URL, JWT secrets, SMTP settings, and R2 credentials (required — the server will not start without them). See [backend/README.md](./backend/README.md) for details.
 
 Apply migrations and seed data:
 
@@ -152,7 +161,7 @@ In a new terminal:
 ```bash
 cd foundit-ui
 pnpm install
-cp .env.example .env   # if present
+cp .env.example .env
 pnpm run dev
 ```
 

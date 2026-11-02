@@ -123,6 +123,8 @@ Unmatched public routes (no middleware): `/`, `/login`, `/signup`, `/report-foun
 
 `/dashboard` redirects authenticated users to `ROLE_HOME[role]` (`utils/routes.ts`).
 
+Middleware only runs on server requests, so a page restored from the browser's back/forward cache would skip it. `components/AuthGuard.tsx` (mounted in `app/layout.tsx`) applies the same role rules on the client and re-checks the session on `pageshow`, `storage`, `focus`, and same-tab sign-in/sign-out events (`utils/authEvents.ts`). After sign-out, protected pages are hidden immediately and redirected to `/login`.
+
 ### API layer
 
 All backend calls go through `lib/api/`:
