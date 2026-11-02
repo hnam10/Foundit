@@ -66,10 +66,12 @@ Copy `.env.example` to `.env` and fill in each value.
 
 ### Server
 
-| Variable      | Description                                                |
-| ------------- | ---------------------------------------------------------- |
-| `PORT`        | Port the server listens on (default: `3001`)               |
-| `CORS_ORIGIN` | Allowed frontend origin (default: `http://localhost:3000`) |
+| Variable       | Description                                                                        |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `DATABASE_URL` | PostgreSQL connection string — **required**                                        |
+| `FRONTEND_URL` | Frontend base URL used in email and QR report links (e.g. `http://localhost:3000`) |
+| `PORT`         | Port the server listens on (default: `3001`)                                       |
+| `CORS_ORIGIN`  | Allowed frontend origin(s), comma-separated (default: `http://localhost:3000`)     |
 
 ### JWT
 
@@ -90,6 +92,17 @@ Set them to any long random string in local dev, e.g.:
 JWT_ACCESS_SECRET=some-long-random-string-here
 JWT_REFRESH_SECRET=another-different-random-string
 ```
+
+### File storage (Cloudflare R2)
+
+| Variable               | Description                                                             |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `R2_ENDPOINT`          | R2 S3-compatible endpoint — **required**, server won't start without it |
+| `R2_ACCESS_KEY_ID`     | R2 access key ID — **required**                                         |
+| `R2_SECRET_ACCESS_KEY` | R2 secret access key — **required**                                     |
+| `R2_BUCKET`            | Bucket for item, claim, and profile photos — **required**               |
+
+Optional settings (public bucket URL, signed URL lifetime) are documented in `.env.example`.
 
 ### AI: semantic matching, item search, and photo analysis
 
